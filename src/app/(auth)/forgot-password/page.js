@@ -1,0 +1,195 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/ui/Toast';
+import { ArrowLeft, ArrowRight, Lock, Mail, Key } from 'lucide-react';
+
+export default function ForgotPasswordPage() {
+  const router = useRouter();
+  const toast = useToast();
+
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleRequestCode(e) {
+    e.preventDefault();
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'Verification code sent!');
+        setStep(2);
+      } else {
+        toast.error(data.error || 'Failed to request reset code');
+      }
+    } catch {
+      toast.error('Network error. Please try again.');
+    }
+    setLoading(false);
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter the 6-digit verification code');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'Password reset successfully!');
+        router.push('/login');
+      } else {
+        toast.error(data.error || 'Failed to reset password');
+      }
+    } catch {
+      toast.error('Network error. Please try again.');
+    }
+    setLoading(false);
+  }
+
+  return (
+    <div className="w-full max-w-sm mx-auto">
+      <div className="bg-white border border-warm-200 border-t-2 border-t-brand-500 rounded-md shadow-sm p-5 sm:p-6">
+        <h1 className="text-lg font-bold text-warm-900 tracking-tight">
+          {step === 1 ? 'Reset password' : 'Enter reset code'}
+        </h1>
+        <p className="text-[11px] text-warm-500 mt-1 mb-4">
+          {step === 1
+            ? 'Enter your account email to receive a 6-digit reset code'
+            : `We sent a 6-digit code to ${email}`}
+        </p>
+
+        {step === 1 ? (
+          <form onSubmit={handleRequestCode} className="space-y-2.5">
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Send Reset Code</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleResetPassword} className="space-y-2.5">
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                6-Digit Reset Code
+              </label>
+              <div className="relative">
+                <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md font-mono text-center tracking-widest text-[13px] font-bold text-warm-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  placeholder="123456"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                New Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>Set New Password</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="w-full text-[11px] text-brand-600 font-medium hover:underline text-center block"
+            >
+              Change email or resend code
+            </button>
+          </form>
+        )}
+
+        <div className="mt-4 pt-3 border-t border-warm-100 text-center">
+          <Link
+            href="/login"
+            className="inline-flex items-center justify-center gap-1.5 text-[11px] text-warm-500 hover:text-warm-900 font-medium transition-colors"
+          >
+            <ArrowLeft className="w-3 h-3" /> Back to Login
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

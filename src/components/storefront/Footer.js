@@ -1,0 +1,104 @@
+import Link from 'next/link';
+import { FiInstagram, FiTwitter, FiFacebook, FiYoutube } from 'react-icons/fi';
+
+const footerLinks = {
+  Shop: [
+    { label: 'New Arrivals', href: '/products?sort=newest' },
+    { label: 'Best Sellers', href: '/products?sort=best-sellers' },
+    { label: 'All Products', href: '/products' },
+    { label: 'Categories', href: '/categories' },
+    { label: 'Sale', href: '/products?sort=discount' },
+  ],
+  'Customer Service': [
+    { label: 'Contact Us', href: '/contact' },
+    { label: 'Shipping Info', href: '/shipping' },
+    { label: 'Returns & Exchanges', href: '/returns' },
+    { label: 'FAQs', href: '/faq' },
+    { label: 'Size Guide', href: '/faq' },
+  ],
+  About: [
+    { label: 'Our Story', href: '/about' },
+    { label: 'Sustainability', href: '/about' },
+    { label: 'Careers', href: '/about' },
+    { label: 'Press', href: '/about' },
+    { label: 'Blog', href: '/about' },
+  ],
+};
+
+const socialLinks = [
+  { Icon: FiInstagram, href: '#', label: 'Instagram' },
+  { Icon: FiTwitter, href: '#', label: 'Twitter' },
+  { Icon: FiFacebook, href: '#', label: 'Facebook' },
+  { Icon: FiYoutube, href: '#', label: 'YouTube' },
+];
+
+export default function Footer() {
+  return (
+    <footer className="bg-warm-900 text-warm-300">
+      {/* Main footer */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-6">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <Link href="/" className="inline-block mb-2">
+              <span className="text-base font-extrabold text-white tracking-tight">
+                Hoda<span className="text-brand-500">Hub</span>
+              </span>
+            </Link>
+            <p className="text-[11px] text-warm-400 leading-relaxed mb-3 max-w-xs">
+              Discover trending products curated for modern lifestyles. Premium quality, delivered worldwide.
+            </p>
+            {/* Social links */}
+            <div className="flex items-center gap-2">
+              {socialLinks.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  aria-label={item.label}
+                  className="w-6 h-6 rounded-full bg-warm-800 flex items-center justify-center text-warm-400 hover:bg-brand-500 hover:text-white transition-all duration-200"
+                >
+                  <item.Icon className="w-3 h-3" />
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Link columns */}
+          {Object.entries(footerLinks).map(([title, links]) => (
+            <div key={title}>
+              <h3 className="text-[11px] font-semibold text-white uppercase tracking-wider mb-2">{title}</h3>
+              <ul className="leading-4">
+                {links.map((link) => (
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="text-[11px] text-warm-400 hover:text-white transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom bar */}
+      <div className="border-t border-warm-800">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p className="text-[10px] text-warm-500">
+              &copy; {new Date().getFullYear()} HodaHub. All rights reserved.
+            </p>
+            <div className="flex items-center gap-4 text-[10px] text-warm-500">
+              <Link href="/privacy" className="hover:text-warm-300 transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-warm-300 transition-colors">Terms of Service</Link>
+              <Link href="/terms" className="hover:text-warm-300 transition-colors">Cookies</Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
