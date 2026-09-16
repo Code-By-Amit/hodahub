@@ -14,7 +14,19 @@ import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import Script from 'next/script';
 import { formatCurrency } from '@/lib/utils';
-import { FiPlus, FiMapPin, FiCreditCard, FiTruck, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { lookupPincode } from '@/lib/pincode';
+import {
+  FiPlus,
+  FiMapPin,
+  FiCreditCard,
+  FiTruck,
+  FiCheck,
+  FiAlertCircle,
+  FiUser,
+  FiUserPlus,
+  FiArrowRight,
+  FiLoader,
+} from 'react-icons/fi';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -43,6 +55,26 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('razorpay');
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
+  // checkoutMode: 'account' | 'prompt' | 'guest'
+  const [checkoutMode, setCheckoutMode] = useState('prompt');
+
+  const [guestForm, setGuestForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    pincode: '',
+  });
+
+  // Pincode auto-fill states
+  const [guestPincodeLoading, setGuestPincodeLoading] = useState(false);
+  const [guestPincodeNote, setGuestPincodeNote] = useState('');
+  const [addrPincodeLoading, setAddrPincodeLoading] = useState(false);
+  const [addrPincodeNote, setAddrPincodeNote] = useState('');
+
   const [storeSettings, setStoreSettings] = useState({
     codEnabled: true,
     shippingFee: 0,
@@ -70,23 +102,78 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
-      router.push('/login');
-      return;
-    }
     if (items.length === 0) {
       router.push('/cart');
       return;
     }
-    fetchAddresses();
+    if (user) {
+      setCheckoutMode('account');
+      fetchAddresses();
+    } else {
+      setCheckoutMode((prev) => (prev === 'account' ? 'prompt' : prev));
+    }
     fetchStoreSettings();
-  }, [user, authLoading]);
+  }, [user, authLoading, items.length]);
 
   useEffect(() => {
     if (!isCodAvailable && paymentMethod === 'cod') {
       setPaymentMethod('razorpay');
     }
   }, [isCodAvailable, paymentMethod]);
+
+  // Debounced Pincode Lookup for Guest Form
+  useEffect(() => {
+    const pincode = guestForm.pincode.trim();
+    if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
+      setGuestPincodeNote('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setGuestPincodeLoading(true);
+      setGuestPincodeNote('');
+      const res = await lookupPincode(pincode);
+      setGuestPincodeLoading(false);
+      if (res && (res.city || res.state)) {
+        setGuestForm((prev) => ({
+          ...prev,
+          city: res.city || prev.city,
+          state: res.state || prev.state,
+        }));
+      } else {
+        setGuestPincodeNote("Couldn't auto-detect city/state. Please enter manually.");
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [guestForm.pincode]);
+
+  // Debounced Pincode Lookup for Logged-in Add Address Form
+  useEffect(() => {
+    const pincode = addrForm.pincode.trim();
+    if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
+      setAddrPincodeNote('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setAddrPincodeLoading(true);
+      setAddrPincodeNote('');
+      const res = await lookupPincode(pincode);
+      setAddrPincodeLoading(false);
+      if (res && (res.city || res.state)) {
+        setAddrForm((prev) => ({
+          ...prev,
+          city: res.city || prev.city,
+          state: res.state || prev.state,
+        }));
+      } else {
+        setAddrPincodeNote("Couldn't auto-detect city/state. Please enter manually.");
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [addrForm.pincode]);
 
   async function fetchStoreSettings() {
     try {
@@ -143,24 +230,53 @@ export default function CheckoutPage() {
   }
 
   async function handleCheckout() {
-    if (!selectedAddress) {
-      toast.error('Please select a delivery address');
-      return;
+    const isGuestOrder = !user || checkoutMode === 'guest';
+
+    if (isGuestOrder) {
+      if (!guestForm.name || !guestForm.email || !guestForm.line1 || !guestForm.city || !guestForm.state || !guestForm.pincode) {
+        toast.error('Please fill all required guest & shipping details');
+        return;
+      }
+    } else {
+      if (!selectedAddress) {
+        toast.error('Please select a delivery address');
+        return;
+      }
     }
 
     setPaying(true);
     try {
       const cartItems = items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
 
+      const payload = isGuestOrder
+        ? {
+            items: cartItems,
+            couponCode: coupon?.code || null,
+            paymentMethod,
+            isGuest: true,
+            guestName: guestForm.name,
+            guestEmail: guestForm.email,
+            guestPhone: guestForm.phone,
+            shippingAddress: {
+              line1: guestForm.line1,
+              line2: guestForm.line2,
+              city: guestForm.city,
+              state: guestForm.state,
+              pincode: guestForm.pincode,
+              phone: guestForm.phone,
+            },
+          }
+        : {
+            items: cartItems,
+            couponCode: coupon?.code || null,
+            addressId: selectedAddress,
+            paymentMethod,
+          };
+
       const createRes = await fetch('/api/payment/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: cartItems,
-          couponCode: coupon?.code || null,
-          addressId: selectedAddress,
-          paymentMethod,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const createData = await createRes.json();
@@ -240,287 +356,490 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!user || items.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setRazorpayLoaded(true)} />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Cart', href: '/cart' }, { label: 'Checkout' }]} />
 
-        <h1 className="text-md font-bold text-warm-900 tracking-tight mb-4">Checkout</h1>
-
-        <div className="grid lg:grid-cols-3 gap-4">
-          {/* Left: Address & Payment Selection */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Delivery Address Section */}
-            <div className="p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5">
-                  <FiMapPin className="w-3.5 h-3.5 text-warm-900" /> Delivery Address
-                </h2>
-                <button
-                  onClick={() => setShowAddForm(!showAddForm)}
-                  className="text-[11px] font-semibold text-warm-900 hover:underline flex items-center gap-1"
-                >
-                  <FiPlus className="w-3 h-3" /> Add New Address
-                </button>
+        {/* DECISION SCREEN FOR UNAUTHENTICATED USERS */}
+        {!user && checkoutMode === 'prompt' ? (
+          <div className="max-w-2xl mx-auto py-6">
+            <div className="bg-white rounded-xl border border-warm-200 shadow-sm p-6 sm:p-8 space-y-6">
+              <div className="text-center space-y-1.5">
+                <h1 className="text-lg sm:text-xl font-bold text-warm-900 tracking-tight">How would you like to check out?</h1>
+                <p className="text-[12px] text-warm-500 max-w-md mx-auto">
+                  Select an option below to proceed. You can log in to your account, register a new account, or check out as a guest.
+                </p>
               </div>
 
-              {/* Add Address Form */}
-              {showAddForm && (
-                <form onSubmit={handleAddAddress} className="grid grid-cols-2 gap-2 mb-4 p-3 bg-warm-50/70 border border-warm-200 rounded-md">
-                  <input
-                    value={addrForm.label}
-                    onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}
-                    placeholder="Label (Home, Office)"
-                    className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                  />
-                  <input
-                    value={addrForm.line1}
-                    onChange={(e) => setAddrForm({ ...addrForm, line1: e.target.value })}
-                    placeholder="Address Line 1 *"
-                    className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                    required
-                  />
-                  <input
-                    value={addrForm.line2}
-                    onChange={(e) => setAddrForm({ ...addrForm, line2: e.target.value })}
-                    placeholder="Address Line 2"
-                    className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                  />
-                  <input
-                    value={addrForm.city}
-                    onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
-                    placeholder="City *"
-                    className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                    required
-                  />
-                  <input
-                    value={addrForm.state}
-                    onChange={(e) => setAddrForm({ ...addrForm, state: e.target.value })}
-                    placeholder="State *"
-                    className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                    required
-                  />
-                  <input
-                    value={addrForm.pincode}
-                    onChange={(e) => setAddrForm({ ...addrForm, pincode: e.target.value })}
-                    placeholder="Pincode *"
-                    className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                    required
-                  />
-                  <input
-                    value={addrForm.phone}
-                    onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
-                    placeholder="Phone"
-                    className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                  />
-                  <div className="col-span-2 flex gap-2 pt-0.5">
-                    <button
-                      type="submit"
-                      disabled={addrLoading}
-                      className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors"
-                    >
-                      {addrLoading ? 'Saving...' : 'Save Address'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddForm(false)}
-                      className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
+              <div className="grid sm:grid-cols-3 gap-4 pt-2">
+                {/* Option 1: Log In */}
+                <div className="flex flex-col justify-between p-4.5 rounded-xl border-2 border-warm-200 hover:border-warm-900 bg-white transition-all shadow-2xs hover:shadow-md group">
+                  <div className="space-y-2">
+                    <div className="w-9 h-9 rounded-lg bg-warm-100 text-warm-900 flex items-center justify-center font-bold group-hover:bg-warm-900 group-hover:text-white transition-colors">
+                      <FiUser className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-warm-900">Log In</h3>
+                    <p className="text-[11px] text-warm-500 leading-relaxed">
+                      Use your saved addresses & track past orders.
+                    </p>
                   </div>
-                </form>
-              )}
+                  <button
+                    type="button"
+                    onClick={() => router.push('/login?redirect=/checkout')}
+                    className="mt-4 w-full py-2 bg-warm-900 text-white text-[11px] font-semibold rounded-lg hover:bg-warm-800 transition-colors shadow-2xs"
+                  >
+                    Log In
+                  </button>
+                </div>
 
-              {/* Address List */}
-              <div className="space-y-2">
-                {addresses.length === 0 ? (
-                  <p className="text-warm-400 text-[11px] py-3 text-center border border-dashed border-warm-200 rounded-md">
-                    No saved addresses. Click above to add one.
-                  </p>
+                {/* Option 2: Create Account */}
+                <div className="flex flex-col justify-between p-4.5 rounded-xl border-2 border-warm-200 hover:border-brand-600 bg-white transition-all shadow-2xs hover:shadow-md group">
+                  <div className="space-y-2">
+                    <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center font-bold group-hover:bg-brand-600 group-hover:text-white transition-colors">
+                      <FiUserPlus className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-warm-900">Create Account</h3>
+                    <p className="text-[11px] text-warm-500 leading-relaxed">
+                      Sign up with email OTP verification.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push('/signup?redirect=/checkout')}
+                    className="mt-4 w-full py-2 bg-brand-600 text-white text-[11px] font-semibold rounded-lg hover:bg-brand-700 transition-colors shadow-2xs"
+                  >
+                    Create Account
+                  </button>
+                </div>
+
+                {/* Option 3: Continue as Guest */}
+                <div className="flex flex-col justify-between p-4.5 rounded-xl border-2 border-warm-200 hover:border-emerald-600 bg-white transition-all shadow-2xs hover:shadow-md group">
+                  <div className="space-y-2">
+                    <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+                      <FiArrowRight className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-warm-900">Continue as Guest</h3>
+                    <p className="text-[11px] text-warm-500 leading-relaxed">
+                      Instant checkout without creating an account.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutMode('guest')}
+                    className="mt-4 w-full py-2 bg-emerald-700 text-white text-[11px] font-semibold rounded-lg hover:bg-emerald-800 transition-colors shadow-2xs"
+                  >
+                    Continue as Guest
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+              <h1 className="text-md font-bold text-warm-900 tracking-tight">Checkout</h1>
+              {!user && checkoutMode === 'guest' && (
+                <div className="flex items-center gap-2 bg-warm-100 p-1 rounded-md text-[11px] font-semibold">
+                  <span className="text-warm-700 px-2">Checking out as Guest</span>
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutMode('prompt')}
+                    className="px-2.5 py-1 bg-white text-warm-900 rounded border border-warm-200 hover:bg-warm-50 transition-colors"
+                  >
+                    Change / Sign In
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-4">
+              {/* Left: Address & Payment Selection */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Delivery Address / Guest Details Section */}
+                {checkoutMode === 'guest' || !user ? (
+                  <div className="p-4 bg-white rounded-lg border border-warm-200 shadow-xs space-y-3">
+                    <div className="border-b border-warm-100 pb-2 flex items-center justify-between">
+                      <div>
+                        <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5">
+                          <FiMapPin className="w-3.5 h-3.5 text-warm-900" /> Guest Details & Shipping Address
+                        </h2>
+                        <p className="text-[10px] text-warm-500 mt-0.5">
+                          Enter your contact and delivery information below.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <input
+                        type="text"
+                        value={guestForm.name}
+                        onChange={(e) => setGuestForm({ ...guestForm, name: e.target.value })}
+                        placeholder="Full Name *"
+                        className="col-span-2 sm:col-span-1 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        required
+                      />
+                      <input
+                        type="email"
+                        value={guestForm.email}
+                        onChange={(e) => setGuestForm({ ...guestForm, email: e.target.value })}
+                        placeholder="Email Address (for order tracking) *"
+                        className="col-span-2 sm:col-span-1 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        required
+                      />
+                      <input
+                        type="tel"
+                        value={guestForm.phone}
+                        onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value })}
+                        placeholder="Phone Number (Optional)"
+                        className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                      />
+                      <input
+                        type="text"
+                        value={guestForm.line1}
+                        onChange={(e) => setGuestForm({ ...guestForm, line1: e.target.value })}
+                        placeholder="Address Line 1 *"
+                        className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        required
+                      />
+                      <input
+                        type="text"
+                        value={guestForm.line2}
+                        onChange={(e) => setGuestForm({ ...guestForm, line2: e.target.value })}
+                        placeholder="Address Line 2 (Apartment, Suite, etc.)"
+                        className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                      />
+
+                      {/* Pincode Field with Loader */}
+                      <div className="col-span-2 relative">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={guestForm.pincode}
+                          onChange={(e) => setGuestForm({ ...guestForm, pincode: e.target.value })}
+                          placeholder="6-Digit Pincode * (Auto-fills City & State)"
+                          className="w-full px-2.5 py-1.5 pr-8 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                          required
+                        />
+                        {guestPincodeLoading && (
+                          <FiLoader className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-500 animate-spin" />
+                        )}
+                      </div>
+
+                      {guestPincodeNote && (
+                        <p className="col-span-2 text-[10px] text-amber-700 font-medium">
+                          {guestPincodeNote}
+                        </p>
+                      )}
+
+                      <input
+                        type="text"
+                        value={guestForm.city}
+                        onChange={(e) => setGuestForm({ ...guestForm, city: e.target.value })}
+                        placeholder="City *"
+                        className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        required
+                      />
+                      <input
+                        type="text"
+                        value={guestForm.state}
+                        onChange={(e) => setGuestForm({ ...guestForm, state: e.target.value })}
+                        placeholder="State *"
+                        className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
                 ) : (
-                  addresses.map((addr) => (
+                  <div className="p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5">
+                        <FiMapPin className="w-3.5 h-3.5 text-warm-900" /> Delivery Address
+                      </h2>
+                      <button
+                        onClick={() => setShowAddForm(!showAddForm)}
+                        className="text-[11px] font-semibold text-warm-900 hover:underline flex items-center gap-1"
+                      >
+                        <FiPlus className="w-3 h-3" /> Add New Address
+                      </button>
+                    </div>
+
+                    {/* Add Address Form */}
+                    {showAddForm && (
+                      <form onSubmit={handleAddAddress} className="grid grid-cols-2 gap-2 mb-4 p-3 bg-warm-50/70 border border-warm-200 rounded-md">
+                        <input
+                          value={addrForm.label}
+                          onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}
+                          placeholder="Label (Home, Office)"
+                          className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        />
+                        <input
+                          value={addrForm.line1}
+                          onChange={(e) => setAddrForm({ ...addrForm, line1: e.target.value })}
+                          placeholder="Address Line 1 *"
+                          className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                          required
+                        />
+                        <input
+                          value={addrForm.line2}
+                          onChange={(e) => setAddrForm({ ...addrForm, line2: e.target.value })}
+                          placeholder="Address Line 2"
+                          className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        />
+
+                        {/* Logged in Pincode with Loader */}
+                        <div className="col-span-2 relative">
+                          <input
+                            type="text"
+                            maxLength={6}
+                            value={addrForm.pincode}
+                            onChange={(e) => setAddrForm({ ...addrForm, pincode: e.target.value })}
+                            placeholder="6-Digit Pincode * (Auto-fills City & State)"
+                            className="w-full px-2.5 py-1.5 pr-8 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                            required
+                          />
+                          {addrPincodeLoading && (
+                            <FiLoader className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-500 animate-spin" />
+                          )}
+                        </div>
+
+                        {addrPincodeNote && (
+                          <p className="col-span-2 text-[10px] text-amber-700 font-medium">
+                            {addrPincodeNote}
+                          </p>
+                        )}
+
+                        <input
+                          value={addrForm.city}
+                          onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
+                          placeholder="City *"
+                          className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                          required
+                        />
+                        <input
+                          value={addrForm.state}
+                          onChange={(e) => setAddrForm({ ...addrForm, state: e.target.value })}
+                          placeholder="State *"
+                          className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                          required
+                        />
+                        <input
+                          value={addrForm.phone}
+                          onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
+                          placeholder="Phone"
+                          className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                        />
+                        <div className="col-span-2 flex gap-2 pt-0.5">
+                          <button
+                            type="submit"
+                            disabled={addrLoading}
+                            className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors"
+                          >
+                            {addrLoading ? 'Saving...' : 'Save Address'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddForm(false)}
+                            className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-100 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Address List */}
+                    <div className="space-y-2">
+                      {addresses.length === 0 ? (
+                        <p className="text-warm-400 text-[11px] py-3 text-center border border-dashed border-warm-200 rounded-md">
+                          No saved addresses. Click above to add one.
+                        </p>
+                      ) : (
+                        addresses.map((addr) => (
+                          <label
+                            key={addr.id}
+                            className={`flex items-start gap-2 p-3 rounded-md border cursor-pointer transition-all ${
+                              selectedAddress === addr.id
+                                ? 'border-warm-900 bg-warm-50/50 shadow-xs'
+                                : 'border-warm-200 hover:border-warm-300'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="address"
+                              checked={selectedAddress === addr.id}
+                              onChange={() => setSelectedAddress(addr.id)}
+                              className="mt-1 accent-warm-900 w-3.5 h-3.5"
+                            />
+                            <div>
+                              {addr.label && (
+                                <span className="text-[10px] font-bold text-warm-900 uppercase tracking-wider block mb-0.5">
+                                  {addr.label}
+                                </span>
+                              )}
+                              <p className="text-[11px] text-warm-900 font-medium">
+                                {addr.line1}
+                                {addr.line2 ? `, ${addr.line2}` : ''}
+                              </p>
+                              <p className="text-[10px] text-warm-500 mt-0.5">
+                                {addr.city}, {addr.state} — {addr.pincode}
+                              </p>
+                              {addr.phone && <p className="text-[10px] text-warm-400 mt-0.5">Phone: {addr.phone}</p>}
+                            </div>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Method Selection */}
+                <div className="p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
+                  <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5 mb-3">
+                    <FiCreditCard className="w-3.5 h-3.5 text-warm-900" /> Payment Method
+                  </h2>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Razorpay Online Option */}
                     <label
-                      key={addr.id}
-                      className={`flex items-start gap-2 p-3 rounded-md border cursor-pointer transition-all ${
-                        selectedAddress === addr.id
+                      className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
+                        paymentMethod === 'razorpay'
                           ? 'border-warm-900 bg-warm-50/50 shadow-xs'
                           : 'border-warm-200 hover:border-warm-300'
                       }`}
                     >
                       <input
                         type="radio"
-                        name="address"
-                        checked={selectedAddress === addr.id}
-                        onChange={() => setSelectedAddress(addr.id)}
-                        className="mt-1 accent-warm-900 w-3.5 h-3.5"
+                        name="paymentMethod"
+                        value="razorpay"
+                        checked={paymentMethod === 'razorpay'}
+                        onChange={() => setPaymentMethod('razorpay')}
+                        className="accent-warm-900 w-3.5 h-3.5"
                       />
                       <div>
-                        {addr.label && (
-                          <span className="text-[10px] font-bold text-warm-900 uppercase tracking-wider block mb-0.5">
-                            {addr.label}
-                          </span>
-                        )}
-                        <p className="text-[11px] text-warm-900 font-medium">
-                          {addr.line1}
-                          {addr.line2 ? `, ${addr.line2}` : ''}
+                        <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
+                          <FiCreditCard className="w-3 h-3 text-warm-700" /> Online Payment
                         </p>
-                        <p className="text-[10px] text-warm-500 mt-0.5">
-                          {addr.city}, {addr.state} — {addr.pincode}
-                        </p>
-                        {addr.phone && <p className="text-[10px] text-warm-400 mt-0.5">Phone: {addr.phone}</p>}
+                        <p className="text-[10px] text-warm-500 mt-0.5">UPI, Cards, NetBanking via Razorpay</p>
                       </div>
                     </label>
-                  ))
-                )}
-              </div>
-            </div>
 
-            {/* Payment Method Selection */}
-            <div className="p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
-              <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5 mb-3">
-                <FiCreditCard className="w-3.5 h-3.5 text-warm-900" /> Payment Method
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {/* Razorpay Online Option */}
-                <label
-                  className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
-                    paymentMethod === 'razorpay'
-                      ? 'border-warm-900 bg-warm-50/50 shadow-xs'
-                      : 'border-warm-200 hover:border-warm-300'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="razorpay"
-                    checked={paymentMethod === 'razorpay'}
-                    onChange={() => setPaymentMethod('razorpay')}
-                    className="accent-warm-900 w-3.5 h-3.5"
-                  />
-                  <div>
-                    <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
-                      <FiCreditCard className="w-3 h-3 text-warm-700" /> Online Payment
-                    </p>
-                    <p className="text-[10px] text-warm-500 mt-0.5">UPI, Cards, NetBanking via Razorpay</p>
+                    {/* Cash on Delivery Option */}
+                    {isCodAvailable && (
+                      <label
+                        className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
+                          paymentMethod === 'cod'
+                            ? 'border-warm-900 bg-warm-50/50 shadow-xs'
+                            : 'border-warm-200 hover:border-warm-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="cod"
+                          checked={paymentMethod === 'cod'}
+                          onChange={() => setPaymentMethod('cod')}
+                          className="accent-warm-900 w-3.5 h-3.5"
+                        />
+                        <div>
+                          <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
+                            <FiTruck className="w-3 h-3 text-warm-700" /> Cash on Delivery
+                          </p>
+                          <p className="text-[10px] text-warm-500 mt-0.5">Pay in cash upon package delivery</p>
+                        </div>
+                      </label>
+                    )}
                   </div>
-                </label>
 
-                {/* Cash on Delivery Option */}
-                {isCodAvailable && (
-                  <label
-                    className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
-                      paymentMethod === 'cod'
-                        ? 'border-warm-900 bg-warm-50/50 shadow-xs'
-                        : 'border-warm-200 hover:border-warm-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="cod"
-                      checked={paymentMethod === 'cod'}
-                      onChange={() => setPaymentMethod('cod')}
-                      className="accent-warm-900 w-3.5 h-3.5"
-                    />
-                    <div>
-                      <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
-                        <FiTruck className="w-3 h-3 text-warm-700" /> Cash on Delivery
-                      </p>
-                      <p className="text-[10px] text-warm-500 mt-0.5">Pay in cash upon package delivery</p>
+                  {nonCodItems.length > 0 && (
+                    <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200/80 rounded-md flex items-start gap-2 text-amber-800 text-[10px] leading-relaxed">
+                      <FiAlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-amber-900">Cash on Delivery unavailable</span>
+                        <p className="mt-0.5 text-amber-700">
+                          Cash on Delivery isn't available for: <span className="font-semibold">{nonCodItems.map((i) => i.name).join(', ')}</span>
+                        </p>
+                      </div>
                     </div>
-                  </label>
-                )}
+                  )}
+                </div>
               </div>
 
-              {nonCodItems.length > 0 && (
-                <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200/80 rounded-md flex items-start gap-2 text-amber-800 text-[10px] leading-relaxed">
-                  <FiAlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-amber-900">Cash on Delivery unavailable</span>
-                    <p className="mt-0.5 text-amber-700">
-                      Cash on Delivery isn't available for: <span className="font-semibold">{nonCodItems.map((i) => i.name).join(', ')}</span>
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+              {/* Right: Order Summary */}
+              <div>
+                <div className="sticky top-20 p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
+                  <h2 className="text-[13px] font-bold text-warm-900 mb-3 pb-2 border-b border-warm-100">Order Summary</h2>
 
-          {/* Right: Order Summary */}
-          <div>
-            <div className="sticky top-20 p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
-              <h2 className="text-[13px] font-bold text-warm-900 mb-3 pb-2 border-b border-warm-100">Order Summary</h2>
-
-              <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
-                {items.map((item) => (
-                  <div key={item.productId} className="flex justify-between text-[11px]">
-                    <span className="text-warm-600 truncate max-w-[150px]">
-                      {item.name} × {item.quantity}
-                    </span>
-                    <span className="font-semibold text-warm-900 shrink-0">
-                      {formatCurrency((item.discountPrice || item.price) * item.quantity)}
-                    </span>
+                  <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
+                    {items.map((item) => (
+                      <div key={item.productId} className="flex justify-between text-[11px]">
+                        <span className="text-warm-600 truncate max-w-[150px]">
+                          {item.name} × {item.quantity}
+                        </span>
+                        <span className="font-semibold text-warm-900 shrink-0">
+                          {formatCurrency((item.discountPrice || item.price) * item.quantity)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <div className="space-y-2 text-[11px] border-t border-warm-200 pt-3">
-                <div className="flex justify-between text-warm-600">
-                  <span>Subtotal</span>
-                  <span className="font-medium text-warm-900">{formatCurrency(subtotal)}</span>
-                </div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-emerald-700">
-                    <span>Discount ({coupon?.code})</span>
-                    <span className="font-medium">-{formatCurrency(discount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-warm-600">
-                  <span>Shipping</span>
-                  <span className="font-medium">
-                    {shippingFee === 0 ? (
-                      <span className="text-emerald-700 font-semibold">Free</span>
-                    ) : (
-                      formatCurrency(shippingFee)
+                  <div className="space-y-2 text-[11px] border-t border-warm-200 pt-3">
+                    <div className="flex justify-between text-warm-600">
+                      <span>Subtotal</span>
+                      <span className="font-medium text-warm-900">{formatCurrency(subtotal)}</span>
+                    </div>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Discount ({coupon?.code})</span>
+                        <span className="font-medium">-{formatCurrency(discount)}</span>
+                      </div>
                     )}
-                  </span>
-                </div>
-                <div className="flex justify-between text-warm-900 font-bold text-[13px] border-t border-warm-200 pt-2">
-                  <span>Total</span>
-                  <span>{formatCurrency(total)}</span>
-                </div>
-              </div>
+                    <div className="flex justify-between text-warm-600">
+                      <span>Shipping</span>
+                      <span className="font-medium">
+                        {shippingFee === 0 ? (
+                          <span className="text-emerald-700 font-semibold">Free</span>
+                        ) : (
+                          formatCurrency(shippingFee)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-warm-900 font-bold text-[13px] border-t border-warm-200 pt-2">
+                      <span>Total</span>
+                      <span>{formatCurrency(total)}</span>
+                    </div>
+                  </div>
 
-              <button
-                onClick={handleCheckout}
-                disabled={paying || (paymentMethod === 'razorpay' && !razorpayLoaded)}
-                className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-warm-900 text-white font-medium text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {paying ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    {paymentMethod === 'cod' ? (
-                      <>
-                        <FiCheck className="w-2.5 h-2.5" /> Confirm Order (COD)
-                      </>
+                  <button
+                    onClick={handleCheckout}
+                    disabled={paying || (paymentMethod === 'razorpay' && !razorpayLoaded)}
+                    className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-warm-900 text-white font-medium text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {paying ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
-                        <FiCreditCard className="w-2.5 h-2.5" /> Pay {formatCurrency(total)}
+                        {paymentMethod === 'cod' ? (
+                          <>
+                            <FiCheck className="w-2.5 h-2.5" /> Confirm Order (COD)
+                          </>
+                        ) : (
+                          <>
+                            <FiCreditCard className="w-2.5 h-2.5" /> Pay {formatCurrency(total)}
+                          </>
+                        )}
                       </>
                     )}
-                  </>
-                )}
-              </button>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </>
   );

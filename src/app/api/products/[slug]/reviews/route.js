@@ -1,8 +1,17 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { reviews, users, products as productsTable } from '@/lib/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, or } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+
+function getProductWhereCondition(slug) {
+  const rawSlug = slug || '';
+  const decodedSlug = decodeURIComponent(rawSlug);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSlug);
+  return isUuid
+    ? or(eq(productsTable.id, rawSlug), eq(productsTable.slug, rawSlug))
+    : or(eq(productsTable.slug, rawSlug), eq(productsTable.slug, decodedSlug));
+}
 
 export async function GET(request, { params }) {
   try {
@@ -12,11 +21,11 @@ export async function GET(request, { params }) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
 
-    // Find product by slug
+    // Find product by slug or id
     const [product] = await db
       .select({ id: productsTable.id })
       .from(productsTable)
-      .where(eq(productsTable.slug, slug))
+      .where(getProductWhereCondition(slug))
       .limit(1);
 
     if (!product) {
@@ -72,7 +81,7 @@ export async function POST(request, { params }) {
     const [product] = await db
       .select({ id: productsTable.id })
       .from(productsTable)
-      .where(eq(productsTable.slug, slug))
+      .where(getProductWhereCondition(slug))
       .limit(1);
 
     if (!product) {

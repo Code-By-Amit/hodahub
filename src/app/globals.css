@@ -221,3 +221,36 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* === Print Styles === */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  header, footer, nav, .print\:hidden, [role="navigation"] {
+    display: none !important;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #1c1917 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .print-container {
+    width: 100% !important;
+    max-width: 720px !important;
+    margin: 20px auto !important;
+    padding: 32px !important;
+    border: 1px solid #e7e5e4 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+}

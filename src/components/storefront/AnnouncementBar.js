@@ -14,7 +14,7 @@ export default function AnnouncementBar() {
   const doubled = [...messages, ...messages];
 
   return (
-    <div className="bg-warm-900 text-warm-200 text-[10px] font-medium overflow-hidden relative h-6 flex items-center border-b border-warm-800">
+    <div className="bg-warm-900 text-warm-200 text-[10px] font-medium overflow-hidden relative h-6 flex items-center border-b border-warm-800 print:hidden">
       <div
         className="flex whitespace-nowrap items-center"
         style={{ animation: 'ticker 35s linear infinite' }}

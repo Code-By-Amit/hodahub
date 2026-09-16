@@ -80,8 +80,8 @@ export default function AdminBannersPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.title.trim()) {
-      toast.error('Title is required');
+    if (!form.imageUrl && !form.title.trim()) {
+      toast.error('Banner image or title is required');
       return;
     }
     setSaving(true);
@@ -252,7 +252,7 @@ export default function AdminBannersPage() {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Banner Title *
+              Banner Title (Optional)
             </label>
             <input
               type="text"
@@ -260,13 +260,12 @@ export default function AdminBannersPage() {
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="e.g. Summer Fashion Sale — Up to 40% Off"
               className="w-full px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-              required
             />
           </div>
 
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Subtitle / Tagline
+              Subtitle / Tagline (Optional)
             </label>
             <input
               type="text"
@@ -305,12 +304,12 @@ export default function AdminBannersPage() {
 
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Banner Image (Optional)
+              Banner Image *
             </label>
             <ImageUpload
-              images={form.imageUrl ? [form.imageUrl] : []}
+              uploadType="product-image"
+              value={form.imageUrl ? [form.imageUrl] : []}
               onChange={(urls) => setForm({ ...form, imageUrl: urls[0] || '' })}
-              type="product-image"
               maxFiles={1}
             />
           </div>

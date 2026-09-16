@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import { Package } from 'lucide-react';
 import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw } from 'react-icons/fi';
+import { formatCurrency } from '@/lib/utils';
 
 const statusOptions = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const paymentStatusOptions = ['pending', 'paid', 'failed', 'refunded'];
@@ -131,6 +132,27 @@ export default function AdminOrderDetailPage() {
         <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-[11px] mb-4">
           <p className="font-bold">Order Cancelled</p>
           {order.cancelReason && <p className="text-[10px] mt-0.5">Reason: {order.cancelReason}</p>}
+        </div>
+      )}
+
+      {/* COD Payment Collection Banner */}
+      {order.paymentMethod?.toLowerCase() === 'cod' && order.paymentStatus !== 'paid' && order.status !== 'cancelled' && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-md mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-emerald-900 text-[12px] flex items-center gap-1.5">
+              💵 Cash on Delivery (COD) Order — Payment Pending
+            </h3>
+            <p className="text-[11px] text-emerald-700 mt-0.5">
+              Total collection amount: <span className="font-bold">{formatCurrency(order.totalAmount)}</span>. Mark as paid once cash is collected upon delivery.
+            </p>
+          </div>
+          <button
+            onClick={() => handleAdminAction('update_payment_status', { paymentStatus: 'paid' })}
+            disabled={updating}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-md transition-colors shrink-0 shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <FiCheck className="w-3.5 h-3.5" /> Mark COD Payment as Paid
+          </button>
         </div>
       )}
 

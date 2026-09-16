@@ -32,7 +32,14 @@ export async function GET(request, { params }) {
     let customer = null;
     if (order.userId) {
       const [u] = await db.select({ name: users.name, email: users.email, phone: users.phone }).from(users).where(eq(users.id, order.userId)).limit(1);
-      customer = u;
+      customer = u ? { ...u, isGuest: false } : null;
+    } else if (order.guestEmail || order.guestName) {
+      customer = {
+        name: order.guestName || 'Guest Customer',
+        email: order.guestEmail,
+        phone: order.guestPhone,
+        isGuest: true,
+      };
     }
 
     return NextResponse.json({ order, items, history, address, customer });

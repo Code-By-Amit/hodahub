@@ -15,8 +15,8 @@ export default function CategoryQuickNav({ categories = [] }) {
             href="/products"
             className="group shrink-0 flex flex-col items-center text-center w-16 "
           >
-            <div className="w-10 h-10 rounded-full bg-warm-900 text-white flex items-center justify-center mb-1.5 shadow-xs group-hover:scale-105 transition-transform">
-              <Grid className="w-3 h-3 " />
+            <div className="w-14 h-14 rounded-full bg-warm-900 text-white flex items-center justify-center mb-1.5 shadow-xs group-hover:scale-105 transition-transform">
+              <Grid className="w-5 h-5 " />
             </div>
             <span className="text-[11px] font-semibold text-warm-900 line-clamp-1 group-hover:text-warm-700">
               All Items
@@ -29,20 +29,20 @@ export default function CategoryQuickNav({ categories = [] }) {
               href={`/categories/${cat.slug}`}
               className="group shrink-0 flex flex-col items-center text-center w-16 "
             >
-              <div className=" w-10 h-10 rounded-full overflow-hidden bg-warm-100 border border-warm-200 flex items-center justify-center mb-1.5 shadow-2xs relative group-hover:scale-105 transition-transform">
+              <div className=" w-14 h-14 rounded-full overflow-hidden bg-warm-100 border border-warm-200 flex items-center justify-center mb-1.5 shadow-2xs relative group-hover:scale-105 transition-transform">
                 {cat.imageUrl ? (
                   <Image
                     src={cat.imageUrl}
                     alt={cat.name}
                     fill
                     className="object-cover"
-                    sizes="56px"
+                    sizes="66px"
                   />
                 ) : (
                   <Folder className="w-3 h-3 text-warm-400" />
                 )}
               </div>
-              <span className="text-[11px] font-semibold text-warm-800 line-clamp-1 group-hover:text-warm-900">
+              <span className="text-[11px] font-semibold text-warm-800 whitespace-nowrap overflow-visible group-hover:text-warm-900">
                 {cat.name}
               </span>
             </Link>

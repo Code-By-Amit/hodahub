@@ -18,3 +18,22 @@ export function formatCurrency(amount) {
     maximumFractionDigits: 2,
   })}`;
 }
+
+/**
+ * Checks if a media URL represents a video (Cloudinary video URL, video extension, or video MIME indicator).
+ * Works reliably even for Cloudinary URLs without explicit file extensions or with query parameters.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isVideoUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const lowercaseUrl = url.toLowerCase();
+  return (
+    lowercaseUrl.includes('/video/upload/') ||
+    lowercaseUrl.includes('/video/') ||
+    lowercaseUrl.includes('resource_type=video') ||
+    Boolean(lowercaseUrl.match(/\.(mp4|webm|mov|avi|mkv|m3u8|flv|wmv)($|\?|#)/i))
+  );
+}
+

@@ -93,19 +93,20 @@ function VerifyOTPContent() {
         return;
       }
 
+      const redirect = searchParams.get('redirect') || '';
       setSuccess('Email verified successfully! Redirecting...');
       dispatch(setUser(data.user));
       await syncWishlistOnAuth(dispatch, guestWishlistItems);
 
       setTimeout(() => {
-        router.push('/');
+        router.push(redirect || '/');
       }, 1000);
     } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [otp, email, dispatch, router]);
+  }, [otp, email, dispatch, router, searchParams]);
 
   useEffect(() => {
     if (otp.every((d) => d !== '') && otp.join('').length === 6) {

@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import StarRating from '@/components/ui/StarRating';
 import { Eye, EyeOff, Trash2, Film, ImageIcon, X } from 'lucide-react';
+import { isVideoUrl } from '@/lib/utils';
 
 export default function AdminReviewsPage() {
   const toast = useToast();
@@ -51,15 +52,6 @@ export default function AdminReviewsPage() {
       toast.error('Error deleting review');
     }
   }
-
-  const isVideoUrl = (url) => {
-    if (!url) return false;
-    return (
-      url.match(/\.(mp4|webm|mov|avi|mkv)($|\?)/i) ||
-      url.includes('/video/upload/') ||
-      url.endsWith('.mp4')
-    );
-  };
 
   return (
     <div className="space-y-4">

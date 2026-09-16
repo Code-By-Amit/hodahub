@@ -28,6 +28,7 @@ export default function ProductCard({ product, variant = 'default' }) {
     ratingAvg, reviewCount, createdAt
   } = product || {};
 
+  const productSlug = slug || id;
   const isWishlisted = useSelector(selectIsWishlisted(id));
 
   const mainImage = images?.[0] || '';
@@ -43,11 +44,11 @@ export default function ProductCard({ product, variant = 'default' }) {
     dispatch(addItem({
       productId: id,
       name,
-      slug,
+      slug: productSlug,
       image: mainImage,
       price: Number(price),
       discountPrice: discountPrice ? Number(discountPrice) : null,
-      codAvailable: product.codAvailable !== false,
+      codAvailable: product?.codAvailable !== false,
       quantity: 1,
     }));
     toast.success(`${name} added to cart!`);
@@ -89,7 +90,7 @@ export default function ProductCard({ product, variant = 'default' }) {
     return (
       <>
         <div className="group bg-white rounded-md border border-warm-200 hover:border-warm-300 hover:shadow-xs transition-all duration-200 overflow-hidden">
-          <Link href={`/products/${slug}`} className="block">
+          <Link href={`/products/${productSlug}`} className="block">
             <div className="flex flex-row items-center p-2 sm:p-2.5 gap-2 sm:gap-3">
               {/* Image */}
               <div className="relative w-20 h-20 sm:w-24 sm:h-24 aspect-square bg-warm-50 overflow-hidden shrink-0 rounded-md border border-warm-100">
@@ -165,7 +166,7 @@ export default function ProductCard({ product, variant = 'default' }) {
   return (
     <>
       <div className="group bg-white rounded-md border border-warm-200 hover:border-warm-300 hover:shadow-xs transition-all duration-200 overflow-hidden h-full flex flex-col">
-        <Link href={`/products/${slug}`} className="flex flex-col h-full">
+        <Link href={`/products/${productSlug}`} className="flex flex-col h-full">
           {/* Image */}
           <div className="relative aspect-square bg-warm-50 overflow-hidden">
             {mainImage ? (
@@ -181,7 +182,6 @@ export default function ProductCard({ product, variant = 'default' }) {
                 <Package className="w-7 h-7" />
               </div>
             )}
-
 
             {/* Badges */}
             <div className="absolute top-1.5 left-1.5 flex flex-col gap-1 z-10">

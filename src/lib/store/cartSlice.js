@@ -36,11 +36,7 @@ const cartSlice = createSlice({
       const { productId, quantity } = action.payload;
       const item = state.items.find((item) => item.productId === productId);
       if (item) {
-        if (quantity <= 0) {
-          state.items = state.items.filter((i) => i.productId !== productId);
-        } else {
-          item.quantity = quantity;
-        }
+        item.quantity = Math.max(1, quantity);
       }
     },
     clearCart: (state) => {

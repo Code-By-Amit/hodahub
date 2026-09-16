@@ -73,6 +73,23 @@ export async function POST(request) {
       );
     }
 
+    // Automatically associate past guest orders with this account
+    try {
+      const { orders } = await import('@/lib/db/schema');
+      const { isNull, sql, and } = await import('drizzle-orm');
+      await db
+        .update(orders)
+        .set({ userId: user.id })
+        .where(
+          and(
+            isNull(orders.userId),
+            sql`LOWER(${orders.guestEmail}) = ${user.email.toLowerCase()}`
+          )
+        );
+    } catch (e) {
+      console.error('Failed to link guest orders on login:', e);
+    }
+
     // Generate tokens
     const tokens = generateTokens({
       id: user.id,

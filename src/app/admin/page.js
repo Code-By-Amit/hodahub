@@ -16,6 +16,8 @@ import {
   FiMonitor,
   FiSmartphone,
   FiTablet,
+  FiActivity,
+  FiZap,
 } from 'react-icons/fi';
 import {
   ResponsiveContainer,
@@ -34,6 +36,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [trafficView, setTrafficView] = useState('24h'); // '24h' or '30d'
 
   async function loadData(isManual = false) {
     if (isManual) setRefreshing(true);
@@ -53,8 +56,8 @@ export default function AdminDashboard() {
         setAnalytics(analyticsData);
       }
 
-      setLastUpdated(new Date().toLocaleTimeString());
-    } catch {}
+      setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }));
+    } catch { }
     setLoading(false);
     setRefreshing(false);
   }
@@ -63,36 +66,41 @@ export default function AdminDashboard() {
     loadData();
     const interval = setInterval(() => {
       loadData();
-    }, 30000); // 30s polling
+    }, 15000); // 15s live polling
     return () => clearInterval(interval);
   }, []);
 
+  const peakSpike = analytics?.metrics?.peakSpike;
+  const activeTrafficData = trafficView === '24h' ? analytics?.hourlyChartData : analytics?.chartData;
+
   const statCards = [
     {
-      label: '30-Day Visitors',
-      value: analytics?.metrics?.uniqueVisitors?.toLocaleString() || '0',
-      change: analytics?.metrics?.uniqueVisitorsChangePct || 0,
-      icon: FiUsers,
-      color: 'bg-blue-50 text-blue-700 border-blue-200',
-    },
-    {
-      label: '30-Day Page Views',
-      value: analytics?.metrics?.totalPageViews?.toLocaleString() || '0',
-      change: analytics?.metrics?.pageViewsChangePct || 0,
-      icon: FiEye,
-      color: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    },
-    {
-      label: 'Total Orders',
-      value: stats?.totalOrders || '0',
-      icon: FiShoppingCart,
+      label: 'Active Right Now',
+      value: analytics?.metrics?.activeNow?.toLocaleString() || '0',
+      isLive: true,
+      icon: FiActivity,
       color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },
     {
-      label: 'Total Revenue',
-      value: formatCurrency(stats?.totalRevenue || 0),
-      icon: FiDollarSign,
+      label: 'Peak Traffic Spike',
+      value: peakSpike?.views ? `${peakSpike.views} views` : '0 views',
+      subtitle: peakSpike?.label && peakSpike?.views > 0 ? `at ${peakSpike.label}` : 'No spike today',
+      icon: FiZap,
       color: 'bg-amber-50 text-amber-700 border-amber-200',
+    },
+    {
+      label: 'Total Orders',
+      value: analytics?.metrics?.totalOrders?.toLocaleString() || '0',
+      change: analytics?.metrics?.ordersChangePct ?? 0,
+      icon: FiShoppingCart,
+      color: 'bg-purple-50 text-purple-700 border-purple-200',
+    },
+    {
+      label: 'Total Revenue',
+      value: formatCurrency(analytics?.metrics?.totalRevenue || 0),
+      change: analytics?.metrics?.revenueChangePct ?? 0,
+      icon: FiDollarSign,
+      color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },
   ];
 
@@ -101,15 +109,15 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-warm-200 pb-3">
         <div>
-          <h1 className="text-base font-bold text-warm-900 tracking-tight">Dashboard Overview</h1>
+          <h1 className="text-base font-bold text-warm-900 tracking-tight">Dashboard & Traffic Spikes</h1>
           <p className="text-[11px] text-warm-500 mt-0.5">
-            Real-time storefront performance, traffic metrics, and inventory alerts.
+            Real-time traffic spike monitoring, live visitor activity, and store sales.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live Polling (30s)
+            Live Polling (15s)
           </span>
           {lastUpdated && (
             <span className="text-[10px] text-warm-400 font-mono hidden sm:inline">
@@ -119,7 +127,7 @@ export default function AdminDashboard() {
           <button
             onClick={() => loadData(true)}
             disabled={refreshing}
-            className="p-1.5 border border-warm-200 rounded-md text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-50"
+            className="p-1.5 border border-warm-200 rounded-md text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-50 cursor-pointer"
             title="Refresh now"
           >
             <FiRefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -153,11 +161,20 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div>
-                    <div className="flex items-baseline justify-between">
+                    <div className="flex items-baseline justify-between gap-1">
                       <p className="text-lg font-bold text-warm-900 tracking-tight">{stat.value}</p>
-                      {stat.change !== undefined && (
+                      {stat.isLive ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Live (5m)
+                        </span>
+                      ) : stat.subtitle ? (
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200 shrink-0">
+                          ⚡ {stat.subtitle}
+                        </span>
+                      ) : stat.change !== undefined ? (
                         <span
-                          className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${
+                          className={`inline-flex items-center gap-0.5 text-[10px] font-bold shrink-0 ${
                             stat.change >= 0 ? 'text-emerald-600' : 'text-rose-600'
                           }`}
                         >
@@ -168,7 +185,7 @@ export default function AdminDashboard() {
                           )}
                           {Math.abs(stat.change)}% vs prev 30d
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -176,41 +193,68 @@ export default function AdminDashboard() {
             })}
           </div>
 
-          {/* Traffic Chart & Devices */}
-          <div className="grid lg:grid-cols-3 gap-4">
-            {/* 30-Day Visitors Line Chart */}
-            <div className="lg:col-span-2 p-4 bg-white rounded-md border border-warm-200 shadow-xs space-y-3">
-              <div className="flex items-center justify-between border-b border-warm-100 pb-2">
+          {/* Charts Row: Traffic Spikes & Sales */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* Store Traffic & Spike Graph */}
+            <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-warm-100 pb-2 gap-2">
                 <div>
-                  <h2 className="font-bold text-warm-900 text-[13px]">Store Traffic (Last 30 Days)</h2>
-                  <p className="text-[10px] text-warm-500">Unique visitors and total page views per day</p>
+                  <h2 className="font-bold text-warm-900 text-[13px] flex items-center gap-1.5">
+                    User Traffic & Spike Graph
+                    {peakSpike?.views > 0 && (
+                      <span className="text-[9px] px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-full border border-amber-300">
+                        Peak Spike: {peakSpike.views} views at {peakSpike.label}
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-[10px] text-warm-500">Visualizing visitor traffic spikes over time</p>
                 </div>
-                <div className="flex items-center gap-3 text-[10px] font-semibold">
-                  <span className="flex items-center gap-1 text-brand-600">
-                    <span className="w-2 h-2 rounded-full bg-brand-600" /> Page Views
-                  </span>
-                  <span className="flex items-center gap-1 text-emerald-600">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Unique Visitors
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="flex bg-warm-100 p-0.5 rounded-md text-[10px] font-semibold">
+                    <button
+                      onClick={() => setTrafficView('24h')}
+                      className={`px-2 py-0.5 rounded cursor-pointer ${
+                        trafficView === '24h'
+                          ? 'bg-white text-warm-900 shadow-xs'
+                          : 'text-warm-500 hover:text-warm-900'
+                      }`}
+                    >
+                      Today (Hourly)
+                    </button>
+                    <button
+                      onClick={() => setTrafficView('30d')}
+                      className={`px-2 py-0.5 rounded ${
+                        trafficView === '30d'
+                          ? 'bg-white text-warm-900 shadow-xs'
+                          : 'text-warm-500 hover:text-warm-900'
+                      }`}
+                    >
+                      30 Days
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="h-48 w-full">
-                {analytics?.chartData?.length > 0 ? (
+              <div className="h-52 w-full">
+                {activeTrafficData?.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={analytics.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <AreaChart data={activeTrafficData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
-                        <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
+                        <linearGradient id="colorSpikeViews" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                         </linearGradient>
-                        <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                        <linearGradient id="colorSpikeVisitors" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
                           <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} />
+                      <XAxis
+                        dataKey={trafficView === '24h' ? 'time' : 'date'}
+                        tick={{ fontSize: 10, fill: '#64748b' }}
+                        tickLine={false}
+                      />
                       <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
                       <Tooltip
                         contentStyle={{
@@ -224,11 +268,11 @@ export default function AdminDashboard() {
                       <Area
                         type="monotone"
                         dataKey="views"
-                        stroke="#4f46e5"
-                        strokeWidth={1.5}
+                        stroke="#6366f1"
+                        strokeWidth={2}
                         fillOpacity={1}
-                        fill="url(#colorViews)"
-                        name="Page Views"
+                        fill="url(#colorSpikeViews)"
+                        name="Page Views (Spike)"
                       />
                       <Area
                         type="monotone"
@@ -236,19 +280,97 @@ export default function AdminDashboard() {
                         stroke="#10b981"
                         strokeWidth={1.5}
                         fillOpacity={1}
-                        fill="url(#colorVisitors)"
+                        fill="url(#colorSpikeVisitors)"
                         name="Unique Visitors"
                       />
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="h-full flex items-center justify-center text-[10px] text-warm-400">
-                    No traffic data recorded in last 30 days. Browse store pages to generate live analytics traffic!
+                    No traffic activity recorded for this period yet.
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Sales & Revenue Chart */}
+            <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-warm-100 pb-2">
+                <div>
+                  <h2 className="font-bold text-warm-900 text-[13px]">Sales & Revenue Trend</h2>
+                  <p className="text-[10px] text-warm-500">Daily paid revenue ($) and completed order volume</p>
+                </div>
+                <div className="flex items-center gap-3 text-[10px] font-semibold">
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" /> Revenue ($)
+                  </span>
+                  <span className="flex items-center gap-1 text-purple-600">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" /> Orders
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-52 w-full">
+                {analytics?.salesChartData?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={analytics.salesChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#a855f7" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#ffffff',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '11px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        }}
+                        formatter={(value, name) => [
+                          name === 'Revenue ($)' ? `$${Number(value).toFixed(2)}` : value,
+                          name,
+                        ]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="revenue"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        fillOpacity={1}
+                        fill="url(#colorRevenue)"
+                        name="Revenue ($)"
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="orders"
+                        stroke="#a855f7"
+                        strokeWidth={1.5}
+                        fillOpacity={1}
+                        fill="url(#colorOrders)"
+                        name="Orders"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-[10px] text-warm-400">
+                    No order or revenue data recorded in last 30 days.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Breakdown & Low Stock Alerts Section */}
+          <div className="grid lg:grid-cols-2 gap-4">
             {/* Device Breakdown */}
             <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs space-y-3 flex flex-col justify-between">
               <div>
@@ -261,15 +383,15 @@ export default function AdminDashboard() {
 
                 <div className="space-y-3">
                   {analytics?.deviceBreakdown?.length > 0 ? (
-                    analytics.deviceBreakdown.map((dev) => {
+                    analytics.deviceBreakdown.map((dev, idx) => {
                       const Icon =
                         dev.name === 'Mobile'
                           ? FiSmartphone
                           : dev.name === 'Tablet'
-                          ? FiTablet
-                          : FiMonitor;
+                            ? FiTablet
+                            : FiMonitor;
                       return (
-                        <div key={dev.name} className="space-y-1">
+                        <div key={dev.name ? `device-${dev.name}` : `device-${idx}`} className="space-y-1">
                           <div className="flex justify-between text-[10px] font-semibold">
                             <span className="flex items-center gap-1 text-warm-700">
                               <Icon className="w-3 h-3 text-warm-500" /> {dev.name}
@@ -296,69 +418,42 @@ export default function AdminDashboard() {
                 <span className="font-bold text-warm-900">{analytics?.metrics?.avgSessionDuration || '0m 0s'}</span>
               </div>
             </div>
-          </div>
-
-          {/* Top Pages & Low Stock Section */}
-          <div className="grid lg:grid-cols-2 gap-4">
-            {/* Top 5 Visited Pages */}
-            <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs">
-              <h2 className="font-bold text-warm-900 text-[13px] pb-2 border-b border-warm-100 mb-3">
-                Most Visited Pages (30 Days)
-              </h2>
-              {analytics?.topPages?.length > 0 ? (
-                <div className="divide-y divide-warm-100">
-                  {analytics.topPages.map((page, idx) => (
-                    <div key={page.path} className="py-2 flex items-center justify-between text-[10px]">
-                      <div className="flex items-center gap-1.5 max-w-[75%]">
-                        <span className="w-4 h-4 rounded-full bg-warm-100 text-warm-700 font-bold flex items-center justify-center shrink-0">
-                          {idx + 1}
-                        </span>
-                        <span className="font-mono text-warm-800 truncate">{page.path}</span>
-                      </div>
-                      <span className="font-semibold text-warm-900 bg-warm-50 px-2 py-0.5 rounded-md border border-warm-200/60">
-                        {page.views.toLocaleString()} views
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[10px] text-warm-400 py-4 text-center">No page views tracked yet.</p>
-              )}
-            </div>
 
             {/* Low Stock Alerts */}
-            <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs">
-              <div className="flex items-center justify-between mb-3 pb-2 border-b border-warm-100">
-                <h2 className="font-bold text-warm-900 text-[13px] flex items-center gap-1.5">
-                  <FiAlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Low Stock Alerts (≤ 5)
-                </h2>
-                <Link
-                  href="/admin/products"
-                  className="text-[10px] text-brand-600 font-semibold hover:underline flex items-center gap-1"
-                >
-                  Manage Products <FiArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-
-              {stats?.lowStockProducts?.length > 0 ? (
-                <div className="space-y-2">
-                  {stats.lowStockProducts.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-2 bg-amber-50/60 border border-amber-200/80 rounded-md text-[10px]"
-                    >
-                      <span className="font-semibold text-warm-900 truncate max-w-xs">{p.name}</span>
-                      <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-full shrink-0">
-                        {p.stock} remaining
-                      </span>
-                    </div>
-                  ))}
+            <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-warm-100">
+                  <h2 className="font-bold text-warm-900 text-[13px] flex items-center gap-1.5">
+                    <FiAlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Low Stock Alerts (≤ 5)
+                  </h2>
+                  <Link
+                    href="/admin/products"
+                    className="text-[10px] text-brand-600 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    Manage <FiArrowRight className="w-3 h-3" />
+                  </Link>
                 </div>
-              ) : (
-                <p className="text-[10px] text-warm-400 py-4 text-center">
-                  All active products have healthy inventory levels (&gt; 5 units).
-                </p>
-              )}
+
+                {stats?.lowStockProducts?.length > 0 ? (
+                  <div className="space-y-2">
+                    {stats.lowStockProducts.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between p-2 bg-amber-50/60 border border-amber-200/80 rounded-md text-[10px]"
+                      >
+                        <span className="font-semibold text-warm-900 truncate max-w-[200px]">{p.name}</span>
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-full shrink-0">
+                          {p.stock} remaining
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-warm-400 py-4 text-center">
+                    All active products have healthy inventory levels (&gt; 5 units).
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </>

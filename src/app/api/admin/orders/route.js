@@ -24,6 +24,7 @@ export async function GET(request) {
       id: orders.id, status: orders.status, paymentStatus: orders.paymentStatus,
       paymentMethod: orders.paymentMethod, totalAmount: orders.totalAmount,
       createdAt: orders.createdAt, couponCode: orders.couponCode,
+      guestName: orders.guestName, guestEmail: orders.guestEmail, guestPhone: orders.guestPhone,
       userName: users.name, userEmail: users.email, userPhone: users.phone,
     }).from(orders)
       .leftJoin(users, eq(orders.userId, users.id))

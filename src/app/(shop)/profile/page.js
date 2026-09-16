@@ -7,7 +7,8 @@ import { selectUser, selectAuthLoading, setUser } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
-import { FiUser, FiMapPin, FiMail, FiPhone, FiSave, FiPlus, FiCamera } from 'react-icons/fi';
+import { lookupPincode } from '@/lib/pincode';
+import { FiUser, FiMapPin, FiMail, FiPhone, FiSave, FiPlus, FiCamera, FiLoader } from 'react-icons/fi';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -17,14 +18,50 @@ export default function ProfilePage() {
   const authLoading = useSelector(selectAuthLoading);
 
   const [activeTab, setActiveTab] = useState('profile');
-  const [profileData, setProfileData] = useState({ name: '', email: '', phone: '', avatarUrl: '' });
+  const [profileData, setProfileData] = useState({ name: '', email: '', phone: '', avatarUrl: '', phoneVerified: false });
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Phone OTP States
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneOtpInput, setPhoneOtpInput] = useState('');
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+
   const [showAddAddr, setShowAddAddr] = useState(false);
   const [addrForm, setAddrForm] = useState({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
   const [addrSaving, setAddrSaving] = useState(false);
+
+  // Pincode auto-fill states
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeNote, setPincodeNote] = useState('');
+
+  useEffect(() => {
+    const pincode = addrForm.pincode.trim();
+    if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
+      setPincodeNote('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setPincodeLoading(true);
+      setPincodeNote('');
+      const res = await lookupPincode(pincode);
+      setPincodeLoading(false);
+      if (res && (res.city || res.state)) {
+        setAddrForm((prev) => ({
+          ...prev,
+          city: res.city || prev.city,
+          state: res.state || prev.state,
+        }));
+      } else {
+        setPincodeNote("Couldn't auto-detect city/state. Please enter manually.");
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [addrForm.pincode]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -45,11 +82,69 @@ export default function ProfilePage() {
           email: data.user.email || '',
           phone: data.user.phone || '',
           avatarUrl: data.user.avatarUrl || '',
+          phoneVerified: Boolean(data.user.phoneVerified),
         });
         setAddresses(data.addresses || []);
       }
     } catch {}
     setLoading(false);
+  }
+
+  async function handleSendPhoneOtp() {
+    if (!profileData.phone || profileData.phone.trim().length < 8) {
+      toast.error('Please enter a valid phone number first');
+      return;
+    }
+    setSendingOtp(true);
+    try {
+      const res = await fetch('/api/user/phone/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: profileData.phone }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'OTP sent to mobile number');
+        if (data.demoOtp) {
+          toast.info(`Dev Mode OTP: ${data.demoOtp}`);
+        }
+        setShowPhoneModal(true);
+      } else {
+        toast.error(data.error || 'Failed to send OTP');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+    setSendingOtp(false);
+  }
+
+  async function handleVerifyPhoneOtp(e) {
+    e.preventDefault();
+    if (!phoneOtpInput || phoneOtpInput.trim().length < 4) {
+      toast.error('Please enter the OTP');
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      const res = await fetch('/api/user/phone/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: phoneOtpInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Mobile number verified successfully!');
+        setProfileData((prev) => ({ ...prev, phoneVerified: true }));
+        setShowPhoneModal(false);
+        setPhoneOtpInput('');
+        if (data.user) dispatch(setUser(data.user));
+      } else {
+        toast.error(data.error || 'Invalid OTP');
+      }
+    } catch {
+      toast.error('Verification error');
+    }
+    setVerifyingOtp(false);
   }
 
   async function handleSaveProfile(e) {
@@ -215,16 +310,34 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
-                Phone Number
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider">
+                  Mobile Number (Optional)
+                </label>
+                {profileData.phone && (
+                  profileData.phoneVerified ? (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      ✓ Verified
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSendPhoneOtp}
+                      disabled={sendingOtp}
+                      className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline"
+                    >
+                      {sendingOtp ? 'Sending OTP...' : 'Verify Phone Number →'}
+                    </button>
+                  )
+                )}
+              </div>
               <div className="relative">
                 <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
                   type="tel"
                   value={profileData.phone}
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                  placeholder="+1 (555) 000-0000"
+                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value, phoneVerified: false })}
+                  placeholder="+91 98765 43210"
                   className="w-full pl-8 pr-3 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
                 />
               </div>
@@ -239,6 +352,48 @@ export default function ProfilePage() {
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
+
+          {/* Modal for Mobile OTP Verification */}
+          {showPhoneModal && (
+            <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg p-5 max-w-sm w-full space-y-3 border border-warm-200 shadow-xl">
+                <h3 className="text-sm font-bold text-warm-900">Verify Mobile OTP</h3>
+                <p className="text-[11px] text-warm-500">
+                  Enter the 6-digit verification code sent to <strong className="text-warm-900">{profileData.phone}</strong>.
+                </p>
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-900">
+                  ⚠️ <strong>SMS Provider Pending:</strong> Real SMS delivery (MSG91/Fast2SMS/Twilio) is not configured yet. Check the server console or toast notification for the OTP code.
+                </div>
+                <form onSubmit={handleVerifyPhoneOtp} className="space-y-3">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={phoneOtpInput}
+                    onChange={(e) => setPhoneOtpInput(e.target.value)}
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full px-3 py-2 border border-warm-200 rounded-md text-center text-sm font-mono tracking-widest bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900"
+                    required
+                  />
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPhoneModal(false)}
+                      className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={verifyingOtp}
+                      className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50"
+                    >
+                      {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -276,6 +431,28 @@ export default function ProfilePage() {
                 placeholder="Address Line 2"
                 className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
               />
+              {/* Pincode Field with Loader */}
+              <div className="col-span-2 relative">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={addrForm.pincode}
+                  onChange={(e) => setAddrForm({ ...addrForm, pincode: e.target.value })}
+                  placeholder="6-Digit Pincode * (Auto-fills City & State)"
+                  className="w-full px-2.5 py-1.5 pr-8 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                  required
+                />
+                {pincodeLoading && (
+                  <FiLoader className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-500 animate-spin" />
+                )}
+              </div>
+
+              {pincodeNote && (
+                <p className="col-span-2 text-[10px] text-amber-700 font-medium">
+                  {pincodeNote}
+                </p>
+              )}
+
               <input
                 value={addrForm.city}
                 onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
@@ -291,17 +468,10 @@ export default function ProfilePage() {
                 required
               />
               <input
-                value={addrForm.pincode}
-                onChange={(e) => setAddrForm({ ...addrForm, pincode: e.target.value })}
-                placeholder="Pincode *"
-                className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                required
-              />
-              <input
                 value={addrForm.phone}
                 onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
                 placeholder="Phone"
-                className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
               />
               <div className="col-span-2 flex gap-2 pt-1.5">
                 <button

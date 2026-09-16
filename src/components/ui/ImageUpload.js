@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { Upload, X, ArrowLeft, ArrowRight, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { isVideoUrl } from '@/lib/utils';
 
 export default function ImageUpload({
   uploadType = 'product-image',
@@ -20,14 +21,6 @@ export default function ImageUpload({
   // Normalize value array
   const mediaList = Array.isArray(value) ? value : value ? [value] : [];
 
-  const isVideoUrl = (url) => {
-    if (!url) return false;
-    return (
-      url.match(/\.(mp4|webm|mov|avi|mkv)($|\?)/i) ||
-      url.includes('/video/upload/') ||
-      url.endsWith('.mp4')
-    );
-  };
 
   const uploadFileDirect = async (file) => {
     // Check file size
@@ -165,7 +158,7 @@ export default function ImageUpload({
           <input
             ref={fileInputRef}
             type="file"
-            accept={uploadType === 'review-media' ? 'image/*,video/*' : 'image/*'}
+            accept="image/*,video/*"
             multiple={multiple}
             className="hidden"
             onChange={(e) => handleFilesSelect(e.target.files)}
@@ -186,9 +179,7 @@ export default function ImageUpload({
                 {uploading ? `Uploading... ${progress}%` : 'Click or drag & drop to upload'}
               </p>
               <p className="text-[11px] text-warm-500 mt-0.5">
-                {uploadType === 'review-media'
-                  ? 'Images or videos up to 50MB'
-                  : 'PNG, JPG, WEBP or GIF up to 50MB'}
+                PNG, JPG, WEBP, GIF or MP4 videos up to 50MB
               </p>
             </div>
           </div>

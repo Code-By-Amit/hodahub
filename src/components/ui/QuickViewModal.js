@@ -13,7 +13,7 @@ import {
 import { selectUser } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
 import StarRating from '@/components/ui/StarRating';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, isVideoUrl } from '@/lib/utils';
 import { X, ShoppingBag, Heart, Package, ArrowRight, Minus, Plus } from 'lucide-react';
 
 export default function QuickViewModal({ product, isOpen, onClose }) {
@@ -128,15 +128,19 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-start">
             {/* Image Gallery */}
             <div className="space-y-3">
-              <div className="relative aspect-square rounded-md bg-warm-50 border border-warm-200 overflow-hidden">
+              <div className="relative aspect-square rounded-md bg-warm-50 border border-warm-200 overflow-hidden group">
                 {mainImage ? (
-                  <Image
-                    src={mainImage}
-                    alt={name}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                  />
+                  isVideoUrl(mainImage) ? (
+                    <video src={mainImage} controls className="w-full h-full object-contain bg-black" />
+                  ) : (
+                    <Image
+                      src={mainImage}
+                      alt={name}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                    />
+                  )
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-warm-300">
                     <Package className="w-16 h-16" />
@@ -144,9 +148,28 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
                 )}
 
                 {discount > 0 && (
-                  <span className="absolute top-3 left-3 px-2.5 py-1 bg-rose-600 text-white text-xs font-bold rounded-full">
+                  <span className="absolute top-3 left-3 px-2.5 py-1 bg-rose-600 text-white text-xs font-bold rounded-full z-10">
                     -{discount}% OFF
                   </span>
+                )}
+
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setSelectedImgIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-warm-900 shadow-md flex items-center justify-center transition-all z-10"
+                      aria-label="Previous"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      onClick={() => setSelectedImgIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-warm-900 shadow-md flex items-center justify-center transition-all z-10"
+                      aria-label="Next"
+                    >
+                      ›
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -157,13 +180,19 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
                     <button
                       key={idx}
                       onClick={() => setSelectedImgIndex(idx)}
-                      className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
+                      className={`relative w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
                         selectedImgIndex === idx
                           ? 'border-warm-900 ring-2 ring-warm-900/20'
                           : 'border-warm-200 hover:border-warm-400'
                       }`}
                     >
-                      <Image src={img} alt="" fill className="object-cover" />
+                      {isVideoUrl(img) ? (
+                        <div className="w-full h-full bg-black flex items-center justify-center">
+                          <video src={img} className="w-full h-full object-cover opacity-60" muted />
+                        </div>
+                      ) : (
+                        <Image src={img} alt="" fill className="object-cover" />
+                      )}
                     </button>
                   ))}
                 </div>

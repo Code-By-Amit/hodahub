@@ -15,26 +15,10 @@ import {
 // --- Enums ---
 export const roleEnum = pgEnum('role', ['customer', 'admin']);
 export const couponTypeEnum = pgEnum('coupon_type', ['flat', 'percent']);
-export const orderStatusEnum = pgEnum('order_status', [
-  'pending',
-  'confirmed',
-  'shipped',
-  'delivered',
-  'cancelled',
-]);
-export const paymentStatusEnum = pgEnum('payment_status', [
-  'pending',
-  'paid',
-  'failed',
-  'refunded',
-]);
+export const orderStatusEnum = pgEnum('order_status', ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']);
+export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'paid', 'failed', 'refunded']);
 export const paymentMethodEnum = pgEnum('payment_method', ['razorpay', 'cod']);
-export const returnStatusEnum = pgEnum('return_status', [
-  'none',
-  'requested',
-  'approved',
-  'rejected',
-]);
+export const returnStatusEnum = pgEnum('return_status', ['none', 'requested', 'approved', 'rejected']);
 
 // --- Users ---
 export const users = pgTable('users', {
@@ -142,9 +126,11 @@ export const coupons = pgTable('coupons', {
 // --- Orders ---
 export const orders = pgTable('orders', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  guestName: varchar('guest_name', { length: 255 }),
+  guestEmail: varchar('guest_email', { length: 255 }),
+  guestPhone: varchar('guest_phone', { length: 50 }),
+  shippingAddress: jsonb('shipping_address'),
   status: orderStatusEnum('status').default('pending').notNull(),
   paymentStatus: paymentStatusEnum('payment_status').default('pending').notNull(),
   paymentMethod: paymentMethodEnum('payment_method').default('razorpay').notNull(),
@@ -211,7 +197,7 @@ export const storeSettings = pgTable('store_settings', {
 // --- Promotional Banners ---
 export const banners = pgTable('banners', {
   id: uuid('id').defaultRandom().primaryKey(),
-  title: varchar('title', { length: 255 }).notNull(),
+  title: varchar('title', { length: 255 }),
   subtitle: varchar('subtitle', { length: 500 }),
   imageUrl: text('image_url'),
   bgColor: varchar('bg_color', { length: 50 }).default('#18181b').notNull(),
@@ -226,6 +212,8 @@ export const pageViews = pgTable('page_views', {
   id: uuid('id').defaultRandom().primaryKey(),
   visitorId: uuid('visitor_id').notNull(),
   path: varchar('path', { length: 500 }).notNull(),
+  userAgent: text('user_agent'),
+  device: varchar('device', { length: 50 }),
   referrer: varchar('referrer', { length: 500 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

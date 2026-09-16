@@ -31,13 +31,24 @@ export async function POST(req) {
       device = 'mobile';
     }
 
-    await db.insert(pageViews).values({
-      visitorId,
-      path: path.split('?')[0], // strip query string for clean page path grouping
-      userAgent,
-      device,
-      referrer: req.headers.get('referer') || null,
-    });
+    try {
+      await db.insert(pageViews).values({
+        visitorId,
+        path: path.split('?')[0], // strip query string for clean page path grouping
+        userAgent,
+        device,
+        referrer: req.headers.get('referer') || null,
+      });
+    } catch (dbErr) {
+      // Safe fallback insert if production DB table hasn't migrated userAgent/device columns yet
+      try {
+        await db.insert(pageViews).values({
+          visitorId,
+          path: path.split('?')[0],
+          referrer: req.headers.get('referer') || null,
+        });
+      } catch { }
+    }
 
     const response = NextResponse.json({ success: true });
 

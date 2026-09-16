@@ -44,61 +44,83 @@ export default function InvoicePage() {
   }
 
   const { order, items = [], address } = orderData;
+  const shippingInfo = address || order.shippingAddress;
+  const guestName = order.guestName;
+  const guestEmail = order.guestEmail;
+
+  const formattedDate = new Date(order.createdAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const subtotal = Number(order.totalAmount) - Number(order.shippingCharge || 0) + Number(order.discountAmount || 0);
 
   return (
-    <div className="min-h-screen bg-warm-50 py-6 px-4 sm:px-6">
+    <div className="min-h-screen bg-warm-50 py-6 px-4 sm:px-6 print:py-0 print:px-0 print:bg-white print:min-h-0">
       {/* Action buttons (hidden on print) */}
       <div className="max-w-3xl mx-auto mb-4 flex items-center justify-between print:hidden">
         <Link
-          href={`/orders/${order.id}`}
+          href={order.userId ? `/orders/${order.id}` : '/products'}
           className="inline-flex items-center gap-1.5 text-[11px] font-medium text-warm-600 hover:text-warm-900"
         >
-          <FiArrowLeft className="w-3.5 h-3.5" /> Back to Order
+          <FiArrowLeft className="w-3.5 h-3.5" /> {order.userId ? 'Back to Order' : 'Back to Shop'}
         </Link>
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-white text-[11px] font-semibold rounded-md shadow-md hover:bg-brand-600 transition-all"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-warm-900 text-white text-[11px] font-semibold rounded-md shadow-md hover:bg-warm-800 transition-all cursor-pointer"
         >
           <FiPrinter className="w-3.5 h-3.5" /> Print / Save PDF
         </button>
       </div>
 
       {/* Invoice Card */}
-      <div className="max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-md border border-warm-200 shadow-sm print:shadow-none print:border-none print:p-0">
+      <div className="print-container max-w-3xl mx-auto bg-white p-6 sm:p-8 rounded-md border border-warm-200 shadow-sm print:shadow-none print:border-none print:p-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b border-warm-200">
+        <div className="flex flex-row justify-between items-start gap-4 pb-6 border-b border-warm-200">
           <div>
             <h1 className="text-xl font-extrabold text-warm-900 tracking-tight">
               Hoda<span className="text-brand-500">Hub</span>
             </h1>
             <p className="text-[11px] text-warm-500 mt-1">Official Purchase Invoice</p>
           </div>
-          <div className="sm:text-right">
+          <div className="text-right">
             <h2 className="text-base font-bold text-warm-900">INVOICE</h2>
             <p className="text-[10px] text-warm-500 mt-1 font-mono">#{order.id}</p>
-            <p className="text-[10px] text-warm-500 mt-1">
-              Date: {new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
+            <p className="text-[10px] text-warm-500 mt-1">Date: {formattedDate}</p>
           </div>
         </div>
 
-        {/* Bill To & Payment Info */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 py-6 border-b border-warm-200 text-[11px]">
-          <div>
+        {/* Bill To & Payment Info - STRICT INLINE FLEXBOX (Guaranteed Side-by-Side in all print engines) */}
+        <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'space-between', gap: '24px' }} className="py-6 border-b border-warm-200 text-[11px]">
+          <div style={{ width: '48%', flex: '1 1 0%' }}>
             <h3 className="font-bold text-warm-900 uppercase tracking-wider text-[10px] mb-2">Billed To</h3>
-            {address ? (
+            {guestName || guestEmail ? (
               <div className="text-warm-700 space-y-1">
-                {address.label && <p className="font-semibold text-brand-600">{address.label}</p>}
-                <p>{address.line1}</p>
-                {address.line2 && <p>{address.line2}</p>}
-                <p>{address.city}, {address.state} — {address.pincode}</p>
-                {address.phone && <p>Phone: {address.phone}</p>}
+                <p className="font-semibold text-brand-600">{guestName || 'Guest Customer'}</p>
+                <p className="text-warm-500">{guestEmail}</p>
+                {shippingInfo && (
+                  <>
+                    <p>{shippingInfo.line1}</p>
+                    {shippingInfo.line2 && <p>{shippingInfo.line2}</p>}
+                    <p>{shippingInfo.city}, {shippingInfo.state} — {shippingInfo.pincode}</p>
+                    {shippingInfo.phone && <p>Phone: {shippingInfo.phone}</p>}
+                  </>
+                )}
+              </div>
+            ) : shippingInfo ? (
+              <div className="text-warm-700 space-y-1">
+                <p className="font-semibold text-brand-600">{order.userName || shippingInfo.label || 'Valued Customer'}</p>
+                <p>{shippingInfo.line1}</p>
+                {shippingInfo.line2 && <p>{shippingInfo.line2}</p>}
+                <p>{shippingInfo.city}, {shippingInfo.state} — {shippingInfo.pincode}</p>
+                {shippingInfo.phone && <p>Phone: {shippingInfo.phone}</p>}
               </div>
             ) : (
               <p className="text-warm-400">Address info unavailable</p>
             )}
           </div>
-          <div>
+          <div style={{ width: '48%', flex: '1 1 0%' }}>
             <h3 className="font-bold text-warm-900 uppercase tracking-wider text-[10px] mb-2">Payment Details</h3>
             <div className="text-warm-700 space-y-1">
               <p>Method: <strong className="uppercase">{order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Razorpay'}</strong></p>
@@ -110,10 +132,10 @@ export default function InvoicePage() {
         </div>
 
         {/* Items Table */}
-        <div className="py-6">
+        <div className="py-6 border-b border-warm-200">
           <table className="w-full text-left text-[11px]">
             <thead>
-              <tr className="border-b border-warm-200 text-warm-500 uppercase text-[10px]">
+              <tr className="text-warm-500 uppercase text-[10px]">
                 <th className="pb-2 font-semibold">Item</th>
                 <th className="pb-2 text-center font-semibold">Qty</th>
                 <th className="pb-2 text-right font-semibold">Price</th>
@@ -138,10 +160,10 @@ export default function InvoicePage() {
         </div>
 
         {/* Totals */}
-        <div className="border-t border-warm-200 pt-4 flex flex-col items-end text-[11px] space-y-1.5">
+        <div className="pt-4 flex flex-col items-end text-[11px] space-y-1.5">
           <div className="flex justify-between w-56 text-warm-600">
             <span>Subtotal</span>
-            <span>{formatCurrency(Number(order.totalAmount) - Number(order.shippingCharge || 0) + Number(order.discountAmount || 0))}</span>
+            <span>{formatCurrency(subtotal)}</span>
           </div>
           {Number(order.discountAmount) > 0 && (
             <div className="flex justify-between w-56 text-green-600">

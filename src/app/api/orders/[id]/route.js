@@ -2,18 +2,23 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { orders, orderItems, orderStatusHistory, products, addresses } from '@/lib/db/schema';
 import { eq, desc, asc } from 'drizzle-orm';
-import { requireAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
 
 export async function GET(request, { params }) {
   try {
-    const user = await requireAuth(request);
+    const user = await getAuthUser(request);
     const { id } = await params;
 
     const [order] = await db.select().from(orders)
       .where(eq(orders.id, id))
       .limit(1);
 
-    if (!order || order.userId !== user.id) {
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    // Security check: if order belongs to a registered user, require matching user authentication
+    if (order.userId && (!user || (user.id !== order.userId && user.role !== 'admin'))) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 

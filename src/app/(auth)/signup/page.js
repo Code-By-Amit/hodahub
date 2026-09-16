@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
 
-export default function SignupPage() {
+function SignupContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '';
+
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -57,13 +60,19 @@ export default function SignupPage() {
         return;
       }
 
-      router.push(`/verify-otp?email=${encodeURIComponent(data.email)}`);
+      router.push(
+        `/verify-otp?email=${encodeURIComponent(data.email)}${
+          redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''
+        }`
+      );
     } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  const loginLink = redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login';
 
   return (
     <div className="w-full max-w-sm mx-auto">
@@ -200,12 +209,26 @@ export default function SignupPage() {
         <div className="mt-4 pt-3 border-t border-warm-100 text-center">
           <p className="text-[11px] text-warm-500">
             Already have an account?{' '}
-            <Link href="/login" className="font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+            <Link href={loginLink} className="font-semibold text-brand-600 hover:text-brand-700 transition-colors">
               Sign In
             </Link>
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full max-w-sm mx-auto p-6 text-center">
+          <div className="w-4 h-4 border-2 border-brand-600/30 border-t-brand-600 rounded-full animate-spin mx-auto" />
+        </div>
+      }
+    >
+      <SignupContent />
+    </Suspense>
   );
 }

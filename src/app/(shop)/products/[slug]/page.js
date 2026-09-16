@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -17,7 +17,7 @@ import StarRating from '@/components/ui/StarRating';
 import ProductCard from '@/components/ui/ProductCard';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, isVideoUrl } from '@/lib/utils';
 import {
   Frown,
   Package,
@@ -34,6 +34,8 @@ import {
   FileText,
   MessageSquare,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function ProductDetailPage() {
@@ -57,6 +59,42 @@ export default function ProductDetailPage() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [modalMedia, setModalMedia] = useState(null);
 
+  // Gallery zoom & gesture states
+  const [zoomPos, setZoomPos] = useState({ show: false, x: 0, y: 0 });
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const handleMouseMove = (e) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    setZoomPos({ show: true, x, y });
+  };
+
+  const handleMouseLeave = () => {
+    setZoomPos({ show: false, x: 0, y: 0 });
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    if (distance > 40 && selectedImage < (product?.images?.length || 1) - 1) {
+      setSelectedImage((prev) => prev + 1);
+    } else if (distance < -40 && selectedImage > 0) {
+      setSelectedImage((prev) => prev - 1);
+    }
+    touchStartX.current = 0;
+    touchEndX.current = 0;
+  };
+
   useEffect(() => {
     fetchProduct();
   }, [slug]);
@@ -70,13 +108,13 @@ export default function ProductDetailPage() {
   async function fetchProduct() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/${slug}`);
+      const res = await fetch(`/api/products/${encodeURIComponent(slug)}`);
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && data.product) {
         setProduct(data.product);
         // Fetch related products
         if (data.product.categorySlug) {
-          const relRes = await fetch(`/api/products?category=${data.product.categorySlug}&limit=6`);
+          const relRes = await fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`);
           const relData = await relRes.json();
           let items = (relData.products || []).filter((p) => p.id !== data.product.id);
           // Fallback if category has < 4 products
@@ -87,15 +125,19 @@ export default function ProductDetailPage() {
           }
           setRelatedProducts(items.slice(0, 6));
         }
+      } else {
+        setProduct(null);
       }
-    } catch {}
+    } catch {
+      setProduct(null);
+    }
     setLoading(false);
   }
 
   async function fetchReviews() {
     setReviewsLoading(true);
     try {
-      const res = await fetch(`/api/products/${slug}/reviews`);
+      const res = await fetch(`/api/products/${encodeURIComponent(slug)}/reviews`);
       const data = await res.json();
       setReviews(data.reviews || []);
     } catch {}
@@ -146,15 +188,6 @@ export default function ProductDetailPage() {
     );
     toast.success(`${product.name} added to cart!`);
   }
-
-  const isVideoUrl = (url) => {
-    if (!url) return false;
-    return (
-      url.match(/\.(mp4|webm|mov|avi|mkv)($|\?)/i) ||
-      url.includes('/video/upload/') ||
-      url.endsWith('.mp4')
-    );
-  };
 
   if (loading) {
     return (
@@ -212,44 +245,128 @@ export default function ProductDetailPage() {
 
       {/* Main Product Showcase */}
       <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
-        {/* Gallery */}
-        <div className="space-y-2 w-full max-w-sm sm:max-w-md mx-auto lg:mx-0">
-          <div className="relative aspect-square rounded-md overflow-hidden bg-warm-50 border border-warm-200 shadow-xs">
+        {/* Gallery Container with relative positioning for side zoom box */}
+        <div className="relative space-y-2 w-full max-w-sm sm:max-w-md mx-auto lg:mx-0">
+          {/* Flipkart-style desktop magnified side-by-side zoom panel */}
+          {zoomPos.show && images.length > 0 && !isVideoUrl(images[selectedImage]) && (
+            <div
+              className="hidden lg:block absolute left-[calc(100%+1.25rem)] top-0 w-[420px] h-[420px] z-40 bg-white border-2 border-warm-300 rounded-xl shadow-2xl overflow-hidden pointer-events-none"
+              style={{
+                backgroundImage: `url(${images[selectedImage]})`,
+                backgroundPosition: `${zoomPos.x}% ${zoomPos.y}%`,
+                backgroundSize: '250%',
+              }}
+            />
+          )}
+
+          <div
+            className="relative aspect-square rounded-md overflow-hidden bg-warm-50 border border-warm-200 shadow-xs group"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             {images.length > 0 ? (
-              <Image
-                src={images[selectedImage]}
-                alt={product.name}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                priority
-              />
+              isVideoUrl(images[selectedImage]) ? (
+                <video
+                  src={images[selectedImage]}
+                  controls
+                  autoPlay
+                  muted
+                  className="w-full h-full object-contain bg-black"
+                />
+              ) : (
+                <>
+                  <Image
+                    src={images[selectedImage]}
+                    alt={product.name}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    priority
+                  />
+                  {/* Hover bounding lens on main image */}
+                  {zoomPos.show && (
+                    <div
+                      className="hidden lg:block absolute pointer-events-none z-10 border border-brand-600/70 bg-brand-500/20 shadow-xs rounded-sm"
+                      style={{
+                        width: '35%',
+                        height: '35%',
+                        left: `clamp(0%, ${zoomPos.x - 17.5}%, 65%)`,
+                        top: `clamp(0%, ${zoomPos.y - 17.5}%, 65%)`,
+                      }}
+                    />
+                  )}
+                </>
+              )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-warm-300">
                 <Package className="w-12 h-12" />
               </div>
             )}
+
             {discount > 0 && (
-              <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded-md uppercase tracking-wider">
+              <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded-md uppercase tracking-wider z-20">
                 -{discount}% OFF
               </span>
             )}
+
+            {/* Prev / Next Slide Arrows (z-30 so always above lens and clickable) */}
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImage((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+                  }}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-warm-900 shadow-md flex items-center justify-center transition-all z-30 cursor-pointer"
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImage((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-warm-900 shadow-md flex items-center justify-center transition-all z-30 cursor-pointer"
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </>
+            )}
           </div>
+
+          {/* Thumbnail Strip */}
           {images.length > 1 && (
             <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
-              {images.map((img, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedImage(i)}
-                  className={`relative w-14 h-14 sm:w-10 sm:h-10 rounded-md overflow-hidden shrink-0 border-2 transition-all ${
-                    selectedImage === i
-                      ? 'border-brand-600 ring-2 ring-brand-600/10'
-                      : 'border-warm-200 hover:border-warm-300'
-                  }`}
-                >fffffffffffffff
-                  <Image src={img} alt="" fill className="object-cover" sizes="54px" />
-                </button>
-              ))}
+              {images.map((img, i) => {
+                const isVid = isVideoUrl(img);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setSelectedImage(i)}
+                    className={`relative w-14 h-14 sm:w-12 sm:h-12 rounded-md overflow-hidden shrink-0 border-2 transition-all ${
+                      selectedImage === i
+                        ? 'border-brand-600 ring-2 ring-brand-600/10'
+                        : 'border-warm-200 hover:border-warm-300'
+                    }`}
+                  >
+                    {isVid ? (
+                      <div className="w-full h-full bg-black flex items-center justify-center relative">
+                        <video src={img} className="w-full h-full object-cover opacity-60" muted />
+                        <Film className="w-4 h-4 text-white absolute" />
+                      </div>
+                    ) : (
+                      <Image src={img} alt="" fill className="object-cover" sizes="54px" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

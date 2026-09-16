@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useDispatch, useSelector } from 'react-redux';
 import { setUser } from '@/lib/store/authSlice';
@@ -9,10 +9,13 @@ import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useDispatch();
   const guestWishlistItems = useSelector(selectWishlistItems);
+  const redirect = searchParams.get('redirect') || '';
+
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -43,7 +46,11 @@ export default function LoginPage() {
 
       if (!res.ok) {
         if (data.requiresVerification) {
-          router.push(`/verify-otp?email=${encodeURIComponent(data.email)}`);
+          router.push(
+            `/verify-otp?email=${encodeURIComponent(data.email)}${
+              redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''
+            }`
+          );
           return;
         }
         setError(data.error || 'Login failed');
@@ -55,6 +62,8 @@ export default function LoginPage() {
 
       if (data.user.role === 'admin') {
         router.push('/admin');
+      } else if (redirect) {
+        router.push(redirect);
       } else {
         router.push('/');
       }
@@ -64,6 +73,8 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const signupLink = redirect ? `/signup?redirect=${encodeURIComponent(redirect)}` : '/signup';
 
   return (
     <div className="w-full max-w-sm mx-auto">
@@ -150,12 +161,26 @@ export default function LoginPage() {
         <div className="mt-4 pt-3 border-t border-warm-100 text-center">
           <p className="text-[11px] text-warm-500">
             Don&apos;t have an account?{' '}
-            <Link href="/signup" className="font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+            <Link href={signupLink} className="font-semibold text-brand-600 hover:text-brand-700 transition-colors">
               Create account
             </Link>
           </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full max-w-sm mx-auto p-6 text-center">
+          <div className="w-4 h-4 border-2 border-brand-600/30 border-t-brand-600 rounded-full animate-spin mx-auto" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

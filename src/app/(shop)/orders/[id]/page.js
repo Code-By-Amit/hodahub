@@ -57,12 +57,8 @@ export default function OrderDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
     fetchOrder();
-  }, [user, id]);
+  }, [id]);
 
   async function fetchOrder() {
     try {
@@ -232,6 +228,24 @@ export default function OrderDetailPage() {
           { label: `Order #${order.id.slice(0, 8)}` },
         ]}
       />
+
+      {/* Guest Notice Banner */}
+      {!order.userId && (
+        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg mb-4 text-[11px] text-amber-900 shadow-xs">
+          <p className="font-bold text-[12px] mb-1 text-amber-950">Guest Order Placed Successfully!</p>
+          <p className="text-amber-800 leading-relaxed font-medium">
+            Save your Order ID. Create an account or log in with this same email to track, cancel, or return your order.
+          </p>
+          <div className="mt-2.5 flex items-center gap-2">
+            <Link
+              href={`/signup?email=${encodeURIComponent(order.guestEmail || '')}`}
+              className="px-3 py-1 bg-amber-900 text-white text-[10px] font-bold rounded hover:bg-amber-800 transition-colors"
+            >
+              Create Account with {order.guestEmail}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Header Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">

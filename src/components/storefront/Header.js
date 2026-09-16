@@ -79,7 +79,7 @@ export default function Header() {
   return (
     <>
       <header
-        className={`sticky top-0 z-50 transition-all duration-300 ${
+        className={`sticky top-0 z-50 transition-all duration-300 print:hidden ${
           scrolled
             ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-warm-100'
             : 'bg-white border-b border-warm-100'
@@ -190,25 +190,25 @@ export default function Header() {
             </nav>
 
             {/* Actions */}
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               {/* Search */}
               <button
                 onClick={() => setSearchOpen(true)}
-                className="p-2 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-full transition-colors"
+                className="w-10 h-10 flex items-center justify-center text-warm-700 hover:text-warm-900 hover:bg-warm-100/80 rounded-full transition-colors"
                 aria-label="Search"
               >
-                <FiSearch className="w-3 h-3" />
+                <FiSearch className="w-5 h-5" />
               </button>
 
               {/* Wishlist */}
               <Link
                 href="/wishlist"
-                className="relative hidden sm:flex p-2 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-full transition-colors"
+                className="relative hidden sm:flex w-10 h-10 items-center justify-center text-warm-700 hover:text-warm-900 hover:bg-warm-100/80 rounded-full transition-colors"
                 aria-label="Wishlist"
               >
-                <FiHeart className="w-3 h-3" />
+                <FiHeart className="w-5 h-5" />
                 {wishlistCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-1 right-1 px-1.5 py-0.2 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
                     {wishlistCount > 99 ? '99+' : wishlistCount}
                   </span>
                 )}
@@ -218,35 +218,33 @@ export default function Header() {
               <div className="relative" ref={accountRef}>
                 <button
                   onClick={() => setAccountOpen(!accountOpen)}
-                  className="p-0.5 text-warm-600 hover:text-warm-900 rounded-full transition-colors flex items-center justify-center"
+                  className="w-10 h-10 flex items-center justify-center text-warm-700 hover:text-warm-900 hover:bg-warm-100/80 rounded-full transition-colors"
                   aria-label="Account"
                 >
                   {user?.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
                       alt={user.name || 'User avatar'}
-                      className="w-5 h-5 rounded-full object-cover border border-warm-200"
+                      className="w-6 h-6 rounded-full object-cover border border-warm-200"
                     />
                   ) : user ? (
-                    <div className="w-5 h-5 rounded-full bg-warm-900 text-white text-[12px] font-bold flex items-center justify-center">
+                    <div className="w-6 h-6 rounded-full bg-warm-900 text-white text-[11px] font-bold flex items-center justify-center">
                       {user.name?.[0]?.toUpperCase() || 'U'}
                     </div>
                   ) : (
-                    <div className="p-1 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-full">
-                      <FiUser className="w-3 h-3" />
-                    </div>
+                    <FiUser className="w-5 h-5" />
                   )}
                 </button>
 
                 {accountOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-42 bg-white rounded-md shadow-lg border border-warm-200 py-1.5 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-md shadow-lg border border-warm-200 py-1.5 z-50">
                     {user ? (
                       <>
                         <div className="px-3 py-2 border-b border-warm-100 flex items-center gap-2.5">
                           {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-warm-200" />
+                            <img src={user.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-warm-200" />
                           ) : (
-                            <div className="w-6 h-6 rounded-full bg-warm-900 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                            <div className="w-7 h-7 rounded-full bg-warm-900 text-white text-[12px] font-bold flex items-center justify-center shrink-0">
                               {user.name?.[0]?.toUpperCase() || 'U'}
                             </div>
                           )}
@@ -259,33 +257,33 @@ export default function Header() {
                           <Link
                             href="/admin"
                             onClick={() => setAccountOpen(false)}
-                            className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
+                            className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
                           >
-                            <FiSettings className="w-3 h-3 text-warm-500" />
+                            <FiSettings className="w-3.5 h-3.5 text-warm-500" />
                             Admin Dashboard
                           </Link>
                         )}
                         <Link
                           href="/profile"
                           onClick={() => setAccountOpen(false)}
-                          className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
                         >
-                          <FiUser className="w-3 h-3 text-warm-500" />
+                          <FiUser className="w-3.5 h-3.5 text-warm-500" />
                           My Profile
                         </Link>
                         <Link
                           href="/orders"
                           onClick={() => setAccountOpen(false)}
-                          className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
                         >
-                          <FiPackage className="w-3 h-3 text-warm-500" />
+                          <FiPackage className="w-3.5 h-3.5 text-warm-500" />
                           My Orders
                         </Link>
                         <button
                           onClick={handleLogout}
-                          className="flex items-center gap-2 w-full px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors border-t border-warm-100 mt-1 pt-2"
+                          className="flex items-center gap-2 w-full px-3 py-2 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors border-t border-warm-100 mt-1 pt-2"
                         >
-                          <FiLogOut className="w-3 h-3" />
+                          <FiLogOut className="w-3.5 h-3.5" />
                           Sign Out
                         </button>
                       </>
@@ -314,12 +312,12 @@ export default function Header() {
               {/* Cart */}
               <Link
                 href="/cart"
-                className="relative p-2 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-full transition-colors"
+                className="relative w-10 h-10 flex items-center justify-center text-warm-700 hover:text-warm-900 hover:bg-warm-100/80 rounded-full transition-colors"
                 aria-label="Cart"
               >
-                <FiShoppingCart className="w-3 h-3" />
+                <FiShoppingCart className="w-5 h-5" />
                 {cartCount > 0 && (
-                  <span className="absolute  top-1 right-1 w-2 h-2 bg-brand-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  <span className="absolute top-1 right-1 px-1.5 py-0.2 min-w-[18px] h-[18px] bg-brand-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
                     {cartCount > 99 ? '99+' : cartCount}
                   </span>
                 )}
@@ -328,10 +326,10 @@ export default function Header() {
               {/* Mobile menu button */}
               <button
                 onClick={() => setMobileOpen(!mobileOpen)}
-                className="lg:hidden p-2 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-full transition-colors ml-0.5"
+                className="lg:hidden w-10 h-10 flex items-center justify-center text-warm-700 hover:text-warm-900 hover:bg-warm-100/80 rounded-full transition-colors"
                 aria-label="Menu"
               >
-                {mobileOpen ? <FiX className="w-4 h-4" /> : <FiMenu className="w-4 h-4" />}
+                {mobileOpen ? <FiX className="w-5 h-5" /> : <FiMenu className="w-5 h-5" />}
               </button>
             </div>
           </div>

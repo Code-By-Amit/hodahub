@@ -55,6 +55,23 @@ export async function POST(request) {
       })
       .where(eq(users.id, user.id));
 
+    // Automatically associate past guest orders with this account
+    try {
+      const { orders } = await import('@/lib/db/schema');
+      const { isNull, sql } = await import('drizzle-orm');
+      await db
+        .update(orders)
+        .set({ userId: user.id })
+        .where(
+          and(
+            isNull(orders.userId),
+            sql`LOWER(${orders.guestEmail}) = ${user.email.toLowerCase()}`
+          )
+        );
+    } catch (e) {
+      console.error('Failed to link guest orders on verify OTP:', e);
+    }
+
     // Generate tokens and set cookies
     const tokens = generateTokens({
       id: user.id,

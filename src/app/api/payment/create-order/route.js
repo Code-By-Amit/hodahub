@@ -3,7 +3,7 @@ import Razorpay from 'razorpay';
 import { db } from '@/lib/db';
 import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings } from '@/lib/db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { requireAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
 import { createOrderSchema } from '@/lib/validations';
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '@/lib/email';
 
@@ -20,10 +20,8 @@ if (razorpayKeyId && razorpayKeySecret) {
 
 export async function POST(request) {
   try {
-    const user = await requireAuth(request);
+    const user = await getAuthUser(request);
     const body = await request.json();
-
-    console.log("Request reaching here: ", body,user)
 
     const result = createOrderSchema.safeParse(body);
     if (!result.success) {
@@ -33,7 +31,21 @@ export async function POST(request) {
       );
     }
 
-    const { items, addressId, paymentMethod = 'razorpay', couponCode } = result.data;
+    const {
+      items,
+      addressId,
+      paymentMethod = 'razorpay',
+      couponCode,
+      isGuest,
+      guestName,
+      guestEmail,
+      guestPhone,
+      shippingAddress,
+    } = result.data;
+
+    if (!user && !isGuest && (!guestEmail || !shippingAddress)) {
+      return NextResponse.json({ error: 'Please login or provide guest checkout details' }, { status: 400 });
+    }
 
     // Fetch store settings for shipping & COD toggle
     const [settings] = await db.select().from(storeSettings).limit(1);
@@ -130,13 +142,17 @@ export async function POST(request) {
       const [order] = await db
         .insert(orders)
         .values({
-          userId: user.id,
+          userId: user ? user.id : null,
+          guestName: guestName || null,
+          guestEmail: guestEmail || null,
+          guestPhone: guestPhone || null,
+          shippingAddress: shippingAddress || null,
           status: 'confirmed',
           paymentStatus: 'pending',
           paymentMethod: 'cod',
           shippingCharge: shippingCharge.toFixed(2),
           totalAmount: totalAmount.toFixed(2),
-          addressId,
+          addressId: addressId || null,
           couponCode: validCouponCode,
           discountAmount: discount.toFixed(2),
         })
@@ -156,11 +172,14 @@ export async function POST(request) {
       await db.insert(orderStatusHistory).values({
         orderId: order.id,
         status: 'confirmed',
-        note: 'COD order placed and confirmed.',
+        note: user ? 'COD order placed by user.' : 'COD order placed by guest.',
       });
 
       // Send Emails
-      sendOrderConfirmationEmail(user.email, order, validatedItems);
+      const targetEmail = user?.email || guestEmail;
+      if (targetEmail) {
+        sendOrderConfirmationEmail(targetEmail, order, validatedItems);
+      }
       if (settings?.contactEmail) {
         sendAdminNewOrderEmail(settings.contactEmail, order, validatedItems);
       }
@@ -200,13 +219,17 @@ export async function POST(request) {
     const [order] = await db
       .insert(orders)
       .values({
-        userId: user.id,
+        userId: user ? user.id : null,
+        guestName: guestName || null,
+        guestEmail: guestEmail || null,
+        guestPhone: guestPhone || null,
+        shippingAddress: shippingAddress || null,
         status: 'pending',
         paymentStatus: 'pending',
         paymentMethod: 'razorpay',
         shippingCharge: shippingCharge.toFixed(2),
         totalAmount: totalAmount.toFixed(2),
-        addressId,
+        addressId: addressId || null,
         couponCode: validCouponCode,
         discountAmount: discount.toFixed(2),
         razorpayOrderId: rzpOrder.id,

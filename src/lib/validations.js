@@ -94,9 +94,24 @@ export const orderItemInputSchema = z.object({
 
 export const createOrderSchema = z.object({
   items: z.array(orderItemInputSchema).min(1, 'Cart cannot be empty'),
-  addressId: z.string().uuid('Invalid address ID'),
+  addressId: z.string().uuid('Invalid address ID').optional().nullable(),
   paymentMethod: z.enum(['razorpay', 'cod']).default('razorpay'),
   couponCode: z.string().max(50).optional().nullable(),
+  isGuest: z.boolean().optional(),
+  guestName: z.string().max(255).optional().nullable(),
+  guestEmail: z.string().email('Invalid email address').optional().nullable(),
+  guestPhone: z.string().max(50).optional().nullable(),
+  shippingAddress: z
+    .object({
+      line1: z.string().min(1, 'Address line 1 is required'),
+      line2: z.string().optional().nullable(),
+      city: z.string().min(1, 'City is required'),
+      state: z.string().min(1, 'State is required'),
+      pincode: z.string().min(3, 'Pincode is required'),
+      phone: z.string().max(15).optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 export const cancelOrderSchema = z.object({

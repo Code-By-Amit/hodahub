@@ -44,6 +44,20 @@ export default function AdminOrdersPage() {
     } catch {} setLoading(false);
   }
 
+  async function handleMarkPaid(e, orderId) {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_payment_status', paymentStatus: 'paid' }),
+      });
+      if (res.ok) {
+        fetchOrders();
+      }
+    } catch {}
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -84,9 +98,20 @@ export default function AdminOrdersPage() {
                 <td className="px-3 py-2.5 font-mono text-[10px] text-warm-900 font-medium">{o.id.slice(0,8)}</td>
                 <td className="px-3 py-2.5">
                   <div>
-                    <p className="text-warm-900 font-medium text-[11px]">{o.userName || '—'}</p>
-                    <p className="text-warm-400 text-[10px]">{o.userEmail}</p>
-                    {o.userPhone && <p className="text-warm-500 text-[10px] font-mono">📞 {o.userPhone}</p>}
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-warm-900 font-medium text-[11px]">
+                        {o.userName || o.guestName || 'Guest Customer'}
+                      </p>
+                      {!o.userName && (
+                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-purple-100 text-purple-800 uppercase">
+                          Guest
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-warm-400 text-[10px]">{o.userEmail || o.guestEmail}</p>
+                    {(o.userPhone || o.guestPhone) && (
+                      <p className="text-warm-500 text-[10px] font-mono">📞 {o.userPhone || o.guestPhone}</p>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-2.5 font-bold text-warm-900">{formatCurrency(o.totalAmount)}</td>
@@ -95,18 +120,33 @@ export default function AdminOrdersPage() {
                     <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${statusColors[o.status] || 'bg-warm-100 text-warm-600'}`}>
                       {o.status}
                     </span>
-                    {o.paymentStatus === 'pending' && (
+                    {o.paymentStatus === 'pending' ? (
                       <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-100 text-amber-900 uppercase border border-amber-300">
-                        Payment Pending
+                        Payment Pending ({o.paymentMethod || 'COD'})
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-100 text-emerald-800 uppercase border border-emerald-300">
+                        Paid ({o.paymentMethod || 'Online'})
                       </span>
                     )}
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-warm-500 text-[10px]">{new Date(o.createdAt).toLocaleDateString()}</td>
                 <td className="px-3 py-2.5 text-right">
-                  <span className="text-warm-900 font-semibold text-[10px]">
-                    View Details →
-                  </span>
+                  <div className="flex items-center justify-end gap-2">
+                    {o.paymentMethod?.toLowerCase() === 'cod' && o.paymentStatus !== 'paid' && o.status !== 'cancelled' && (
+                      <button
+                        onClick={(e) => handleMarkPaid(e, o.id)}
+                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold rounded transition-colors"
+                        title="Mark COD Cash Collected as Paid"
+                      >
+                        Mark Paid
+                      </button>
+                    )}
+                    <span className="text-warm-900 font-semibold text-[10px] hover:underline">
+                      Details →
+                    </span>
+                  </div>
                 </td>
               </tr>
             ))}

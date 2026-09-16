@@ -142,20 +142,23 @@ export default function CartPage() {
                       onClick={() =>
                         dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity - 1 }))
                       }
-                      className="p-1.5 text-warm-600 hover:bg-warm-50 transition-colors"
+                      disabled={item.quantity <= 1}
+                      className="p-2 text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      title={item.quantity <= 1 ? "Minimum quantity is 1 (use remove icon to delete)" : "Decrease quantity"}
                     >
-                      <Minus className="w-2.5 h-2.5" />
+                      <Minus className="w-3.5 h-3.5" />
                     </button>
-                    <span className="px-3 py-1 text-[11px] font-bold text-warm-900 min-w-[32px] text-center">
+                    <span className="px-3 py-1.5 text-[12px] font-bold text-warm-900 min-w-[36px] text-center">
                       {item.quantity}
                     </span>
                     <button
                       onClick={() =>
                         dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity + 1 }))
                       }
-                      className="p-1.5 text-warm-600 hover:bg-warm-50 transition-colors"
+                      className="p-2 text-warm-600 hover:bg-warm-50 transition-colors"
+                      title="Increase quantity"
                     >
-                      <Plus className="w-2.5 h-2.5" />
+                      <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
@@ -164,10 +167,11 @@ export default function CartPage() {
                       dispatch(removeItem(item.productId));
                       toast.info('Item removed from cart');
                     }}
-                    className="p-1.5 text-warm-400 hover:text-red-600 rounded-lg transition-colors"
-                    title="Remove item"
+                    className="p-2 text-warm-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium"
+                    title="Remove item entirely"
                   >
-                    <Trash2 className="w-2.5 h-2.5" />
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Remove</span>
                   </button>
                 </div>
               </div>
