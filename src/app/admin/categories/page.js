@@ -5,6 +5,9 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import { Folder, Plus, Edit2, Trash2, X, Check, ChevronDown } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
+import FieldError from '@/components/ui/FieldError';
+import { categorySchema } from '@/lib/validations';
+import { flattenZodErrors } from '@/lib/zod-utils';
 
 export default function AdminCategoriesPage() {
   const toast = useToast();
@@ -13,6 +16,7 @@ export default function AdminCategoriesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentIds: [] });
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
 
@@ -37,12 +41,14 @@ export default function AdminCategoriesPage() {
       imageUrl: cat.imageUrl || '',
       parentIds: Array.isArray(cat.parentIds) ? cat.parentIds : [],
     });
+    setErrors({});
     setShowForm(true);
   }
 
   function resetForm() {
     setEditingId(null);
     setForm({ name: '', slug: '', imageUrl: '', parentIds: [] });
+    setErrors({});
     setShowForm(false);
     setParentDropdownOpen(false);
   }
@@ -50,6 +56,9 @@ export default function AdminCategoriesPage() {
   function handleNameChange(name) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     setForm((prev) => ({ ...prev, name, slug }));
+    if (errors.name || errors.slug) {
+      setErrors((prev) => ({ ...prev, name: null, slug: null }));
+    }
   }
 
   function toggleParentId(id) {
@@ -64,10 +73,15 @@ export default function AdminCategoriesPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name || !form.slug) {
-      toast.error('Name and slug are required');
+    const payload = { ...form, parentIds: form.parentIds || [] };
+    const validation = categorySchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors = flattenZodErrors(validation.error);
+      setErrors(fieldErrors);
+      toast.error(validation.error.issues?.[0]?.message || 'Please fix category errors');
       return;
     }
+    setErrors({});
     setSaving(true);
     try {
       const url = editingId ? `/api/admin/categories/${editingId}` : '/api/admin/categories';
@@ -75,7 +89,7 @@ export default function AdminCategoriesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, parentIds: form.parentIds || [] }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
@@ -83,7 +97,8 @@ export default function AdminCategoriesPage() {
         resetForm();
         fetchCategories();
       } else {
-        toast.error(data.error || 'Failed');
+        if (data.errors) setErrors(data.errors);
+        toast.error(data.error || 'Failed to save category');
       }
     } catch {
       toast.error('Network error');
@@ -156,9 +171,11 @@ export default function AdminCategoriesPage() {
                   value={form.name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   placeholder="e.g. Footwear"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.name ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.name} />
               </div>
 
               <div>
@@ -170,9 +187,11 @@ export default function AdminCategoriesPage() {
                   value={form.slug}
                   onChange={(e) => setForm({ ...form, slug: e.target.value })}
                   placeholder="footwear"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 font-mono focus:outline-none focus:border-brand-600"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 font-mono focus:outline-none ${
+                    errors.slug ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.slug} />
               </div>
             </div>
 

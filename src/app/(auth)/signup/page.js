@@ -4,13 +4,21 @@ import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, User } from 'lucide-react';
+import PhoneInput from '@/components/ui/PhoneInput';
+import FieldError from '@/components/ui/FieldError';
+import { signupSchema } from '@/lib/validations';
+import { useZodForm } from '@/hooks/useZodForm';
 
 function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '';
 
-  const [form, setForm] = useState({ email: '', password: '', confirmPassword: '' });
+  const { values: form, setValues: setForm, errors, handleChange, validate, setServerErrors } = useZodForm(
+    { name: '', email: '', password: '', confirmPassword: '', phone: '' },
+    signupSchema
+  );
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,18 +33,20 @@ function SignupContent() {
     e.preventDefault();
     setError('');
 
-    if (!form.email.trim() || !form.password) {
-      setError('Email and password are required');
-      return;
-    }
-
-    if (form.password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return;
-    }
-
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+
+    const clientCheck = signupSchema.safeParse({
+      name: form.name,
+      email: form.email.trim(),
+      password: form.password,
+      phone: form.phone,
+    });
+
+    if (!clientCheck.success) {
+      validate();
       return;
     }
 
@@ -47,14 +57,17 @@ function SignupContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: form.name ? form.name.trim() : null,
           email: form.email.trim(),
           password: form.password,
+          phone: form.phone || null,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        setServerErrors(data);
         setError(data.error || 'Something went wrong');
         return;
       }
@@ -89,10 +102,30 @@ function SignupContent() {
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-2.5 ">
+        <form onSubmit={handleSubmit} className="space-y-2.5">
+          <div>
+            <label htmlFor="signup-name" className="block text-[10px] font-semibold text-warm-700 mb-1">
+              Full Name
+            </label>
+            <div className="relative">
+              <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
+              <input
+                id="signup-name"
+                type="text"
+                value={form.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  errors.name ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
+                placeholder="John Doe"
+              />
+            </div>
+            <FieldError message={errors.name} />
+          </div>
+
           <div>
             <label htmlFor="signup-email" className="block text-[10px] font-semibold text-warm-700 mb-1">
-              Email Address
+              Email Address *
             </label>
             <div className="relative">
               <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
@@ -100,17 +133,30 @@ function SignupContent() {
                 id="signup-email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                onChange={(e) => handleChange('email', e.target.value)}
+                className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  errors.email ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="you@example.com"
+                required
               />
             </div>
+            <FieldError message={errors.email} />
+          </div>
+
+          <div>
+            <PhoneInput
+              label="Mobile Phone Number"
+              value={form.phone}
+              onChange={(val) => handleChange('phone', val)}
+              error={errors.phone}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label htmlFor="signup-password" className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Password
+                Password *
               </label>
               <div className="relative">
                 <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
@@ -118,9 +164,12 @@ function SignupContent() {
                   id="signup-password"
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full pl-8 pr-8 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  onChange={(e) => handleChange('password', e.target.value)}
+                  className={`w-full pl-8 pr-8 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                    errors.password ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                   placeholder="Min. 6 chars"
+                  required
                 />
                 <button
                   type="button"
@@ -130,11 +179,12 @@ function SignupContent() {
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              <FieldError message={errors.password} />
             </div>
 
             <div>
               <label htmlFor="signup-confirm" className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Confirm
+                Confirm Password *
               </label>
               <div className="relative">
                 <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
@@ -142,9 +192,10 @@ function SignupContent() {
                   id="signup-confirm"
                   type={showConfirm ? 'text' : 'password'}
                   value={form.confirmPassword}
-                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                  className="w-full pl-8 pr-8 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  onChange={(e) => handleChange('confirmPassword', e.target.value)}
+                  className="w-full pl-8 pr-8 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 transition-all"
                   placeholder="Re-enter"
+                  required
                 />
                 <button
                   type="button"
@@ -175,7 +226,7 @@ function SignupContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
           >
             {loading ? (
               <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

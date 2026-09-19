@@ -6,6 +6,10 @@ import Pagination from '@/components/ui/Pagination';
 import { Plus, Edit2, Trash2, X, Check, Tag } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import NumericInput from '@/components/ui/NumericInput';
+import CustomSelect from '@/components/ui/CustomSelect';
+import FieldError from '@/components/ui/FieldError';
+import { couponSchema } from '@/lib/validations';
+import { flattenZodErrors } from '@/lib/zod-utils';
 
 export default function AdminCouponsPage() {
   const toast = useToast();
@@ -22,6 +26,7 @@ export default function AdminCouponsPage() {
     expiresAt: '',
     isActive: true,
   });
+  const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -48,6 +53,7 @@ export default function AdminCouponsPage() {
       expiresAt: c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : '',
       isActive: c.isActive,
     });
+    setErrors({});
     setShowForm(true);
   }
 
@@ -61,15 +67,27 @@ export default function AdminCouponsPage() {
       expiresAt: '',
       isActive: true,
     });
+    setErrors({});
     setShowForm(false);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.code || !form.value) {
-      toast.error('Coupon code and discount value are required');
+    const payload = {
+      ...form,
+      value: form.value ? parseFloat(form.value) : 0,
+      minOrderAmount: form.minOrderAmount ? parseFloat(form.minOrderAmount) : 0,
+      expiresAt: form.expiresAt || null,
+    };
+
+    const validation = couponSchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors = flattenZodErrors(validation.error);
+      setErrors(fieldErrors);
+      toast.error(validation.error.issues?.[0]?.message || 'Please fix coupon errors');
       return;
     }
+    setErrors({});
     setSaving(true);
     try {
       const url = editingId ? `/api/admin/coupons/${editingId}` : '/api/admin/coupons';
@@ -77,15 +95,16 @@ export default function AdminCouponsPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
       if (res.ok) {
         toast.success(editingId ? 'Coupon updated!' : 'Coupon created!');
         resetForm();
         fetchCoupons();
       } else {
-        const d = await res.json();
-        toast.error(d.error || 'Failed to save coupon');
+        if (data.errors) setErrors(data.errors);
+        toast.error(data.error || 'Failed to save coupon');
       }
     } catch {
       toast.error('Network error');
@@ -161,9 +180,11 @@ export default function AdminCouponsPage() {
                   value={form.code}
                   onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                   placeholder="e.g. SUMMER20"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 font-mono focus:outline-none focus:border-brand-600 uppercase"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 font-mono focus:outline-none uppercase ${
+                    errors.code ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.code} />
               </div>
 
               <div>
@@ -187,9 +208,11 @@ export default function AdminCouponsPage() {
                   value={form.value}
                   onChange={(val) => setForm({ ...form, value: val })}
                   placeholder={form.type === 'percent' ? '20' : '15.00'}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.value ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.value} />
               </div>
 
               <div>
@@ -200,8 +223,11 @@ export default function AdminCouponsPage() {
                   value={form.minOrderAmount}
                   onChange={(val) => setForm({ ...form, minOrderAmount: val })}
                   placeholder="0.00"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.minOrderAmount ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.minOrderAmount} />
               </div>
             </div>
 

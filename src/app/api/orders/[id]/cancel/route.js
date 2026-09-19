@@ -4,6 +4,7 @@ import { orders, orderItems, products, orderStatusHistory } from '@/lib/db/schem
 import { eq, and, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth';
 import { cancelOrderSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderStatusEmail } from '@/lib/email';
 
 export async function POST(request, { params }) {
@@ -15,7 +16,7 @@ export async function POST(request, { params }) {
     const result = cancelOrderSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Reason is required' },
+        formatZodErrorResponse(result, 'Reason is required'),
         { status: 400 }
       );
     }

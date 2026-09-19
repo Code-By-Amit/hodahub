@@ -31,11 +31,23 @@ export async function GET(request) {
   }
 }
 
+import { categorySchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request) {
   try {
     await requireAdmin(request);
-    const { name, slug, imageUrl, parentIds } = await request.json();
-    if (!name || !slug) return NextResponse.json({ error: 'Name and slug required' }, { status: 400 });
+    const body = await request.json();
+
+    const parseResult = categorySchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        formatZodErrorResponse(parseResult, 'Invalid category data'),
+        { status: 400 }
+      );
+    }
+
+    const { name, slug, imageUrl, parentIds } = body;
 
     const normalizedParentIds = Array.isArray(parentIds)
       ? parentIds.filter(Boolean)

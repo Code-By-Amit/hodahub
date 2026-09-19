@@ -8,6 +8,9 @@ import { ArrowLeft, Plus, Trash2, Check, Package } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
 import CustomSelect from '@/components/ui/CustomSelect';
 import NumericInput from '@/components/ui/NumericInput';
+import FieldError from '@/components/ui/FieldError';
+import { productSchema } from '@/lib/validations';
+import { flattenZodErrors } from '@/lib/zod-utils';
 
 export default function NewProductPage() {
   return <ProductForm />;
@@ -19,6 +22,7 @@ export function ProductForm({ initialData, productId }) {
   const isEditing = !!productId;
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
     name: '',
@@ -57,6 +61,9 @@ export function ProductForm({ initialData, productId }) {
   function handleNameChange(name) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     setForm((prev) => ({ ...prev, name, slug }));
+    if (errors.name || errors.slug) {
+      setErrors((prev) => ({ ...prev, name: null, slug: null }));
+    }
   }
 
   // Specifications Key-Value Row Helpers
@@ -107,11 +114,6 @@ export function ProductForm({ initialData, productId }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name || !form.slug || !form.price || !form.categoryId) {
-      toast.error('Name, slug, price, and Category are required');
-      return;
-    }
-    setLoading(true);
 
     // Clean spec rows with missing labels/values
     const cleanSpecs = (form.specifications || []).filter(
@@ -128,21 +130,33 @@ export function ProductForm({ initialData, productId }) {
         isActive: a.isActive !== false,
       }));
 
+    const payload = {
+      ...form,
+      price: form.price ? parseFloat(form.price) : 0,
+      discountPrice: form.discountPrice ? parseFloat(form.discountPrice) : null,
+      stock: form.stock !== '' ? parseInt(form.stock, 10) : 0,
+      categoryId: form.categoryId,
+      specifications: cleanSpecs,
+      addons: cleanAddons,
+    };
+
+    const validation = productSchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors = flattenZodErrors(validation.error);
+      setErrors(fieldErrors);
+      toast.error(validation.error.issues?.[0]?.message || 'Please fix product validation errors');
+      return;
+    }
+    setErrors({});
+    setLoading(true);
+
     try {
       const url = isEditing ? `/api/admin/products/${productId}` : '/api/admin/products';
       const method = isEditing ? 'PUT' : 'POST';
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          price: parseFloat(form.price),
-          discountPrice: form.discountPrice ? parseFloat(form.discountPrice) : null,
-          stock: parseInt(form.stock) || 0,
-          categoryId: form.categoryId,
-          specifications: cleanSpecs,
-          addons: cleanAddons,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -150,6 +164,7 @@ export function ProductForm({ initialData, productId }) {
         toast.success(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
         router.push('/admin/products');
       } else {
+        if (data.errors) setErrors(data.errors);
         toast.error(data.error || 'Failed to save product');
       }
     } catch {
@@ -224,10 +239,12 @@ export function ProductForm({ initialData, productId }) {
                 type="text"
                 value={form.name}
                 onChange={(e) => handleNameChange(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.name ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="e.g. Minimalist Leather Watch"
-                required
               />
+              <FieldError message={errors.name} />
             </div>
 
             <div>
@@ -238,10 +255,12 @@ export function ProductForm({ initialData, productId }) {
                 type="text"
                 value={form.slug}
                 onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 font-mono focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 font-mono focus:outline-none ${
+                  errors.slug ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="minimalist-leather-watch"
-                required
               />
+              <FieldError message={errors.slug} />
             </div>
           </div>
 
@@ -286,10 +305,12 @@ export function ProductForm({ initialData, productId }) {
               <NumericInput
                 value={form.price}
                 onChange={(val) => setForm({ ...form, price: val })}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.price ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="99.99"
-                required
               />
+              <FieldError message={errors.price} />
             </div>
 
             <div>
@@ -299,9 +320,12 @@ export function ProductForm({ initialData, productId }) {
               <NumericInput
                 value={form.discountPrice || ''}
                 onChange={(val) => setForm({ ...form, discountPrice: val })}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.discountPrice ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="79.99"
               />
+              <FieldError message={errors.discountPrice} />
             </div>
 
             <div>
@@ -313,9 +337,11 @@ export function ProductForm({ initialData, productId }) {
                 min={0}
                 value={form.stock}
                 onChange={(val) => setForm({ ...form, stock: val })}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
-                required
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.stock ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.stock} />
             </div>
 
             <div>
@@ -328,6 +354,7 @@ export function ProductForm({ initialData, productId }) {
                 onChange={(val) => setForm({ ...form, categoryId: val })}
                 placeholder="Select category..."
               />
+              <FieldError message={errors.categoryId} />
             </div>
           </div>
 

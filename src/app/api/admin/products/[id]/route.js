@@ -22,16 +22,24 @@ export async function GET(request, { params }) {
   }
 }
 
+import { productSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function PUT(request, { params }) {
   try {
     await requireAdmin(request);
     const { id } = await params;
     const body = await request.json();
-    const { name, slug, description, price, discountPrice, categoryId, stock, images, specifications, isActive, codAvailable, productLink, addons } = body;
 
-    if (categoryId !== undefined && !categoryId) {
-      return NextResponse.json({ error: 'Category selection is required' }, { status: 400 });
+    const parseResult = productSchema.partial().safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        formatZodErrorResponse(parseResult, 'Invalid product data'),
+        { status: 400 }
+      );
     }
+
+    const { name, slug, description, price, discountPrice, categoryId, stock, images, specifications, isActive, codAvailable, productLink, addons } = body;
 
     const [product] = await db.update(products).set({
       ...(name && { name }),

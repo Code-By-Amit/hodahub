@@ -126,7 +126,7 @@ export async function createDelhiveryShipment(orderData, forceStaging = false) {
   try {
     const isCod = paymentMethod === 'cod';
     const codAmount = isCod ? parseFloat(totalAmount) || 0 : 0;
-    const cleanPhone = (shippingAddress?.phone || guestPhone || '9876543210')
+    const cleanPhone = (shippingAddress?.phone || guestPhone || '')
       .toString()
       .replace(/\D/g, '')
       .slice(0, 10);

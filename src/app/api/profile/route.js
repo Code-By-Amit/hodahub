@@ -4,6 +4,7 @@ import { users, addresses } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth';
 import { updateProfileSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function GET(request) {
   try {
@@ -51,7 +52,7 @@ export async function PUT(request) {
     const result = updateProfileSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid data' },
+        formatZodErrorResponse(result, 'Invalid profile data'),
         { status: 400 }
       );
     }

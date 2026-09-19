@@ -6,6 +6,7 @@ import { products, coupons, orders, orderItems, orderStatusHistory, storeSetting
 import { eq, and, inArray, sql, gte } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { createOrderSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '@/lib/email';
 import { cleanupAbandonedOrders } from '@/lib/order-cleanup';
 
@@ -31,7 +32,7 @@ export async function POST(request) {
     const result = createOrderSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid input data' },
+        formatZodErrorResponse(result, 'Invalid input data'),
         { status: 400 }
       );
     }

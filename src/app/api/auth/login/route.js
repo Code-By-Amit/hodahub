@@ -7,6 +7,9 @@ import { generateTokens, setAuthCookies, generateOTP } from '@/lib/auth';
 import { sendOTPEmail } from '@/lib/email';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
+import { loginSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request) {
   try {
     const ip = getClientIP(request);
@@ -18,14 +21,17 @@ export async function POST(request) {
       );
     }
 
-    const { email, password } = await request.json();
+    const body = await request.json();
 
-    if (!email || !password) {
+    const parseResult = loginSchema.safeParse(body);
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        formatZodErrorResponse(parseResult, 'Invalid credentials'),
         { status: 400 }
       );
     }
+
+    const { email, password } = parseResult.data;
 
     // Find user
     const [user] = await db

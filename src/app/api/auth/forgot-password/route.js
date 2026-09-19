@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { generateOTP } from '@/lib/auth';
 import { sendPasswordResetEmail } from '@/lib/email';
 import { forgotPasswordSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 export async function POST(request) {
@@ -22,7 +23,7 @@ export async function POST(request) {
     const result = forgotPasswordSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid email address' },
+        formatZodErrorResponse(result, 'Invalid email address'),
         { status: 400 }
       );
     }

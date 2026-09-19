@@ -4,29 +4,36 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import { Settings, Save, Check, MapPin, Clock, Share2 } from 'lucide-react';
 import NumericInput from '@/components/ui/NumericInput';
+import PhoneInput from '@/components/ui/PhoneInput';
+import FieldError from '@/components/ui/FieldError';
+import { storeSettingsSchema } from '@/lib/validations';
+import { useZodForm } from '@/hooks/useZodForm';
 
 export default function AdminSettingsPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({
-    storeName: 'HodaHub',
-    contactEmail: '',
-    contactPhone: '',
-    whatsappNumber: '',
-    address: '',
-    businessHours: '',
-    instagramUrl: '',
-    facebookUrl: '',
-    twitterUrl: '',
-    youtubeUrl: '',
-    codEnabled: true,
-    shippingFee: '0',
-    minFreeShipping: '50',
-    codAdvanceAmount: '99',
-    orderExpirationMinutes: '15',
-  });
+  const { values: form, setValues: setForm, errors, handleChange, validate, setServerErrors } = useZodForm(
+    {
+      storeName: 'HodaHub',
+      contactEmail: '',
+      contactPhone: '',
+      whatsappNumber: '',
+      address: '',
+      businessHours: '',
+      instagramUrl: '',
+      facebookUrl: '',
+      twitterUrl: '',
+      youtubeUrl: '',
+      codEnabled: true,
+      shippingFee: '0',
+      minFreeShipping: '50',
+      codAdvanceAmount: '99',
+      orderExpirationMinutes: '15',
+    },
+    storeSettingsSchema
+  );
 
   useEffect(() => {
     fetchSettings();
@@ -49,9 +56,9 @@ export default function AdminSettingsPage() {
           twitterUrl: data.settings.twitterUrl || '',
           youtubeUrl: data.settings.youtubeUrl || '',
           codEnabled: data.settings.codEnabled ?? true,
-          shippingFee: data.settings.shippingFee || '0',
-          minFreeShipping: data.settings.minFreeShipping || '50',
-          codAdvanceAmount: data.settings.codAdvanceAmount || '99',
+          shippingFee: String(data.settings.shippingFee ?? '0'),
+          minFreeShipping: String(data.settings.minFreeShipping ?? '50'),
+          codAdvanceAmount: String(data.settings.codAdvanceAmount ?? '99'),
           orderExpirationMinutes: String(data.settings.orderExpirationMinutes || 15),
         });
       }
@@ -61,23 +68,34 @@ export default function AdminSettingsPage() {
 
   async function handleSubmit(e) {
     if (e) e.preventDefault();
+
+    const payloadToValidate = {
+      ...form,
+      shippingFee: parseFloat(form.shippingFee) || 0,
+      minFreeShipping: parseFloat(form.minFreeShipping) || 0,
+      codAdvanceAmount: parseFloat(form.codAdvanceAmount) || 0,
+      orderExpirationMinutes: parseInt(form.orderExpirationMinutes) || 15,
+    };
+
+    const clientCheck = storeSettingsSchema.safeParse(payloadToValidate);
+    if (!clientCheck.success) {
+      validate();
+      toast.error('Please fix validation errors before saving');
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          shippingFee: parseFloat(form.shippingFee) || 0,
-          minFreeShipping: parseFloat(form.minFreeShipping) || 0,
-          codAdvanceAmount: parseFloat(form.codAdvanceAmount) || 0,
-          orderExpirationMinutes: parseInt(form.orderExpirationMinutes) || 15,
-        }),
+        body: JSON.stringify(payloadToValidate),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success('Store settings saved successfully!');
       } else {
+        setServerErrors(data);
         toast.error(data.error || 'Failed to save settings');
       }
     } catch {
@@ -135,10 +153,13 @@ export default function AdminSettingsPage() {
               <input
                 type="text"
                 value={form.storeName}
-                onChange={(e) => setForm({ ...form, storeName: e.target.value })}
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                onChange={(e) => handleChange('storeName', e.target.value)}
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.storeName ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 required
               />
+              <FieldError message={errors.storeName} />
             </div>
 
             <div>
@@ -148,35 +169,30 @@ export default function AdminSettingsPage() {
               <input
                 type="email"
                 value={form.contactEmail}
-                onChange={(e) => setForm({ ...form, contactEmail: e.target.value })}
+                onChange={(e) => handleChange('contactEmail', e.target.value)}
                 placeholder="e.g. support@yourdomain.com"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.contactEmail ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.contactEmail} />
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Customer Support Phone
-              </label>
-              <input
-                type="tel"
+              <PhoneInput
+                label="Customer Support Phone"
                 value={form.contactPhone}
-                onChange={(e) => setForm({ ...form, contactPhone: e.target.value })}
-                placeholder="e.g. 9876543210"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                onChange={(val) => handleChange('contactPhone', val)}
+                error={errors.contactPhone}
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                WhatsApp Contact Number (with country code, e.g. 919876543210)
-              </label>
-              <input
-                type="text"
+              <PhoneInput
+                label="WhatsApp Contact Number"
                 value={form.whatsappNumber}
-                onChange={(e) => setForm({ ...form, whatsappNumber: e.target.value })}
-                placeholder="e.g. 919876543210"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 font-mono"
+                onChange={(val) => handleChange('whatsappNumber', val)}
+                error={errors.whatsappNumber}
               />
             </div>
 
@@ -187,11 +203,14 @@ export default function AdminSettingsPage() {
               </label>
               <textarea
                 value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                onChange={(e) => handleChange('address', e.target.value)}
                 rows={2}
                 placeholder="e.g. Plot 45, Sector 18, Gurugram, Haryana - 122015"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 resize-none"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none resize-none ${
+                  errors.address ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.address} />
             </div>
 
             <div className="sm:col-span-2">
@@ -202,10 +221,13 @@ export default function AdminSettingsPage() {
               <input
                 type="text"
                 value={form.businessHours}
-                onChange={(e) => setForm({ ...form, businessHours: e.target.value })}
+                onChange={(e) => handleChange('businessHours', e.target.value)}
                 placeholder="e.g. Mon - Sat: 9:00 AM - 6:00 PM IST"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.businessHours ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.businessHours} />
             </div>
           </div>
         </div>
@@ -225,10 +247,13 @@ export default function AdminSettingsPage() {
               <input
                 type="url"
                 value={form.instagramUrl}
-                onChange={(e) => setForm({ ...form, instagramUrl: e.target.value })}
+                onChange={(e) => handleChange('instagramUrl', e.target.value)}
                 placeholder="https://instagram.com/hodahub"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.instagramUrl ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.instagramUrl} />
             </div>
 
             <div>
@@ -238,10 +263,13 @@ export default function AdminSettingsPage() {
               <input
                 type="url"
                 value={form.facebookUrl}
-                onChange={(e) => setForm({ ...form, facebookUrl: e.target.value })}
+                onChange={(e) => handleChange('facebookUrl', e.target.value)}
                 placeholder="https://facebook.com/hodahub"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.facebookUrl ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.facebookUrl} />
             </div>
 
             <div>
@@ -251,10 +279,13 @@ export default function AdminSettingsPage() {
               <input
                 type="url"
                 value={form.twitterUrl}
-                onChange={(e) => setForm({ ...form, twitterUrl: e.target.value })}
+                onChange={(e) => handleChange('twitterUrl', e.target.value)}
                 placeholder="https://twitter.com/hodahub"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.twitterUrl ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.twitterUrl} />
             </div>
 
             <div>
@@ -264,10 +295,13 @@ export default function AdminSettingsPage() {
               <input
                 type="url"
                 value={form.youtubeUrl}
-                onChange={(e) => setForm({ ...form, youtubeUrl: e.target.value })}
+                onChange={(e) => handleChange('youtubeUrl', e.target.value)}
                 placeholder="https://youtube.com/@hodahub"
-                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.youtubeUrl ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
+              <FieldError message={errors.youtubeUrl} />
             </div>
           </div>
         </div>
@@ -283,7 +317,7 @@ export default function AdminSettingsPage() {
               <input
                 type="checkbox"
                 checked={form.codEnabled}
-                onChange={(e) => setForm({ ...form, codEnabled: e.target.checked })}
+                onChange={(e) => handleChange('codEnabled', e.target.checked)}
                 className="w-3.5 h-3.5 accent-warm-900 rounded"
               />
               <div>
@@ -301,9 +335,12 @@ export default function AdminSettingsPage() {
                 </label>
                 <NumericInput
                   value={form.shippingFee}
-                  onChange={(val) => setForm({ ...form, shippingFee: val })}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                  onChange={(val) => handleChange('shippingFee', val)}
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.shippingFee ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.shippingFee} />
               </div>
 
               <div>
@@ -312,9 +349,12 @@ export default function AdminSettingsPage() {
                 </label>
                 <NumericInput
                   value={form.minFreeShipping}
-                  onChange={(val) => setForm({ ...form, minFreeShipping: val })}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                  onChange={(val) => handleChange('minFreeShipping', val)}
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.minFreeShipping ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.minFreeShipping} />
               </div>
 
               <div>
@@ -323,9 +363,12 @@ export default function AdminSettingsPage() {
                 </label>
                 <NumericInput
                   value={form.codAdvanceAmount}
-                  onChange={(val) => setForm({ ...form, codAdvanceAmount: val })}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                  onChange={(val) => handleChange('codAdvanceAmount', val)}
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                    errors.codAdvanceAmount ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.codAdvanceAmount} />
               </div>
 
               <div>
@@ -336,10 +379,13 @@ export default function AdminSettingsPage() {
                   allowDecimals={false}
                   min={1}
                   value={form.orderExpirationMinutes}
-                  onChange={(val) => setForm({ ...form, orderExpirationMinutes: val })}
+                  onChange={(val) => handleChange('orderExpirationMinutes', val)}
                   placeholder="15"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 font-mono"
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none font-mono ${
+                    errors.orderExpirationMinutes ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                 />
+                <FieldError message={errors.orderExpirationMinutes} />
               </div>
             </div>
           </div>

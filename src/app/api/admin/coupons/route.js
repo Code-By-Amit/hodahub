@@ -22,12 +22,23 @@ export async function GET(request) {
   }
 }
 
+import { couponSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request) {
   try {
     await requireAdmin(request);
     const body = await request.json();
+
+    const parseResult = couponSchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        formatZodErrorResponse(parseResult, 'Invalid coupon data'),
+        { status: 400 }
+      );
+    }
+
     const { code, type, value, minOrderAmount, expiresAt, isActive } = body;
-    if (!code || !type || !value) return NextResponse.json({ error: 'Code, type, and value required' }, { status: 400 });
 
     const [coupon] = await db.insert(coupons).values({
       code: code.toUpperCase(), type, value: value.toString(),

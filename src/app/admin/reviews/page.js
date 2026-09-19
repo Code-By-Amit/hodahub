@@ -5,8 +5,11 @@ import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import StarRating from '@/components/ui/StarRating';
 import ImageUpload from '@/components/ui/ImageUpload';
+import FieldError from '@/components/ui/FieldError';
 import { Eye, EyeOff, Trash2, Film, ImageIcon, X } from 'lucide-react';
 import { isVideoUrl } from '@/lib/utils';
+import { adminReviewSchema } from '@/lib/validations';
+import { flattenZodErrors } from '@/lib/zod-utils';
 
 export default function AdminReviewsPage() {
   const toast = useToast();
@@ -26,6 +29,7 @@ export default function AdminReviewsPage() {
     comment: '',
     mediaUrls: [],
   });
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     fetchReviews();
@@ -57,34 +61,39 @@ export default function AdminReviewsPage() {
 
   async function handleCreateReview(e) {
     e.preventDefault();
-    if (!addForm.productId || !addForm.userName.trim()) {
-      toast.error('Please select a product and provide an author name');
+
+    const payload = {
+      productId: addForm.productId,
+      userName: addForm.userName.trim(),
+      rating: addForm.rating ? Number(addForm.rating) : null,
+      comment: addForm.comment.trim() || null,
+      mediaUrls: Array.isArray(addForm.mediaUrls) ? addForm.mediaUrls : [],
+    };
+
+    const validation = adminReviewSchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors = flattenZodErrors(validation.error);
+      setErrors(fieldErrors);
+      toast.error(validation.error.issues?.[0]?.message || 'Please fix review submission errors');
       return;
     }
-    if (!addForm.rating && (!addForm.comment || !addForm.comment.trim())) {
-      toast.error('Please provide either a star rating or a review comment');
-      return;
-    }
+    setErrors({});
     setSubmitting(true);
     try {
       const res = await fetch('/api/admin/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productId: addForm.productId,
-          userName: addForm.userName.trim(),
-          rating: addForm.rating ? Number(addForm.rating) : null,
-          comment: addForm.comment.trim() || null,
-          mediaUrls: Array.isArray(addForm.mediaUrls) ? addForm.mediaUrls : [],
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success('Customer review published successfully!');
         setShowAddModal(false);
+        setErrors({});
         setAddForm({ productId: productsList[0]?.id || '', userName: '', rating: 5, comment: '', mediaUrls: [] });
         fetchReviews();
       } else {
+        if (data.errors) setErrors(data.errors);
         toast.error(data.error || 'Failed to create review');
       }
     } catch {
@@ -287,8 +296,9 @@ export default function AdminReviewsPage() {
                 <select
                   value={addForm.productId}
                   onChange={(e) => setAddForm({ ...addForm, productId: e.target.value })}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
+                    errors.productId ? 'border-red-500' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                 >
                   {productsList.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -296,6 +306,7 @@ export default function AdminReviewsPage() {
                     </option>
                   ))}
                 </select>
+                <FieldError message={errors.productId} />
               </div>
 
               <div>
@@ -307,9 +318,11 @@ export default function AdminReviewsPage() {
                   value={addForm.userName}
                   onChange={(e) => setAddForm({ ...addForm, userName: e.target.value })}
                   placeholder="e.g. Priya Sharma"
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
-                  required
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
+                    errors.userName ? 'border-red-500' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                 />
+                <FieldError message={errors.userName} />
               </div>
 
               <div>
@@ -319,7 +332,9 @@ export default function AdminReviewsPage() {
                 <select
                   value={addForm.rating || ''}
                   onChange={(e) => setAddForm({ ...addForm, rating: e.target.value ? Number(e.target.value) : '' })}
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
+                    errors.rating ? 'border-red-500' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                 >
                   <option value="5">5 Stars (Excellent)</option>
                   <option value="4">4 Stars (Very Good)</option>
@@ -328,6 +343,7 @@ export default function AdminReviewsPage() {
                   <option value="1">1 Star (Poor)</option>
                   <option value="">No Star Rating (Comment Only)</option>
                 </select>
+                <FieldError message={errors.rating} />
               </div>
 
               <div>
@@ -339,8 +355,11 @@ export default function AdminReviewsPage() {
                   value={addForm.comment}
                   onChange={(e) => setAddForm({ ...addForm, comment: e.target.value })}
                   placeholder="Write customer review feedback or commentary..."
-                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
+                    errors.comment ? 'border-red-500' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                 />
+                <FieldError message={errors.comment} />
               </div>
 
               <div>

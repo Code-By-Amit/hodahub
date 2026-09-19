@@ -7,6 +7,9 @@ import { generateOTP } from '@/lib/auth';
 import { sendOTPEmail } from '@/lib/email';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
+import { signupSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request) {
   try {
     const ip = getClientIP(request);
@@ -18,22 +21,17 @@ export async function POST(request) {
       );
     }
 
-    const { name, email, password } = await request.json();
+    const body = await request.json();
 
-    // Basic validation
-    if (!email || !password) {
+    const parseResult = signupSchema.safeParse(body);
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        formatZodErrorResponse(parseResult, 'Invalid signup details'),
         { status: 400 }
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
-        { status: 400 }
-      );
-    }
+    const { name, email, password, phone } = parseResult.data;
 
     // Check if user exists
     const existingUser = await db

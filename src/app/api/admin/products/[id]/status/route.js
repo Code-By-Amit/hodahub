@@ -5,6 +5,7 @@ import { products } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { productStatusToggleSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function PATCH(request, { params }) {
   try {
@@ -21,7 +22,7 @@ export async function PATCH(request, { params }) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid payload' },
+        formatZodErrorResponse(result, 'Invalid status payload'),
         { status: 400 }
       );
     }

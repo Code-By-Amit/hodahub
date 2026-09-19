@@ -11,6 +11,7 @@ import {
   FiSearch, FiHeart, FiUser, FiShoppingCart,
   FiMenu, FiX, FiChevronDown, FiLogOut, FiPackage, FiSettings, FiGrid
 } from 'react-icons/fi';
+import { formatCurrency } from '@/lib/utils';
 
 const navLinks = [
   { label: 'Home', href: '/' },
@@ -559,7 +560,7 @@ function SearchOverlay({ onClose }) {
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-warm-900 truncate">{product.name}</p>
                             <p className="text-xs text-brand-600 font-semibold">
-                              ${product.discountPrice || product.price}
+                              {formatCurrency(product.discountPrice || product.price)}
                             </p>
                           </div>
                         </Link>

@@ -63,6 +63,9 @@ export async function GET(request, { params }) {
   }
 }
 
+import { reviewSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request, { params }) {
   try {
     const user = await getAuthUser(request);
@@ -73,13 +76,15 @@ export async function POST(request, { params }) {
     const { slug } = await params;
     const body = await request.json();
 
-    const { rating, comment, mediaUrls } = body;
-    if (!rating && (!comment || !comment.trim())) {
-      return NextResponse.json({ error: 'Please provide either a star rating or a review comment' }, { status: 400 });
+    const parseResult = reviewSchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        formatZodErrorResponse(parseResult, 'Invalid review data'),
+        { status: 400 }
+      );
     }
-    if (rating && (rating < 1 || rating > 5)) {
-      return NextResponse.json({ error: 'Rating must be 1-5' }, { status: 400 });
-    }
+
+    const { rating, comment, mediaUrls } = parseResult.data;
 
     let sanitizedMediaUrls = [];
     if (Array.isArray(mediaUrls)) {

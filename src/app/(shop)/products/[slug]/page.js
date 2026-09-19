@@ -18,6 +18,7 @@ import ProductCard from '@/components/ui/ProductCard';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
 import { formatCurrency, isVideoUrl } from '@/lib/utils';
+import { toWhatsAppLink } from '@/lib/zod-utils';
 import {
   Frown,
   Package,
@@ -656,10 +657,10 @@ export default function ProductDetailPage() {
             <button
               type="button"
               onClick={() => {
-                const cleanNumber = whatsappNumber.trim().replace(/\D/g, '');
                 const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-                const text = encodeURIComponent(`Hi! I'm interested in *${product.name}*: ${currentUrl}`);
-                window.open(`https://wa.me/${cleanNumber}?text=${text}`, '_blank');
+                const text = `Hi! I'm interested in *${product.name}*: ${currentUrl}`;
+                const waUrl = toWhatsAppLink(whatsappNumber, text);
+                window.open(waUrl, '_blank');
               }}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-[11px] sm:text-[12px] font-bold rounded-md transition-all shadow-xs cursor-pointer"
             >

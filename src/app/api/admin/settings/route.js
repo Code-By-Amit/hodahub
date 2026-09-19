@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { storeSettings } from '@/lib/db/schema';
 import { requireAdmin } from '@/lib/auth';
 import { storeSettingsSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { eq } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,7 @@ export async function PUT(request) {
     const result = storeSettingsSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid settings data' },
+        formatZodErrorResponse(result, 'Invalid settings data'),
         { status: 400 }
       );
     }

@@ -4,6 +4,7 @@ import { reviews, products as productsTable } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth';
 import { reviewSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function PUT(request, { params }) {
   try {
@@ -14,7 +15,7 @@ export async function PUT(request, { params }) {
     const result = reviewSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid review data' },
+        formatZodErrorResponse(result, 'Invalid review data'),
         { status: 400 }
       );
     }

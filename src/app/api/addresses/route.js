@@ -15,28 +15,23 @@ export async function GET(request) {
   }
 }
 
+import { addressSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
+
 export async function POST(request) {
   try {
     const user = await requireAuth(request);
     const body = await request.json();
-    const { label, line1, line2, city, state, pincode, phone } = body;
 
-    if (!line1 || !city || !state || !pincode) {
-      return NextResponse.json({ error: 'Address, city, state, and pincode are required' }, { status: 400 });
+    const parseResult = addressSchema.safeParse(body);
+    if (!parseResult.success) {
+      return NextResponse.json(
+        formatZodErrorResponse(parseResult, 'Invalid address details'),
+        { status: 400 }
+      );
     }
 
-    const cleanPincode = String(pincode).trim();
-    if (!/^\d{6}$/.test(cleanPincode)) {
-      return NextResponse.json({ error: 'Pincode must be a valid 6-digit number' }, { status: 400 });
-    }
-
-    let cleanPhone = null;
-    if (phone) {
-      cleanPhone = String(phone).replace(/\D/g, '');
-      if (!/^\d{10}$/.test(cleanPhone)) {
-        return NextResponse.json({ error: 'Phone number must be a valid 10-digit mobile number' }, { status: 400 });
-      }
-    }
+    const { label, line1, line2, city, state, pincode, phone } = parseResult.data;
 
     const [address] = await db.insert(addresses).values({
       userId: user.id,

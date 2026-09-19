@@ -11,9 +11,6 @@ import {
 } from '@/lib/store/cartSlice';
 import { selectUser, selectAuthLoading } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
-import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import Script from 'next/script';
-import { formatCurrency } from '@/lib/utils';
 import { lookupPincode } from '@/lib/pincode';
 import {
   FiPlus,
@@ -28,6 +25,12 @@ import {
   FiLoader,
   FiMessageSquare,
 } from 'react-icons/fi';
+import { toWhatsAppLink } from '@/lib/zod-utils';
+import PhoneInput from '@/components/ui/PhoneInput';
+import FieldError from '@/components/ui/FieldError';
+import Script from 'next/script';
+import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import { formatCurrency } from '@/lib/utils';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -80,6 +83,8 @@ export default function CheckoutPage() {
     codEnabled: true,
     shippingFee: 0,
     minFreeShipping: 50,
+    whatsappNumber: '',
+    codAdvanceAmount: 99,
   });
 
   const nonCodItems = items.filter((item) => item.codAvailable === false);
@@ -185,6 +190,8 @@ export default function CheckoutPage() {
           codEnabled: data.settings.codEnabled ?? true,
           shippingFee: Number(data.settings.shippingFee || 0),
           minFreeShipping: Number(data.settings.minFreeShipping || 50),
+          whatsappNumber: data.settings.whatsappNumber || '',
+          codAdvanceAmount: Number(data.settings.codAdvanceAmount || 99),
         });
       }
     } catch {}
@@ -292,8 +299,8 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
         toast.error('WhatsApp checkout is currently unavailable.');
         return;
       }
-      const cleanNum = waNumber.replace(/\D/g, '');
-      window.open(`https://wa.me/${cleanNum}?text=${encodeURIComponent(waText)}`, '_blank');
+      const waUrl = toWhatsAppLink(waNumber, waText);
+      window.open(waUrl, '_blank');
       toast.success('WhatsApp opened with your complete order details!');
       return;
     }

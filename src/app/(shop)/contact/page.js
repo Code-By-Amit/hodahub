@@ -3,11 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
+import FieldError from '@/components/ui/FieldError';
+import { contactSchema } from '@/lib/validations';
+import { useZodForm } from '@/hooks/useZodForm';
 import { FiMail, FiUser, FiSend, FiPhone, FiMapPin, FiClock } from 'react-icons/fi';
 
 export default function ContactPage() {
   const toast = useToast();
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const { values: form, setValues: setForm, errors, handleChange, validate, setServerErrors, reset } = useZodForm(
+    { name: '', email: '', subject: '', message: '' },
+    contactSchema
+  );
+
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState({
     storeName: 'HodaHub',
@@ -30,6 +37,13 @@ export default function ContactPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+
+    const clientCheck = contactSchema.safeParse(form);
+    if (!clientCheck.success) {
+      validate();
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/contact', {
@@ -40,8 +54,9 @@ export default function ContactPage() {
       const data = await res.json();
       if (res.ok) {
         toast.success(data.message || 'Message sent successfully!');
-        setForm({ name: '', email: '', subject: '', message: '' });
+        reset({ name: '', email: '', subject: '', message: '' });
       } else {
+        setServerErrors(data);
         toast.error(data.error || 'Failed to send message');
       }
     } catch {
@@ -132,13 +147,16 @@ export default function ContactPage() {
                   <input
                     type="text"
                     value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg text-[11px] outline-none transition-colors ${
+                      errors.name ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                    }`}
                     placeholder="Jane Doe"
                     disabled={!settings.contactEmail}
                     required
                   />
                 </div>
+                <FieldError message={errors.name} />
               </div>
 
               <div>
@@ -148,13 +166,16 @@ export default function ContactPage() {
                   <input
                     type="email"
                     value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2.5 border rounded-lg text-[11px] outline-none transition-colors ${
+                      errors.email ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                    }`}
                     placeholder="jane@example.com"
                     disabled={!settings.contactEmail}
                     required
                   />
                 </div>
+                <FieldError message={errors.email} />
               </div>
             </div>
 
@@ -163,25 +184,31 @@ export default function ContactPage() {
               <input
                 type="text"
                 value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                className="w-full px-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
+                onChange={(e) => handleChange('subject', e.target.value)}
+                className={`w-full px-4 py-2.5 border rounded-lg text-[11px] outline-none transition-colors ${
+                  errors.subject ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                }`}
                 placeholder="Order Inquiry, Product Info..."
                 disabled={!settings.contactEmail}
                 required
               />
+              <FieldError message={errors.subject} />
             </div>
 
             <div>
               <label className="block text-[11px] font-bold text-warm-700 uppercase mb-1">Message *</label>
               <textarea
                 value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                onChange={(e) => handleChange('message', e.target.value)}
                 rows={4}
-                className="w-full px-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors resize-none"
+                className={`w-full px-4 py-2.5 border rounded-lg text-[11px] outline-none transition-colors resize-none ${
+                  errors.message ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                }`}
                 placeholder="How can we help you?"
                 disabled={!settings.contactEmail}
                 required
               />
+              <FieldError message={errors.message} />
             </div>
 
             <button

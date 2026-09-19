@@ -8,6 +8,9 @@ import { setUser } from '@/lib/store/authSlice';
 import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import FieldError from '@/components/ui/FieldError';
+import { loginSchema } from '@/lib/validations';
+import { useZodForm } from '@/hooks/useZodForm';
 
 function LoginContent() {
   const router = useRouter();
@@ -16,7 +19,11 @@ function LoginContent() {
   const guestWishlistItems = useSelector(selectWishlistItems);
   const redirect = searchParams.get('redirect') || '';
 
-  const [form, setForm] = useState({ email: '', password: '' });
+  const { values: form, setValues: setForm, errors, handleChange, validate, setServerErrors } = useZodForm(
+    { email: '', password: '' },
+    loginSchema
+  );
+
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,8 +32,13 @@ function LoginContent() {
     e.preventDefault();
     setError('');
 
-    if (!form.email.trim() || !form.password) {
-      setError('Email and password are required');
+    const clientCheck = loginSchema.safeParse({
+      email: form.email.trim(),
+      password: form.password,
+    });
+
+    if (!clientCheck.success) {
+      validate();
       return;
     }
 
@@ -53,6 +65,7 @@ function LoginContent() {
           );
           return;
         }
+        setServerErrors(data);
         setError(data.error || 'Login failed');
         return;
       }
@@ -103,11 +116,15 @@ function LoginContent() {
                 id="login-email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                onChange={(e) => handleChange('email', e.target.value)}
+                className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  errors.email ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="you@example.com"
+                required
               />
             </div>
+            <FieldError message={errors.email} />
           </div>
 
           <div>
@@ -128,9 +145,12 @@ function LoginContent() {
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
                 value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full pl-8 pr-9 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                onChange={(e) => handleChange('password', e.target.value)}
+                className={`w-full pl-8 pr-9 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  errors.password ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
                 placeholder="Enter password"
+                required
               />
               <button
                 type="button"
@@ -140,12 +160,13 @@ function LoginContent() {
                 {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
+            <FieldError message={errors.password} />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
           >
             {loading ? (
               <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

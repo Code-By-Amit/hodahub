@@ -97,7 +97,7 @@ export default function FilterPanel({
           onClick={() => toggleSection('price')}
           className="flex items-center justify-between w-full text-left py-1 font-bold text-[11px] text-warm-900 uppercase tracking-wider"
         >
-          <span>Price Range ($)</span>
+          <span>Price Range (₹)</span>
           {openSections.price ? (
             <ChevronUp className="w-2 h-2 text-warm-500" />
           ) : (

@@ -4,6 +4,7 @@ import { orders, orderItems, products, orderStatusHistory, users } from '@/lib/d
 import { eq, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { adminOrderActionSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderStatusEmail } from '@/lib/email';
 
 export async function POST(request, { params }) {
@@ -15,7 +16,7 @@ export async function POST(request, { params }) {
     const result = adminOrderActionSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid action data' },
+        formatZodErrorResponse(result, 'Invalid action data'),
         { status: 400 }
       );
     }

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
+import FieldError from '@/components/ui/FieldError';
+import { forgotPasswordSchema, resetPasswordSchema } from '@/lib/validations';
 import { ArrowLeft, ArrowRight, Lock, Mail, Key } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
@@ -15,25 +17,31 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
 
   async function handleRequestCode(e) {
     e.preventDefault();
-    if (!email) {
-      toast.error('Please enter your email address');
+    setErrors({});
+
+    const clientCheck = forgotPasswordSchema.safeParse({ email: email.trim() });
+    if (!clientCheck.success) {
+      setErrors({ email: clientCheck.error.issues[0]?.message });
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success(data.message || 'Verification code sent!');
         setStep(2);
       } else {
+        if (data.errors) setErrors(data.errors);
         toast.error(data.error || 'Failed to request reset code');
       }
     } catch {
@@ -44,12 +52,15 @@ export default function ForgotPasswordPage() {
 
   async function handleResetPassword(e) {
     e.preventDefault();
-    if (!otp || otp.length !== 6) {
-      toast.error('Please enter the 6-digit verification code');
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    setErrors({});
+
+    const clientCheck = resetPasswordSchema.safeParse({ email: email.trim(), otp, newPassword });
+    if (!clientCheck.success) {
+      const errMap = {};
+      clientCheck.error.issues.forEach((iss) => {
+        if (iss.path[0]) errMap[iss.path[0]] = iss.message;
+      });
+      setErrors(errMap);
       return;
     }
 
@@ -58,13 +69,14 @@ export default function ForgotPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp, newPassword }),
+        body: JSON.stringify({ email: email.trim(), otp, newPassword }),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success(data.message || 'Password reset successfully!');
         router.push('/login');
       } else {
+        if (data.errors) setErrors(data.errors);
         toast.error(data.error || 'Failed to reset password');
       }
     } catch {
@@ -89,25 +101,31 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleRequestCode} className="space-y-2.5">
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Email Address
+                Email Address *
               </label>
               <div className="relative">
                 <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors((prev) => ({ ...prev, email: null }));
+                  }}
+                  className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                    errors.email ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                   placeholder="you@example.com"
                   required
                 />
               </div>
+              <FieldError message={errors.email} />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -123,7 +141,7 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleResetPassword} className="space-y-2.5">
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                6-Digit Reset Code
+                6-Digit Reset Code *
               </label>
               <div className="relative">
                 <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
@@ -131,35 +149,47 @@ export default function ForgotPasswordPage() {
                   type="text"
                   maxLength={6}
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md font-mono text-center tracking-widest text-[13px] font-bold text-warm-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  onChange={(e) => {
+                    setOtp(e.target.value.replace(/\D/g, ''));
+                    if (errors.otp) setErrors((prev) => ({ ...prev, otp: null }));
+                  }}
+                  className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md font-mono text-center tracking-widest text-[13px] font-bold text-warm-900 focus:outline-none transition-all ${
+                    errors.otp ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                   placeholder="123456"
                   required
                 />
               </div>
+              <FieldError message={errors.otp} />
             </div>
 
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                New Password
+                New Password *
               </label>
               <div className="relative">
                 <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
                   type="password"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 transition-all"
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: null }));
+                  }}
+                  className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                    errors.newPassword ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                  }`}
                   placeholder="••••••••"
                   required
                 />
               </div>
+              <FieldError message={errors.newPassword} />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -174,7 +204,7 @@ export default function ForgotPasswordPage() {
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="w-full text-[11px] text-brand-600 font-medium hover:underline text-center block"
+              className="w-full text-[11px] text-brand-600 font-medium hover:underline text-center block cursor-pointer"
             >
               Change email or resend code
             </button>

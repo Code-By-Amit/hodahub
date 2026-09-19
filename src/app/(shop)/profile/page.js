@@ -7,8 +7,11 @@ import { selectUser, selectAuthLoading, setUser } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
+import PhoneInput from '@/components/ui/PhoneInput';
+import FieldError from '@/components/ui/FieldError';
+import { updateProfileSchema, addressSchema } from '@/lib/validations';
 import { lookupPincode } from '@/lib/pincode';
-import { FiUser, FiMapPin, FiMail, FiPhone, FiSave, FiPlus, FiCamera, FiLoader } from 'react-icons/fi';
+import { FiUser, FiMapPin, FiMail, FiSave, FiPlus, FiLoader } from 'react-icons/fi';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -19,6 +22,8 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState('profile');
   const [profileData, setProfileData] = useState({ name: '', email: '', phone: '', avatarUrl: '', phoneVerified: false });
+  const [profileErrors, setProfileErrors] = useState({});
+
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,6 +36,7 @@ export default function ProfilePage() {
 
   const [showAddAddr, setShowAddAddr] = useState(false);
   const [addrForm, setAddrForm] = useState({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
+  const [addrErrors, setAddrErrors] = useState({});
   const [addrSaving, setAddrSaving] = useState(false);
 
   // Pincode auto-fill states
@@ -149,10 +155,25 @@ export default function ProfilePage() {
 
   async function handleSaveProfile(e) {
     e.preventDefault();
-    if (!profileData.name.trim()) {
-      toast.error('Name cannot be empty');
+    setProfileErrors({});
+
+    const clientCheck = updateProfileSchema.safeParse({
+      name: profileData.name,
+      phone: profileData.phone || null,
+      avatarUrl: profileData.avatarUrl || null,
+    });
+
+    if (!clientCheck.success) {
+      const issues = clientCheck.error.issues;
+      const errMap = {};
+      issues.forEach((iss) => {
+        if (iss.path[0]) errMap[iss.path[0]] = iss.message;
+      });
+      setProfileErrors(errMap);
+      toast.error('Please fix validation errors');
       return;
     }
+
     setSaving(true);
     try {
       const res = await fetch('/api/profile', {
@@ -169,6 +190,7 @@ export default function ProfilePage() {
         toast.success('Profile updated!');
         dispatch(setUser(data.user));
       } else {
+        if (data.errors) setProfileErrors(data.errors);
         toast.error(data.error || 'Failed to update profile');
       }
     } catch {
@@ -179,10 +201,20 @@ export default function ProfilePage() {
 
   async function handleAddAddress(e) {
     e.preventDefault();
-    if (!addrForm.line1 || !addrForm.city || !addrForm.state || !addrForm.pincode) {
-      toast.error('Please fill required address fields');
+    setAddrErrors({});
+
+    const clientCheck = addressSchema.safeParse(addrForm);
+    if (!clientCheck.success) {
+      const issues = clientCheck.error.issues;
+      const errMap = {};
+      issues.forEach((iss) => {
+        if (iss.path[0]) errMap[iss.path[0]] = iss.message;
+      });
+      setAddrErrors(errMap);
+      toast.error('Please fix address validation errors');
       return;
     }
+
     setAddrSaving(true);
     try {
       const res = await fetch('/api/addresses', {
@@ -197,7 +229,8 @@ export default function ProfilePage() {
         setShowAddAddr(false);
         fetchProfile();
       } else {
-        toast.error(data.error);
+        if (data.errors) setAddrErrors(data.errors);
+        toast.error(data.error || 'Failed to add address');
       }
     } catch {
       toast.error('Failed to add address');
@@ -280,18 +313,24 @@ export default function ProfilePage() {
 
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
-                Full Name
+                Full Name *
               </label>
               <div className="relative">
                 <FiUser className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
                   type="text"
                   value={profileData.name}
-                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
-                  className="w-full pl-8 pr-3 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                  onChange={(e) => {
+                    setProfileData({ ...profileData, name: e.target.value });
+                    if (profileErrors.name) setProfileErrors((prev) => ({ ...prev, name: null }));
+                  }}
+                  className={`w-full pl-8 pr-3 py-1.5 border rounded-md text-[11px] bg-white outline-none transition-all ${
+                    profileErrors.name ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                   required
                 />
               </div>
+              <FieldError message={profileErrors.name} />
             </div>
 
             <div>
@@ -331,23 +370,20 @@ export default function ProfilePage() {
                   )
                 )}
               </div>
-              <div className="relative">
-                <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
-                <input
-                  type="tel"
-                  maxLength={10}
-                  value={profileData.phone}
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value.replace(/\D/g, '').slice(0, 10), phoneVerified: false })}
-                  placeholder="10-digit mobile number (e.g. 9876543210)"
-                  className="w-full pl-8 pr-3 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                />
-              </div>
+              <PhoneInput
+                value={profileData.phone}
+                onChange={(val) => {
+                  setProfileData({ ...profileData, phone: val, phoneVerified: false });
+                  if (profileErrors.phone) setProfileErrors((prev) => ({ ...prev, phone: null }));
+                }}
+                error={profileErrors.phone}
+              />
             </div>
 
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
             >
               <FiSave className="w-3.5 h-3.5" />
               {saving ? 'Saving...' : 'Save Changes'}
@@ -363,7 +399,7 @@ export default function ProfilePage() {
                   Enter the 6-digit verification code sent to <strong className="text-warm-900">{profileData.phone}</strong>.
                 </p>
                 <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-900">
-                  ⚠️ <strong>SMS Provider Pending:</strong> Real SMS delivery (MSG91/Fast2SMS/Twilio) is not configured yet. Check the server console or toast notification for the OTP code.
+                  ⚠️ <strong>SMS Provider Pending:</strong> Check the server console or toast notification for the OTP code.
                 </div>
                 <form onSubmit={handleVerifyPhoneOtp} className="space-y-3">
                   <input
@@ -405,7 +441,7 @@ export default function ProfilePage() {
             <h2 className="text-[13px] font-bold text-warm-900">Delivery Addresses</h2>
             <button
               onClick={() => setShowAddAddr(!showAddAddr)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors cursor-pointer"
             >
               <FiPlus className="w-3.5 h-3.5" /> Add New Address
             </button>
@@ -413,39 +449,66 @@ export default function ProfilePage() {
 
           {showAddAddr && (
             <form onSubmit={handleAddAddress} className="grid grid-cols-2 gap-2.5 p-3.5 bg-white border border-warm-200 rounded-md shadow-xs">
-              <input
-                value={addrForm.label}
-                onChange={(e) => setAddrForm({ ...addrForm, label: e.target.value })}
-                placeholder="Label (Home, Office)"
-                className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-              />
-              <input
-                value={addrForm.line1}
-                onChange={(e) => setAddrForm({ ...addrForm, line1: e.target.value })}
-                placeholder="Address Line 1 *"
-                className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                required
-              />
-              <input
-                value={addrForm.line2}
-                onChange={(e) => setAddrForm({ ...addrForm, line2: e.target.value })}
-                placeholder="Address Line 2"
-                className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-              />
+              <div className="col-span-2">
+                <input
+                  value={addrForm.label}
+                  onChange={(e) => {
+                    setAddrForm({ ...addrForm, label: e.target.value });
+                    if (addrErrors.label) setAddrErrors((prev) => ({ ...prev, label: null }));
+                  }}
+                  placeholder="Label (Home, Office)"
+                  className={`w-full px-2.5 py-1.5 border rounded-md text-[11px] bg-white outline-none ${
+                    addrErrors.label ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
+                />
+                <FieldError message={addrErrors.label} />
+              </div>
+
+              <div className="col-span-2">
+                <input
+                  value={addrForm.line1}
+                  onChange={(e) => {
+                    setAddrForm({ ...addrForm, line1: e.target.value });
+                    if (addrErrors.line1) setAddrErrors((prev) => ({ ...prev, line1: null }));
+                  }}
+                  placeholder="Address Line 1 *"
+                  className={`w-full px-2.5 py-1.5 border rounded-md text-[11px] bg-white outline-none ${
+                    addrErrors.line1 ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
+                  required
+                />
+                <FieldError message={addrErrors.line1} />
+              </div>
+
+              <div className="col-span-2">
+                <input
+                  value={addrForm.line2}
+                  onChange={(e) => setAddrForm({ ...addrForm, line2: e.target.value })}
+                  placeholder="Address Line 2"
+                  className="w-full px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:border-warm-900"
+                />
+              </div>
+
               {/* Pincode Field with Loader */}
               <div className="col-span-2 relative">
                 <input
                   type="text"
                   maxLength={6}
                   value={addrForm.pincode}
-                  onChange={(e) => setAddrForm({ ...addrForm, pincode: e.target.value })}
+                  onChange={(e) => {
+                    setAddrForm({ ...addrForm, pincode: e.target.value });
+                    if (addrErrors.pincode) setAddrErrors((prev) => ({ ...prev, pincode: null }));
+                  }}
                   placeholder="6-Digit Pincode * (Auto-fills City & State)"
-                  className="w-full px-2.5 py-1.5 pr-8 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                  className={`w-full px-2.5 py-1.5 pr-8 border rounded-md text-[11px] bg-white outline-none ${
+                    addrErrors.pincode ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
                   required
                 />
                 {pincodeLoading && (
                   <FiLoader className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-500 animate-spin" />
                 )}
+                <FieldError message={addrErrors.pincode} />
               </div>
 
               {pincodeNote && (
@@ -454,40 +517,62 @@ export default function ProfilePage() {
                 </p>
               )}
 
-              <input
-                value={addrForm.city}
-                onChange={(e) => setAddrForm({ ...addrForm, city: e.target.value })}
-                placeholder="City *"
-                className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                required
-              />
-              <input
-                value={addrForm.state}
-                onChange={(e) => setAddrForm({ ...addrForm, state: e.target.value })}
-                placeholder="State *"
-                className="px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-                required
-              />
-              <input
-                type="tel"
-                maxLength={10}
-                value={addrForm.phone}
-                onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                placeholder="10-digit Phone"
-                className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
-              />
+              <div>
+                <input
+                  value={addrForm.city}
+                  onChange={(e) => {
+                    setAddrForm({ ...addrForm, city: e.target.value });
+                    if (addrErrors.city) setAddrErrors((prev) => ({ ...prev, city: null }));
+                  }}
+                  placeholder="City *"
+                  className={`w-full px-2.5 py-1.5 border rounded-md text-[11px] bg-white outline-none ${
+                    addrErrors.city ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
+                  required
+                />
+                <FieldError message={addrErrors.city} />
+              </div>
+
+              <div>
+                <input
+                  value={addrForm.state}
+                  onChange={(e) => {
+                    setAddrForm({ ...addrForm, state: e.target.value });
+                    if (addrErrors.state) setAddrErrors((prev) => ({ ...prev, state: null }));
+                  }}
+                  placeholder="State *"
+                  className={`w-full px-2.5 py-1.5 border rounded-md text-[11px] bg-white outline-none ${
+                    addrErrors.state ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
+                  }`}
+                  required
+                />
+                <FieldError message={addrErrors.state} />
+              </div>
+
+              <div className="col-span-2">
+                <PhoneInput
+                  label="Contact Phone for Delivery"
+                  value={addrForm.phone}
+                  onChange={(val) => {
+                    setAddrForm({ ...addrForm, phone: val });
+                    if (addrErrors.phone) setAddrErrors((prev) => ({ ...prev, phone: null }));
+                  }}
+                  error={addrErrors.phone}
+                />
+              </div>
+
               <div className="col-span-2 flex gap-2 pt-1.5">
                 <button
                   type="submit"
                   disabled={addrSaving}
-                  className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors"
+                  className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {addrSaving ? 'Saving...' : 'Save Address'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddAddr(false)}
-                  className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-100 transition-colors"
+                  className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-100 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

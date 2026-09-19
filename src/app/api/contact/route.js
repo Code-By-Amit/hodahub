@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { storeSettings } from '@/lib/db/schema';
 import { contactSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendContactFormEmail } from '@/lib/email';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
@@ -20,7 +21,7 @@ export async function POST(request) {
     const result = contactSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid form data' },
+        formatZodErrorResponse(result, 'Invalid form data'),
         { status: 400 }
       );
     }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const phoneRegex = /^[6-9]\d{9}$/;
+const phoneRegex = /^(?:\+?91|0)?[6-9][0-9]{9}$/;
 const phoneValidation = z
   .string()
   .refine((val) => !val || phoneRegex.test(val), {
@@ -8,6 +8,12 @@ const phoneValidation = z
   })
   .optional()
   .nullable();
+
+export function getZodErrorMessage(error, fallback = 'Invalid request data') {
+  if (!error) return fallback;
+  const issues = error.issues || error.errors;
+  return issues?.[0]?.message || fallback;
+}
 
 // --- Auth Validations ---
 export const signupSchema = z.object({

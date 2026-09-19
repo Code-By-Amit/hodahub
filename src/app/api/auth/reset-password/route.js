@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { resetPasswordSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 export async function POST(request) {
@@ -21,7 +22,7 @@ export async function POST(request) {
     const result = resetPasswordSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error.errors[0]?.message || 'Invalid request data' },
+        formatZodErrorResponse(result, 'Invalid request data'),
         { status: 400 }
       );
     }

@@ -4,6 +4,7 @@ import { orders, orderStatusHistory } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { packOrderSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function POST(request, { params }) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request, { params }) {
     const parseResult = packOrderSchema.safeParse(body);
     if (!parseResult.success) {
       return NextResponse.json(
-        { error: parseResult.error.errors[0]?.message || 'Invalid package details' },
+        formatZodErrorResponse(parseResult, 'Invalid package details'),
         { status: 400 }
       );
     }
