@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { Package, Phone } from 'lucide-react';
-import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiShield, FiAlertTriangle, FiEdit3 } from 'react-icons/fi';
+import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiAlertTriangle, FiEdit3 } from 'react-icons/fi';
 import { formatCurrency } from '@/lib/utils';
 
 const statusOptions = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
@@ -45,11 +45,8 @@ export default function AdminOrderDetailPage() {
   const [packing, setPacking] = useState(false);
   const [isEditingPackage, setIsEditingPackage] = useState(false);
 
-  // Part 3: Test Shipment Dry-Run State
+  // Shipment Creation State
   const [creatingShipment, setCreatingShipment] = useState(false);
-  const [testingShipment, setTestingShipment] = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [showTestModal, setShowTestModal] = useState(false);
   const [trackingInfo, setTrackingInfo] = useState(null);
 
   // Manual AWB State
@@ -144,39 +141,7 @@ export default function AdminOrderDetailPage() {
     setPacking(false);
   }
 
-  // Part 3: Handle Test Shipment Dry-Run (Always Staging)
-  async function handleTestShipment() {
-    if (!packageWeight || !packageLength || !packageWidth || !packageHeight) {
-      toast.error('Please enter package weight and dimensions before running test shipment');
-      return;
-    }
 
-    setTestingShipment(true);
-    try {
-      const res = await fetch(`/api/admin/orders/${id}/test-shipment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          packageWeight,
-          packageLength,
-          packageWidth,
-          packageHeight,
-        }),
-      });
-      const data = await res.json();
-      setTestResult(data);
-      setShowTestModal(true);
-
-      if (res.ok && data.success) {
-        toast.success('Staging dry-run test shipment succeeded!');
-      } else {
-        toast.error(data.error || data.message || 'Staging dry-run test shipment failed');
-      }
-    } catch {
-      toast.error('Network error during test shipment execution');
-    }
-    setTestingShipment(false);
-  }
 
   // Real Shipment Creation (Uses DELHIVERY_ENV setting)
   async function handleCreateShipment() {
@@ -470,24 +435,12 @@ export default function AdminOrderDetailPage() {
                 <div>
                   <p className="text-[11px] text-warm-700 font-medium">
                     {isPacked
-                      ? 'Package details confirmed. You can test safely against Staging or create live shipment.'
+                      ? 'Package details confirmed. Ready to create live shipment or enter tracking number.'
                       : 'Please enter package weight & dimensions in Step 1 above to enable shipment creation.'}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Part 3: Test Shipment Button (Always Staging) */}
-                  <button
-                    type="button"
-                    onClick={handleTestShipment}
-                    disabled={testingShipment || !packageWeight || !packageLength}
-                    className="px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 text-[11px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    title="Safely dry-run against Delhivery Staging sandbox without changing order record"
-                  >
-                    <FiShield className="w-3.5 h-3.5 text-emerald-600" />
-                    {testingShipment ? 'Testing Staging...' : 'Test Shipment (Staging Dry-Run)'}
-                  </button>
-
                   {/* Manual AWB Entry Button */}
                   <button
                     type="button"
@@ -793,62 +746,7 @@ export default function AdminOrderDetailPage() {
         </div>
       </div>
 
-      {/* Part 3: Test Shipment Staging Response Modal */}
-      <Modal
-        isOpen={showTestModal}
-        onClose={() => setShowTestModal(false)}
-        title="Delhivery Staging Test Dry-Run Result"
-      >
-        <div className="space-y-3 text-[11px]">
-          <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-900 rounded border border-emerald-200">
-            <FiShield className="w-4 h-4 text-emerald-600 shrink-0" />
-            <div>
-              <p className="font-bold">Safe Staging Environment Dry-Run</p>
-              <p className="text-[10px] text-emerald-700">
-                Target URL: <code className="font-mono">https://staging-express.delhivery.com</code> (Zero charge / Safe check)
-              </p>
-            </div>
-          </div>
 
-          <div className="p-3 bg-warm-50 border border-warm-200 rounded font-mono text-[10px] space-y-1">
-            <p className="font-bold text-warm-900">
-              Test Status:{' '}
-              <span className={testResult?.success ? 'text-emerald-700' : 'text-rose-600'}>
-                {testResult?.success ? 'SUCCESS ✅' : 'FAILED ❌'}
-              </span>
-            </p>
-            <p>Message: {testResult?.message}</p>
-            {testResult?.testResponse?.awbNumber && (
-              <p>Test Waybill / AWB: <span className="font-bold text-warm-900">{testResult.testResponse.awbNumber}</span></p>
-            )}
-            {testResult?.testResponse?.isMock && (
-              <p className="text-amber-700 italic">Note: Environment in mock sandbox response mode.</p>
-            )}
-          </div>
-
-          {testResult?.testResponse?.rawResponse && (
-            <div>
-              <p className="font-bold text-warm-800 text-[10px] mb-1 uppercase">Raw Staging API Response:</p>
-              <pre className="p-2 bg-warm-900 text-warm-100 rounded text-[9px] overflow-x-auto font-mono max-h-40">
-                {JSON.stringify(testResult.testResponse.rawResponse, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          <p className="text-[10px] text-warm-500 italic border-t border-warm-100 pt-2">
-            ℹ️ This test run did NOT alter your order status or store any AWB number in the database. Your entered package details remain filled, so you can immediately click &quot;Create Shipment&quot; when ready.
-          </p>
-
-          <div className="flex justify-end pt-1">
-            <button
-              onClick={() => setShowTestModal(false)}
-              className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded hover:bg-warm-800"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* Manual AWB Entry Modal */}
       <Modal
