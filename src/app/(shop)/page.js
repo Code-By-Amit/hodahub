@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { products, categories } from '@/lib/db/schema';
-import { desc, eq, asc } from 'drizzle-orm';
+import { desc, eq, asc, and, gt } from 'drizzle-orm';
 import CategoryQuickNav from '@/components/storefront/CategoryQuickNav';
 import BannerCarousel from '@/components/storefront/BannerCarousel';
 import TrustBadges from '@/components/storefront/TrustBadges';
@@ -18,14 +18,20 @@ export const revalidate = 60;
 
 async function getHomepageData() {
   try {
+    const availableCondition = and(
+      eq(products.isActive, true),
+      eq(products.isOutOfStock, false),
+      gt(products.stock, 0)
+    );
+
     const [allCategories, newArrivals, bestSellers] = await Promise.all([
       db.select().from(categories).orderBy(asc(categories.name)).limit(12),
       db.select().from(products)
-        .where(eq(products.isActive, true))
+        .where(availableCondition)
         .orderBy(desc(products.createdAt))
         .limit(12),
       db.select().from(products)
-        .where(eq(products.isActive, true))
+        .where(availableCondition)
         .orderBy(desc(products.reviewCount))
         .limit(8),
     ]);

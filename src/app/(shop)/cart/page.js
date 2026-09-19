@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSelector, useDispatch } from 'react-redux';
@@ -27,6 +27,31 @@ export default function CartPage() {
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
+
+  // Availability validation on cart page load
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    const checkAvailability = async () => {
+      try {
+        const productIds = items.map((i) => i.productId);
+        const res = await fetch('/api/products/check-availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productIds }),
+        });
+        const data = await res.json();
+        if (res.ok && data.unavailableItems && data.unavailableItems.length > 0) {
+          for (const unitem of data.unavailableItems) {
+            dispatch(removeItem(unitem.id));
+            toast.warning(`"${unitem.name}" was removed from your cart because it's no longer available.`);
+          }
+        }
+      } catch (err) {
+        console.error('Cart availability check failed:', err);
+      }
+    };
+    checkAvailability();
+  }, []);
 
   const discount = coupon
     ? coupon.type === 'percent'
@@ -103,7 +128,7 @@ export default function CartPage() {
         <div className="lg:col-span-2 space-y-3">
           {items.map((item) => (
             <div
-              key={item.productId}
+              key={item.itemKey || item.productId}
               className="flex gap-4 p-2.5 bg-white border border-warm-200 rounded-xl shadow-2xs items-center"
             >
               <Link
@@ -136,11 +161,25 @@ export default function CartPage() {
                   )}
                 </div>
 
+                {Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0 && (
+                  <div className="mt-1.5 space-y-1">
+                    {item.selectedAddons.map((a) => (
+                      <div key={a.id} className="flex items-center gap-1.5 text-[10px] text-warm-600 bg-warm-50 px-2 py-0.5 rounded border border-warm-200">
+                        {a.imageUrl && (
+                          <img src={a.imageUrl} alt="" className="w-4 h-4 rounded object-cover border border-warm-200 shrink-0" />
+                        )}
+                        <span className="font-semibold text-warm-900">+ {a.name}</span>
+                        <span className="text-brand-700 font-bold ml-auto">{a.isFree ? 'Free' : formatCurrency(a.price)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mt-3">
                   <div className="flex items-center border border-warm-200 rounded-lg overflow-hidden bg-white">
                     <button
                       onClick={() =>
-                        dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity - 1 }))
+                        dispatch(updateQuantity({ productId: item.productId, itemKey: item.itemKey, quantity: item.quantity - 1 }))
                       }
                       disabled={item.quantity <= 1}
                       className="p-2 text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
@@ -153,7 +192,7 @@ export default function CartPage() {
                     </span>
                     <button
                       onClick={() =>
-                        dispatch(updateQuantity({ productId: item.productId, quantity: item.quantity + 1 }))
+                        dispatch(updateQuantity({ productId: item.productId, itemKey: item.itemKey, quantity: item.quantity + 1 }))
                       }
                       className="p-2 text-warm-600 hover:bg-warm-50 transition-colors"
                       title="Increase quantity"
@@ -164,7 +203,7 @@ export default function CartPage() {
 
                   <button
                     onClick={() => {
-                      dispatch(removeItem(item.productId));
+                      dispatch(removeItem(item.itemKey || item.productId));
                       toast.info('Item removed from cart');
                     }}
                     className="p-2 text-warm-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium"

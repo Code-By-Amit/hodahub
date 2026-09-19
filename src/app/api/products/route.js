@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { products, categories } from '@/lib/db/schema';
-import { eq, desc, asc, ilike, and, gte, lte, sql, or } from 'drizzle-orm';
+import { products, categories, categoryRelations } from '@/lib/db/schema';
+import { eq, desc, asc, ilike, and, gte, lte, gt, sql, or, inArray } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,11 @@ export async function GET(request) {
     const offset = (page - 1) * limit;
 
     // Build where conditions
-    const conditions = [eq(products.isActive, true)];
+    const conditions = [
+      eq(products.isActive, true),
+      eq(products.isOutOfStock, false),
+      gt(products.stock, 0),
+    ];
 
     if (category) {
       // Find category by slug
@@ -28,15 +32,32 @@ export async function GET(request) {
         .where(eq(categories.slug, category))
         .limit(1);
       if (cat) {
-        conditions.push(eq(products.categoryId, cat.id));
+        // Collect all descendant subcategory IDs recursively
+        const allRelations = await db.select().from(categoryRelations);
+        const descendantIds = new Set([cat.id]);
+        const queue = [cat.id];
+
+        while (queue.length > 0) {
+          const currentParentId = queue.shift();
+          const children = allRelations.filter((r) => r.parentId === currentParentId);
+          for (const child of children) {
+            if (!descendantIds.has(child.categoryId)) {
+              descendantIds.add(child.categoryId);
+              queue.push(child.categoryId);
+            }
+          }
+        }
+
+        conditions.push(inArray(products.categoryId, Array.from(descendantIds)));
       }
     }
 
     if (search) {
+      const sanitizedSearch = search.replace(/[%_\\]/g, '\\$&');
       conditions.push(
         or(
-          ilike(products.name, `%${search}%`),
-          ilike(products.description, `%${search}%`)
+          ilike(products.name, `%${sanitizedSearch}%`),
+          ilike(products.description, `%${sanitizedSearch}%`)
         )
       );
     }

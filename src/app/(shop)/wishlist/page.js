@@ -1,8 +1,9 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useSelector, useDispatch } from 'react-redux';
-import { selectWishlistItems, clearWishlist } from '@/lib/store/wishlistSlice';
+import { selectWishlistItems, removeFromWishlist, clearWishlist } from '@/lib/store/wishlistSlice';
 import { selectUser } from '@/lib/store/authSlice';
 import ProductCard from '@/components/ui/ProductCard';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
@@ -14,6 +15,30 @@ export default function WishlistPage() {
   const toast = useToast();
   const wishlistItems = useSelector(selectWishlistItems);
   const user = useSelector(selectUser);
+
+  useEffect(() => {
+    if (!wishlistItems || wishlistItems.length === 0) return;
+    const checkWishlistAvailability = async () => {
+      try {
+        const productIds = wishlistItems.map((i) => i.id);
+        const res = await fetch('/api/products/check-availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productIds }),
+        });
+        const data = await res.json();
+        if (res.ok && data.unavailableItems && data.unavailableItems.length > 0) {
+          for (const unitem of data.unavailableItems) {
+            dispatch(removeFromWishlist(unitem.id));
+            toast.warning(`"${unitem.name}" was removed from your wishlist as it is no longer available.`);
+          }
+        }
+      } catch (err) {
+        console.error('Wishlist availability check failed:', err);
+      }
+    };
+    checkWishlistAvailability();
+  }, []);
 
   const handleClear = async () => {
     if (confirm('Are you sure you want to clear your wishlist?')) {

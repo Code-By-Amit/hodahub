@@ -26,7 +26,15 @@ export async function POST(request) {
     }
 
     const [settings] = await db.select().from(storeSettings).limit(1);
-    const storeContactEmail = settings?.contactEmail || 'admin@hodahub.com';
+    const storeContactEmail = settings?.contactEmail?.trim();
+
+    if (!storeContactEmail) {
+      console.warn('[Contact Form] Store contact email is not configured in store_settings. Cannot route customer inquiry.');
+      return NextResponse.json(
+        { error: 'Contact form is temporarily unavailable.' },
+        { status: 503 }
+      );
+    }
 
     await sendContactFormEmail(storeContactEmail, result.data);
 

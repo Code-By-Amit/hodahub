@@ -23,8 +23,8 @@ import {
   FiCreditCard,
 } from 'react-icons/fi';
 
-const statusSteps = ['pending', 'confirmed', 'shipped', 'delivered'];
-const statusIcons = { pending: FiPackage, confirmed: FiCheck, shipped: FiTruck, delivered: FiMapPin };
+const statusSteps = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
+const statusIcons = { pending: FiPackage, confirmed: FiCheck, packed: FiPackage, shipped: FiTruck, delivered: FiMapPin };
 
 export default function OrderDetailPage() {
   const { id } = useParams();
@@ -56,22 +56,38 @@ export default function OrderDetailPage() {
     }
   }, []);
 
+  const [trackingInfo, setTrackingInfo] = useState(null);
+
   useEffect(() => {
     fetchOrder();
   }, [id]);
 
   async function fetchOrder() {
     try {
-      const res = await fetch(`/api/orders/${id}`);
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const res = await fetch(`/api/orders/${id}${search}`);
       const data = await res.json();
       if (res.ok) {
         setOrder(data.order);
         setItems(data.items || []);
         setHistory(data.history || []);
         setAddress(data.address);
+        if (data.order?.awbNumber) {
+          fetchTracking(id);
+        }
       }
     } catch {}
     setLoading(false);
+  }
+
+  async function fetchTracking(orderId) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/tracking`);
+      const data = await res.json();
+      if (res.ok) {
+        setTrackingInfo(data);
+      }
+    } catch {}
   }
 
   async function handleCancelOrder(e) {
@@ -277,7 +293,7 @@ export default function OrderDetailPage() {
             <FiPrinter className="w-3.5 h-3.5 text-warm-600" /> Printable Invoice
           </Link>
 
-          {(order.status === 'pending' || order.status === 'confirmed') && (
+          {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'packed') && (
             <button
               onClick={() => setShowCancelModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-semibold rounded-md hover:bg-rose-100 transition-colors"
@@ -367,6 +383,48 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Courier Shipment Tracking Card (Delhivery Integration) */}
+      {order.awbNumber && (
+        <div className="p-4 bg-white rounded-md border border-warm-200 shadow-xs mb-4">
+          <div className="flex items-center justify-between border-b border-warm-100 pb-2.5 mb-3">
+            <div>
+              <h2 className="text-[13px] font-bold text-warm-900 flex items-center gap-1.5">
+                <FiTruck className="w-4 h-4 text-brand-600" /> Delhivery Courier Tracking
+              </h2>
+              <p className="text-[10px] text-warm-500 font-mono mt-0.5">
+                AWB / Waybill: <span className="font-bold text-warm-900">{order.awbNumber}</span>
+              </p>
+            </div>
+            <span className="px-2 py-0.5 bg-brand-50 text-brand-700 text-[10px] font-bold rounded-md uppercase border border-brand-200">
+              {trackingInfo?.courierStatus || order.courierStatus || 'In Transit'}
+            </span>
+          </div>
+
+          {trackingInfo?.events && trackingInfo.events.length > 0 ? (
+            <div className="space-y-3 pt-1">
+              {trackingInfo.events.map((evt, idx) => (
+                <div key={idx} className="flex items-start gap-3">
+                  <div className="relative flex flex-col items-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-brand-600 mt-1" />
+                    {idx < trackingInfo.events.length - 1 && <div className="w-0.5 flex-1 bg-brand-200 mt-1" />}
+                  </div>
+                  <div className="text-[11px] pb-1">
+                    <p className="font-bold text-warm-900">{evt.status}</p>
+                    {evt.location && <p className="text-[10px] text-warm-600 font-medium">Location: {evt.location}</p>}
+                    {evt.remark && <p className="text-[10px] text-warm-500 italic">{evt.remark}</p>}
+                    <p className="text-[9px] text-warm-400 mt-0.5">
+                      {new Date(evt.eventTimestamp || evt.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-warm-500 italic">Tracking scan updates will appear here once shipment moves.</p>
+          )}
+        </div>
+      )}
+
       {order.status === 'cancelled' && (
         <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-800 text-[11px] font-medium mb-4">
           <p className="font-bold">This order has been cancelled.</p>
@@ -382,19 +440,44 @@ export default function OrderDetailPage() {
             {items.map((item) => (
               <div key={item.id} className="flex gap-3">
                 <div className="w-14 h-14 rounded-md overflow-hidden bg-warm-50 shrink-0 relative border border-warm-200">
-                  {item.productImage?.[0] ? (
-                    <Image src={item.productImage[0]} alt="" fill className="object-cover" sizes="56px" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-warm-300"><Package className="w-5 h-5" /></div>
-                  )}
+                  {(() => {
+                    const rawSrc = item.productImage || (Array.isArray(item.productImages) ? item.productImages[0] : null);
+                    const validSrc = typeof rawSrc === 'string' && rawSrc.trim() !== '' ? rawSrc : null;
+                    return validSrc ? (
+                      <Image src={validSrc} alt="" fill className="object-cover" sizes="56px" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-warm-300"><Package className="w-5 h-5" /></div>
+                    );
+                  })()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/products/${item.productSlug}`}
-                    className="text-[11px] font-medium text-warm-900 hover:underline line-clamp-1"
-                  >
-                    {item.productName || 'Product'}
-                  </Link>
+                  {item.productSlug ? (
+                    <Link
+                      href={`/products/${item.productSlug}`}
+                      className="text-[11px] font-medium text-warm-900 hover:underline line-clamp-1"
+                    >
+                      {item.productName || item.name || 'Product'}
+                    </Link>
+                  ) : (
+                    <span className="text-[11px] font-medium text-warm-900 line-clamp-1">
+                      {item.productName || item.name || 'Product'}
+                    </span>
+                  )}
+
+                  {/* Add-ons list if present */}
+                  {Array.isArray(item.addons) && item.addons.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {item.addons.map((addon) => (
+                        <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
+                          {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
+                            <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
+                          )}
+                          <span>+ {addon.name} ({Number(addon.priceAtPurchase) === 0 ? 'Free' : formatCurrency(addon.priceAtPurchase)})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <p className="text-[10px] text-warm-500 mt-0.5">
                     Qty: {item.quantity} × {formatCurrency(item.priceAtPurchase)}
                   </p>
@@ -452,6 +535,23 @@ export default function OrderDetailPage() {
                 <span>Total Amount</span>
                 <span>{formatCurrency(order.totalAmount)}</span>
               </div>
+              {order.paymentMethod === 'cod' && Number(order.codAdvanceAmount) > 0 && (
+                <div className="mt-2 pt-2 border-t border-dashed border-warm-200 space-y-1">
+                  <div className="flex justify-between text-emerald-700 font-semibold text-[11px]">
+                    <span>Advance Paid Online</span>
+                    <span>{formatCurrency(order.codAdvanceAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-800 font-bold text-[11px]">
+                    <span>Cash Due on Delivery</span>
+                    <span>{formatCurrency(Math.max(0, Number(order.totalAmount) - Number(order.codAdvanceAmount)))}</span>
+                  </div>
+                  {order.codAdvancePaymentId && (
+                    <p className="text-[9px] text-warm-400 font-mono mt-0.5">
+                      Advance Txn: {order.codAdvancePaymentId}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

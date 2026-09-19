@@ -10,6 +10,7 @@ export default function InvoicePage() {
   const { id } = useParams();
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [storeSettings, setStoreSettings] = useState({ storeName: 'HodaHub', contactEmail: '' });
 
   useEffect(() => {
     async function fetchOrder() {
@@ -20,7 +21,15 @@ export default function InvoicePage() {
       } catch {}
       setLoading(false);
     }
+    async function fetchSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (res.ok && data.settings) setStoreSettings(data.settings);
+      } catch {}
+    }
     fetchOrder();
+    fetchSettings();
   }, [id]);
 
   if (loading) {
@@ -148,7 +157,25 @@ export default function InvoicePage() {
                 const itemTotal = unitPrice * item.quantity;
                 return (
                   <tr key={item.id}>
-                    <td className="py-2.5 text-warm-900 font-medium">{item.productName || 'Product'}</td>
+                    <td className="py-2.5 text-warm-900 font-medium">
+                      <div>{item.productName || 'Product'}</div>
+                      {item.addons && item.addons.length > 0 && (
+                        <div className="mt-1 space-y-1 pl-2 border-l-2 border-warm-200">
+                          {item.addons.map((addon) => (
+                            <div key={addon.id} className="flex items-center gap-2 text-[10px] text-warm-600">
+                              {addon.imageUrl && (
+                                <img
+                                  src={addon.imageUrl}
+                                  alt={addon.name}
+                                  className="w-5 h-5 object-cover rounded border border-warm-200"
+                                />
+                              )}
+                              <span>+ {addon.name} ({formatCurrency(addon.priceAtPurchase)})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-2.5 text-center text-warm-600">{item.quantity}</td>
                     <td className="py-2.5 text-right text-warm-600">{formatCurrency(unitPrice)}</td>
                     <td className="py-2.5 text-right font-bold text-warm-900">{formatCurrency(itemTotal)}</td>
@@ -179,12 +206,26 @@ export default function InvoicePage() {
             <span>Grand Total</span>
             <span>{formatCurrency(order.totalAmount)}</span>
           </div>
+          {order.paymentMethod === 'cod' && Number(order.codAdvanceAmount) > 0 && (
+            <div className="w-56 pt-2 border-t border-dashed border-warm-300 text-[10px] space-y-1">
+              <div className="flex justify-between text-emerald-700 font-semibold">
+                <span>Advance Paid Online</span>
+                <span>{formatCurrency(order.codAdvanceAmount)}</span>
+              </div>
+              <div className="flex justify-between text-amber-800 font-bold">
+                <span>Cash Balance Due</span>
+                <span>{formatCurrency(Math.max(0, Number(order.totalAmount) - Number(order.codAdvanceAmount)))}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Note */}
         <div className="mt-8 pt-6 border-t border-warm-200 text-center text-[10px] text-warm-400">
-          <p>Thank you for shopping at HodaHub!</p>
-          <p className="mt-1">For support or inquiries, contact us at support@hodahub.com</p>
+          <p>Thank you for shopping at {storeSettings.storeName || 'HodaHub'}!</p>
+          {storeSettings.contactEmail && (
+            <p className="mt-1">For support or inquiries, contact us at {storeSettings.contactEmail}</p>
+          )}
         </div>
       </div>
     </div>

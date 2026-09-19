@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default function BannerCarousel() {
   const [banners, setBanners] = useState([]);
@@ -32,7 +32,7 @@ export default function BannerCarousel() {
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length);
-    }, 5000);
+    }, 4500);
 
     return () => clearInterval(timer);
   }, [banners.length, isPaused]);
@@ -104,11 +104,11 @@ export default function BannerCarousel() {
   };
 
   return (
-    <section className="max-w-4xl mx-auto sm:px-1 pt-4 pb-2">
+    <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2">
       {/* Outer fixed-size relative container */}
       <div
         className="relative w-full h-44 sm:h-56 md:h-64 lg:h-72 rounded-xl overflow-hidden shadow-sm select-none group"
-        style={{ backgroundColor: currentBanner.bgColor || '#18181b' }}
+        style={{ backgroundColor: currentBanner.bgColor || 'transparent' }}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={handleTouchStart}
@@ -130,41 +130,21 @@ export default function BannerCarousel() {
           </div>
         )}
 
-        {/* Navigation Controls (positioned outside Link so clicks never trigger navigation) */}
+        {/* Indicator Dots */}
         {banners.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-colors z-20 cursor-pointer"
-              aria-label="Previous slide"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition-colors z-20 cursor-pointer"
-              aria-label="Next slide"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-
-            {/* Indicator Dots */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
-              {banners.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={(e) => handleDotClick(e, i)}
-                  className={`h-2 rounded-full transition-all cursor-pointer ${
-                    currentIndex === i ? 'w-5 bg-white' : 'w-2 bg-white/50 hover:bg-white/80'
-                  }`}
-                  aria-label={`Go to slide ${i + 1}`}
-                />
-              ))}
-            </div>
-          </>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+            {banners.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => handleDotClick(e, i)}
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  currentIndex === i ? 'w-5 bg-white shadow-xs' : 'w-2 bg-white/50 hover:bg-white/80'
+                }`}
+                aria-label={`Go to slide ${i + 1}`}
+              />
+            ))}
+          </div>
         )}
       </div>
     </section>

@@ -3,10 +3,20 @@ import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAuth, generateOTP } from '@/lib/auth';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 export async function POST(request) {
   try {
     const user = await requireAuth(request);
+    const ip = getClientIP(request);
+    const rateLimit = await checkRateLimit(`phone_otp:${user.id}:${ip}`, 3, 300);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many OTP requests. Please wait 5 minutes before trying again.' },
+        { status: 429 }
+      );
+    }
+
     const { phone } = await request.json();
 
     if (!phone || typeof phone !== 'string' || phone.trim().length < 8) {

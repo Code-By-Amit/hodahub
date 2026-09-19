@@ -5,15 +5,17 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
-import { Package } from 'lucide-react';
-import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw } from 'react-icons/fi';
+import Modal from '@/components/ui/Modal';
+import { Package, Phone } from 'lucide-react';
+import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiShield, FiAlertTriangle, FiEdit3 } from 'react-icons/fi';
 import { formatCurrency } from '@/lib/utils';
 
-const statusOptions = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+const statusOptions = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
 const paymentStatusOptions = ['pending', 'paid', 'failed', 'refunded'];
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-700',
   confirmed: 'bg-blue-100 text-blue-700',
+  packed: 'bg-indigo-100 text-indigo-700',
   shipped: 'bg-purple-100 text-purple-700',
   delivered: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
@@ -29,11 +31,31 @@ export default function AdminOrderDetailPage() {
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Status updates state
   const [newStatus, setNewStatus] = useState('');
   const [newPaymentStatus, setNewPaymentStatus] = useState('');
-  const [statusNote, setStatusNote] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Part 1: Packing Step State (Persists across user actions)
+  const [packageWeight, setPackageWeight] = useState('');
+  const [packageLength, setPackageLength] = useState('');
+  const [packageWidth, setPackageWidth] = useState('');
+  const [packageHeight, setPackageHeight] = useState('');
+  const [packing, setPacking] = useState(false);
+  const [isEditingPackage, setIsEditingPackage] = useState(false);
+
+  // Part 3: Test Shipment Dry-Run State
+  const [creatingShipment, setCreatingShipment] = useState(false);
+  const [testingShipment, setTestingShipment] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [trackingInfo, setTrackingInfo] = useState(null);
+
+  // Manual AWB State
+  const [showManualAwbModal, setShowManualAwbModal] = useState(false);
+  const [manualAwbNumber, setManualAwbNumber] = useState('');
+  const [savingManualAwb, setSavingManualAwb] = useState(false);
 
   useEffect(() => {
     fetchOrder();
@@ -51,9 +73,163 @@ export default function AdminOrderDetailPage() {
         setCustomer(data.customer);
         setNewStatus(data.order.status);
         setNewPaymentStatus(data.order.paymentStatus || 'pending');
+
+        // Populate packing state from order data if available
+        if (data.order.packageWeight) setPackageWeight(data.order.packageWeight);
+        if (data.order.packageLength) setPackageLength(data.order.packageLength);
+        if (data.order.packageWidth) setPackageWidth(data.order.packageWidth);
+        if (data.order.packageHeight) setPackageHeight(data.order.packageHeight);
+
+        if (data.order?.awbNumber) {
+          fetchTracking(id);
+        }
       }
-    } catch {}
+    } catch { }
     setLoading(false);
+  }
+
+  async function fetchTracking(orderId) {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/tracking`);
+      const data = await res.json();
+      if (res.ok) {
+        setTrackingInfo(data);
+      }
+    } catch { }
+  }
+
+  // Part 1: Handle Submit Packing Details
+  async function handlePackOrder(e) {
+    if (e) e.preventDefault();
+
+    if (!packageWeight || parseFloat(packageWeight) <= 0) {
+      toast.error('Please enter a valid package weight in kg (e.g. 0.5)');
+      return;
+    }
+    if (
+      !packageLength ||
+      !packageWidth ||
+      !packageHeight ||
+      parseFloat(packageLength) <= 0 ||
+      parseFloat(packageWidth) <= 0 ||
+      parseFloat(packageHeight) <= 0
+    ) {
+      toast.error('Please enter valid package dimensions in cm (Length, Width, Height)');
+      return;
+    }
+
+    setPacking(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/pack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packageWeight,
+          packageLength,
+          packageWidth,
+          packageHeight,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Order packed successfully! Real shipment creation enabled.');
+        setIsEditingPackage(false);
+        fetchOrder();
+      } else {
+        toast.error(data.error || 'Failed to pack order');
+      }
+    } catch {
+      toast.error('Network error during order packing');
+    }
+    setPacking(false);
+  }
+
+  // Part 3: Handle Test Shipment Dry-Run (Always Staging)
+  async function handleTestShipment() {
+    if (!packageWeight || !packageLength || !packageWidth || !packageHeight) {
+      toast.error('Please enter package weight and dimensions before running test shipment');
+      return;
+    }
+
+    setTestingShipment(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/test-shipment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          packageWeight,
+          packageLength,
+          packageWidth,
+          packageHeight,
+        }),
+      });
+      const data = await res.json();
+      setTestResult(data);
+      setShowTestModal(true);
+
+      if (res.ok && data.success) {
+        toast.success('Staging dry-run test shipment succeeded!');
+      } else {
+        toast.error(data.error || data.message || 'Staging dry-run test shipment failed');
+      }
+    } catch {
+      toast.error('Network error during test shipment execution');
+    }
+    setTestingShipment(false);
+  }
+
+  // Real Shipment Creation (Uses DELHIVERY_ENV setting)
+  async function handleCreateShipment() {
+    if (!order?.packageWeight && (!packageWeight || !packageLength || !packageWidth || !packageHeight)) {
+      toast.error('Please complete order packing first!');
+      return;
+    }
+
+    setCreatingShipment(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/shipment`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Shipment created successfully! AWB: ${data.order.awbNumber}`);
+        fetchOrder();
+      } else {
+        toast.error(data.error || 'Failed to create shipment');
+      }
+    } catch {
+      toast.error('Network error during shipment creation');
+    }
+    setCreatingShipment(false);
+  }
+
+  // Handle Save Manual AWB Tracking Number
+  async function handleSaveManualAwb(e) {
+    if (e) e.preventDefault();
+    if (!manualAwbNumber.trim()) {
+      toast.error('Please enter a valid tracking/AWB number');
+      return;
+    }
+    setSavingManualAwb(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/manual-awb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ awbNumber: manualAwbNumber.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Tracking number saved! Order marked as shipped.');
+        setShowManualAwbModal(false);
+        setManualAwbNumber('');
+        fetchOrder();
+      } else {
+        toast.error(data.error || 'Failed to save tracking number');
+      }
+    } catch {
+      toast.error('Network error while saving tracking number');
+    }
+    setSavingManualAwb(false);
   }
 
   async function handleAdminAction(actionType, extraData = {}) {
@@ -85,6 +261,12 @@ export default function AdminOrderDetailPage() {
   if (loading) return <div className="h-40 shimmer rounded-md" />;
   if (!order) return <p className="text-warm-500 text-[11px]">Order not found</p>;
 
+  const isPacked =
+    order.status === 'packed' ||
+    order.status === 'shipped' ||
+    order.status === 'delivered' ||
+    Boolean(order.packageWeight && parseFloat(order.packageWeight) > 0);
+
   return (
     <div>
       {/* Header */}
@@ -94,7 +276,7 @@ export default function AdminOrderDetailPage() {
             <FiArrowLeft className="w-4 h-4 text-warm-600" />
           </Link>
           <h1 className="text-base font-bold text-warm-900">Order #{order.id.slice(0, 8)}</h1>
-          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full capitalize ${statusColors[order.status]}`}>
+          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full capitalize ${statusColors[order.status] || 'bg-warm-100 text-warm-700'}`}>
             {order.status}
           </span>
           <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-brand-50 text-brand-700 uppercase">
@@ -103,7 +285,7 @@ export default function AdminOrderDetailPage() {
         </div>
       </div>
 
-      {/* Return Request Banner / Action Panel */}
+      {/* Return Request Banner */}
       {order.returnStatus === 'requested' && (
         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-md mb-4">
           <h3 className="font-bold text-amber-900 text-[12px] mb-1">Return / Refund Requested by Customer</h3>
@@ -123,6 +305,237 @@ export default function AdminOrderDetailPage() {
             >
               <FiX className="w-3.5 h-3.5" /> Reject Return
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* PART 1 & PART 3: Packing & Delhivery Integration Panel */}
+      {order.status !== 'cancelled' && (
+        <div className="p-4 bg-white border border-warm-200 rounded-md mb-4 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-warm-100 pb-2.5">
+            <h3 className="font-bold text-warm-900 text-[13px] flex items-center gap-2">
+              <FiBox className="w-4 h-4 text-indigo-600" /> Delhivery Order Fulfillment & Packing Workflow
+            </h3>
+            {isPacked ? (
+              <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-full uppercase border border-indigo-200 flex items-center gap-1">
+                <FiCheckCircle className="w-3 h-3" /> Order Packed
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-bold rounded-full uppercase border border-amber-200 flex items-center gap-1">
+                <FiAlertTriangle className="w-3 h-3" /> Packing Required
+              </span>
+            )}
+          </div>
+
+          {/* STEP 1: Package Dimensions Form / Details Card */}
+          <div className="p-3 bg-warm-50/70 border border-warm-200 rounded-md">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-warm-900 flex items-center gap-1.5">
+                Step 1: Package Details (Weight & Dimensions)
+              </span>
+              {isPacked && !isEditingPackage && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPackage(true)}
+                  className="text-[10px] font-bold text-indigo-600 hover:underline"
+                >
+                  Edit Package Details
+                </button>
+              )}
+            </div>
+
+            {isPacked && !isEditingPackage ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-2.5 rounded border border-warm-200 text-[11px]">
+                <div>
+                  <span className="text-[10px] text-warm-500 block uppercase font-semibold">Weight</span>
+                  <span className="font-bold text-warm-900">{order.packageWeight || packageWeight} kg</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-warm-500 block uppercase font-semibold">Length</span>
+                  <span className="font-bold text-warm-900">{order.packageLength || packageLength} cm</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-warm-500 block uppercase font-semibold">Width</span>
+                  <span className="font-bold text-warm-900">{order.packageWidth || packageWidth} cm</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-warm-500 block uppercase font-semibold">Height</span>
+                  <span className="font-bold text-warm-900">{order.packageHeight || packageHeight} cm</span>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handlePackOrder} className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
+                      Weight (kg) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.001"
+                      value={packageWeight}
+                      onChange={(e) => setPackageWeight(e.target.value)}
+                      placeholder="e.g. 0.5"
+                      className="w-full px-2.5 py-1.5 border border-warm-200 rounded text-[11px] bg-white outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
+                      Length (cm) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={packageLength}
+                      onChange={(e) => setPackageLength(e.target.value)}
+                      placeholder="e.g. 20"
+                      className="w-full px-2.5 py-1.5 border border-warm-200 rounded text-[11px] bg-white outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
+                      Width (cm) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={packageWidth}
+                      onChange={(e) => setPackageWidth(e.target.value)}
+                      placeholder="e.g. 15"
+                      className="w-full px-2.5 py-1.5 border border-warm-200 rounded text-[11px] bg-white outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
+                      Height (cm) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={packageHeight}
+                      onChange={(e) => setPackageHeight(e.target.value)}
+                      placeholder="e.g. 10"
+                      className="w-full px-2.5 py-1.5 border border-warm-200 rounded text-[11px] bg-white outline-none focus:border-indigo-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={packing}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {packing ? 'Saving & Packing...' : 'Save Package & Pack Order'}
+                  </button>
+                  {isEditingPackage && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingPackage(false)}
+                      className="px-3 py-1.5 border border-warm-300 text-[11px] font-semibold text-warm-700 rounded hover:bg-warm-100"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
+          </div>
+
+          {/* STEP 2: Delhivery Shipment Actions & Waybill Status */}
+          <div>
+            <span className="text-[11px] font-bold text-warm-900 block mb-2">
+              Step 2: Courier Waybill & Dispatch
+            </span>
+
+            {order.awbNumber ? (
+              <div className="p-3 bg-brand-50/60 border border-brand-200 rounded-md">
+                <p className="text-[11px] text-warm-800 font-mono">
+                  Waybill / AWB Number: <span className="font-bold text-brand-700 text-[12px]">{order.awbNumber}</span>
+                </p>
+                <p className="text-[11px] text-warm-600 mt-1">
+                  Courier Status: <span className="font-bold text-warm-900">{trackingInfo?.courierStatus || order.courierStatus || 'Manifested'}</span>
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white border border-warm-200 rounded-md">
+                <div>
+                  <p className="text-[11px] text-warm-700 font-medium">
+                    {isPacked
+                      ? 'Package details confirmed. You can test safely against Staging or create live shipment.'
+                      : 'Please enter package weight & dimensions in Step 1 above to enable shipment creation.'}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Part 3: Test Shipment Button (Always Staging) */}
+                  <button
+                    type="button"
+                    onClick={handleTestShipment}
+                    disabled={testingShipment || !packageWeight || !packageLength}
+                    className="px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 text-[11px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Safely dry-run against Delhivery Staging sandbox without changing order record"
+                  >
+                    <FiShield className="w-3.5 h-3.5 text-emerald-600" />
+                    {testingShipment ? 'Testing Staging...' : 'Test Shipment (Staging Dry-Run)'}
+                  </button>
+
+                  {/* Manual AWB Entry Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowManualAwbModal(true)}
+                    className="px-3 py-1.5 bg-white text-warm-800 border border-warm-300 hover:bg-warm-50 text-[11px] font-bold rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    title="Manually enter an AWB generated externally or directly via Delhivery panel"
+                  >
+                    <FiEdit3 className="w-3.5 h-3.5 text-warm-600" />
+                    <span>Enter AWB Manually</span>
+                  </button>
+
+                  {/* Real Create Shipment Button */}
+                  <button
+                    type="button"
+                    onClick={handleCreateShipment}
+                    disabled={creatingShipment || !isPacked}
+                    className="px-3.5 py-1.5 bg-warm-900 hover:bg-warm-800 text-white text-[11px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    {creatingShipment ? (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FiSend className="w-3.5 h-3.5" />
+                    )}
+                    <span>Create Shipment</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tracking Movement Timeline */}
+            {order.awbNumber && trackingInfo?.events && trackingInfo.events.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-warm-100 space-y-2">
+                <p className="text-[10px] font-bold text-warm-700 uppercase tracking-wider">Shipment Movement History</p>
+                <div className="space-y-2">
+                  {trackingInfo.events.map((evt, idx) => (
+                    <div key={idx} className="flex items-start gap-2.5 text-[10px]">
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-600 mt-1 shrink-0" />
+                      <div>
+                        <span className="font-bold text-warm-900">{evt.status}</span>
+                        {evt.location && <span className="text-warm-500 font-medium ml-1.5">({evt.location})</span>}
+                        {evt.remark && <p className="text-warm-500 italic text-[9px]">{evt.remark}</p>}
+                        <p className="text-warm-400 text-[9px]">{new Date(evt.eventTimestamp || evt.createdAt).toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -164,15 +577,34 @@ export default function AdminOrderDetailPage() {
             {items.map((item) => (
               <div key={item.id} className="flex gap-2.5">
                 <div className="w-10 h-10 rounded-md bg-warm-50 shrink-0 relative overflow-hidden">
-                  {item.productImage?.[0] ? (
-                    <Image src={item.productImage[0]} alt="" fill className="object-cover" sizes="40px" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-warm-400"><Package className="w-4 h-4" /></div>
-                  )}
+                  {(() => {
+                    const rawSrc = item.productImage || (Array.isArray(item.productImages) ? item.productImages[0] : null);
+                    const validSrc = typeof rawSrc === 'string' && rawSrc.trim() !== '' ? rawSrc : null;
+                    return validSrc ? (
+                      <Image src={validSrc} alt="" fill className="object-cover" sizes="40px" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-warm-400"><Package className="w-4 h-4" /></div>
+                    );
+                  })()}
                 </div>
                 <div className="flex-1">
-                  <p className="text-[11px] font-medium text-warm-900">{item.productName || 'Product'}</p>
-                  <p className="text-[10px] text-warm-500">
+                  <p className="text-[11px] font-medium text-warm-900">{item.productName || item.name || 'Product'}</p>
+
+                  {/* Add-ons rendering */}
+                  {Array.isArray(item.addons) && item.addons.length > 0 && (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {item.addons.map((addon) => (
+                        <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
+                          {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
+                            <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
+                          )}
+                          <span>+ {addon.name} ({Number(addon.priceAtPurchase) === 0 ? 'Free' : formatCurrency(addon.priceAtPurchase)})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-warm-500 mt-0.5">
                     Qty: {item.quantity} × {formatCurrency(item.priceAtPurchase)}
                   </p>
                   {item.productLink && (
@@ -212,8 +644,25 @@ export default function AdminOrderDetailPage() {
             )}
             <div className="flex justify-between text-[11px] font-bold text-warm-900 border-t border-warm-100 pt-1.5">
               <span>Total Amount</span>
-              <span>${order.totalAmount}</span>
+              <span>{formatCurrency(order.totalAmount)}</span>
             </div>
+            {order.paymentMethod === 'cod' && Number(order.codAdvanceAmount) > 0 && (
+              <div className="pt-2 border-t border-dashed border-warm-200 space-y-1">
+                <div className="flex justify-between text-emerald-700 font-semibold">
+                  <span>Advance Paid Online</span>
+                  <span>{formatCurrency(order.codAdvanceAmount)}</span>
+                </div>
+                <div className="flex justify-between text-amber-800 font-bold">
+                  <span>Cash Due on Delivery</span>
+                  <span>{formatCurrency(Math.max(0, Number(order.totalAmount) - Number(order.codAdvanceAmount)))}</span>
+                </div>
+                {order.codAdvancePaymentId && (
+                  <p className="text-[9px] text-warm-400 font-mono mt-0.5">
+                    Advance Payment ID: {order.codAdvancePaymentId}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -292,9 +741,10 @@ export default function AdminOrderDetailPage() {
                 {customer.phone && (
                   <a
                     href={`tel:${customer.phone}`}
-                    className="text-[10px] text-brand-600 font-bold hover:underline"
+                    className="inline-flex items-center gap-1 text-[10px] text-brand-600 font-bold hover:underline"
                   >
-                    Call Customer 📞
+                    <Phone className="w-3 h-3" />
+                    Call Customer
                   </a>
                 )}
               </h2>
@@ -342,6 +792,105 @@ export default function AdminOrderDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Part 3: Test Shipment Staging Response Modal */}
+      <Modal
+        isOpen={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        title="Delhivery Staging Test Dry-Run Result"
+      >
+        <div className="space-y-3 text-[11px]">
+          <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-900 rounded border border-emerald-200">
+            <FiShield className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <p className="font-bold">Safe Staging Environment Dry-Run</p>
+              <p className="text-[10px] text-emerald-700">
+                Target URL: <code className="font-mono">https://staging-express.delhivery.com</code> (Zero charge / Safe check)
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 bg-warm-50 border border-warm-200 rounded font-mono text-[10px] space-y-1">
+            <p className="font-bold text-warm-900">
+              Test Status:{' '}
+              <span className={testResult?.success ? 'text-emerald-700' : 'text-rose-600'}>
+                {testResult?.success ? 'SUCCESS ✅' : 'FAILED ❌'}
+              </span>
+            </p>
+            <p>Message: {testResult?.message}</p>
+            {testResult?.testResponse?.awbNumber && (
+              <p>Test Waybill / AWB: <span className="font-bold text-warm-900">{testResult.testResponse.awbNumber}</span></p>
+            )}
+            {testResult?.testResponse?.isMock && (
+              <p className="text-amber-700 italic">Note: Environment in mock sandbox response mode.</p>
+            )}
+          </div>
+
+          {testResult?.testResponse?.rawResponse && (
+            <div>
+              <p className="font-bold text-warm-800 text-[10px] mb-1 uppercase">Raw Staging API Response:</p>
+              <pre className="p-2 bg-warm-900 text-warm-100 rounded text-[9px] overflow-x-auto font-mono max-h-40">
+                {JSON.stringify(testResult.testResponse.rawResponse, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          <p className="text-[10px] text-warm-500 italic border-t border-warm-100 pt-2">
+            ℹ️ This test run did NOT alter your order status or store any AWB number in the database. Your entered package details remain filled, so you can immediately click &quot;Create Shipment&quot; when ready.
+          </p>
+
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={() => setShowTestModal(false)}
+              className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded hover:bg-warm-800"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Manual AWB Entry Modal */}
+      <Modal
+        isOpen={showManualAwbModal}
+        onClose={() => setShowManualAwbModal(false)}
+        title="Enter Tracking / AWB Number Manually"
+      >
+        <form onSubmit={handleSaveManualAwb} className="space-y-3 text-[11px]">
+          <p className="text-warm-600">
+            For shipments created directly through Delhivery&apos;s dashboard or another carrier, paste the AWB tracking number here.
+          </p>
+          <div>
+            <label className="block text-[10px] font-bold text-warm-700 uppercase mb-1">
+              AWB / Waybill Number *
+            </label>
+            <input
+              type="text"
+              value={manualAwbNumber}
+              onChange={(e) => setManualAwbNumber(e.target.value)}
+              placeholder="e.g. 123456789012"
+              className="w-full px-3 py-2 border border-warm-200 rounded text-[11px] font-mono outline-none focus:border-warm-900"
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowManualAwbModal(false)}
+              className="px-3 py-1.5 border border-warm-200 text-warm-700 text-[11px] font-semibold rounded hover:bg-warm-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={savingManualAwb}
+              className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded hover:bg-warm-800 disabled:opacity-50"
+            >
+              {savingManualAwb ? 'Saving...' : 'Save & Mark Shipped'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

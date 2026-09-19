@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { db } from '@/lib/db';
-import { categories } from '@/lib/db/schema';
+import { categories, categoryRelations } from '@/lib/db/schema';
 import { asc } from 'drizzle-orm';
 import { ArrowRight, Folder } from 'lucide-react';
 
@@ -14,11 +14,14 @@ export const metadata = {
 
 export default async function CategoriesPage() {
   let allCategories = [];
+  let childCategoryIds = new Set();
   try {
     allCategories = await db.select().from(categories).orderBy(asc(categories.name));
+    const relations = await db.select().from(categoryRelations);
+    childCategoryIds = new Set(relations.map((r) => r.categoryId));
   } catch {}
 
-  const rootCategories = allCategories.filter(c => !c.parentId);
+  const rootCategories = allCategories.filter((c) => !childCategoryIds.has(c.id));
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

@@ -335,9 +335,10 @@ export default function ProfilePage() {
                 <FiPhone className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
                   type="tel"
+                  maxLength={10}
                   value={profileData.phone}
-                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value, phoneVerified: false })}
-                  placeholder="+91 98765 43210"
+                  onChange={(e) => setProfileData({ ...profileData, phone: e.target.value.replace(/\D/g, '').slice(0, 10), phoneVerified: false })}
+                  placeholder="10-digit mobile number (e.g. 9876543210)"
                   className="w-full pl-8 pr-3 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
                 />
               </div>
@@ -468,9 +469,11 @@ export default function ProfilePage() {
                 required
               />
               <input
+                type="tel"
+                maxLength={10}
                 value={addrForm.phone}
-                onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
-                placeholder="Phone"
+                onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                placeholder="10-digit Phone"
                 className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
               />
               <div className="col-span-2 flex gap-2 pt-1.5">

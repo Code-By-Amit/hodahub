@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { products, categories } from '@/lib/db/schema';
-import { eq, or } from 'drizzle-orm';
+import { products, categories, productAddons } from '@/lib/db/schema';
+import { eq, or, and } from 'drizzle-orm';
 
 export async function GET(request, { params }) {
   try {
@@ -27,6 +27,7 @@ export async function GET(request, { params }) {
         discountPrice: products.discountPrice,
         categoryId: products.categoryId,
         stock: products.stock,
+        isOutOfStock: products.isOutOfStock,
         images: products.images,
         ratingAvg: products.ratingAvg,
         reviewCount: products.reviewCount,
@@ -43,14 +44,28 @@ export async function GET(request, { params }) {
       .where(whereCondition)
       .limit(1);
 
-    if (!product) {
+    if (!product || !product.isActive) {
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ product });
+    // Fetch active add-ons for product
+    const addons = await db
+      .select()
+      .from(productAddons)
+      .where(and(eq(productAddons.productId, product.id), eq(productAddons.isActive, true)));
+
+    const isUnavailable = product.isOutOfStock || product.stock <= 0;
+
+    return NextResponse.json({
+      product: {
+        ...product,
+        isOutOfStock: isUnavailable,
+        addons: addons || [],
+      },
+    });
   } catch (error) {
     console.error('Product detail error:', error);
     return NextResponse.json(

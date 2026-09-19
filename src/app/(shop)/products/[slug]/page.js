@@ -95,9 +95,24 @@ export default function ProductDetailPage() {
     touchEndX.current = 0;
   };
 
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+
   useEffect(() => {
     fetchProduct();
+    fetchSettings();
   }, [slug]);
+
+  async function fetchSettings() {
+    try {
+      const res = await fetch('/api/settings');
+      const data = await res.json();
+      if (res.ok && data.settings?.whatsappNumber) {
+        setWhatsappNumber(data.settings.whatsappNumber);
+      } else {
+        setWhatsappNumber('');
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     if (activeTab === 'reviews' && product) {
@@ -150,6 +165,10 @@ export default function ProductDetailPage() {
       toast.error('Please login to submit a review');
       return;
     }
+    if (!reviewForm.rating && (!reviewForm.comment || !reviewForm.comment.trim())) {
+      toast.error('Please provide either a star rating or a review comment');
+      return;
+    }
     setSubmittingReview(true);
     try {
       const res = await fetch(`/api/products/${slug}/reviews`, {
@@ -172,8 +191,52 @@ export default function ProductDetailPage() {
     setSubmittingReview(false);
   }
 
+  const [selectedAddons, setSelectedAddons] = useState([]);
+  const [pincodeInput, setPincodeInput] = useState('');
+  const [pincodeStatus, setPincodeStatus] = useState(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+
+  const isOutOfStock = product?.isOutOfStock || product?.stock <= 0;
+
+  async function handleCheckPincode(e) {
+    if (e) e.preventDefault();
+    const cleaned = pincodeInput.replace(/\D/g, '').slice(0, 6);
+    if (cleaned.length !== 6) {
+      setPincodeStatus({ type: 'error', message: 'Please enter a valid 6-digit pincode' });
+      return;
+    }
+    setPincodeLoading(true);
+    setPincodeStatus(null);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${cleaned}`);
+      const data = await res.json();
+      if (Array.isArray(data) && data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+        setPincodeStatus({
+          type: 'success',
+          message: `Delivered to your location (${data[0].PostOffice[0].District}, ${data[0].PostOffice[0].State} - Est. 3-7 business days)`,
+        });
+      } else {
+        setPincodeStatus({ type: 'error', message: 'Please enter a valid 6-digit pincode' });
+      }
+    } catch {
+      setPincodeStatus({ type: 'error', message: 'Please enter a valid 6-digit pincode' });
+    }
+    setPincodeLoading(false);
+  }
+
+  function toggleAddon(addon) {
+    setSelectedAddons((prev) => {
+      const exists = prev.some((a) => a.id === addon.id);
+      if (exists) {
+        return prev.filter((a) => a.id !== addon.id);
+      } else {
+        return [...prev, addon];
+      }
+    });
+  }
+
   function handleAddToCart() {
-    if (!product) return;
+    if (!product || isOutOfStock) return;
     dispatch(
       addItem({
         productId: product.id,
@@ -184,6 +247,7 @@ export default function ProductDetailPage() {
         discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
         codAvailable: product.codAvailable !== false,
         quantity,
+        selectedAddons,
       })
     );
     toast.success(`${product.name} added to cart!`);
@@ -415,16 +479,101 @@ export default function ProductDetailPage() {
 
           {/* Stock Availability */}
           <div>
-            {product.stock > 0 ? (
+            {!isOutOfStock ? (
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                 <CheckCircle className="w-3 h-3" /> In Stock ({product.stock} units available)
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200">
-                <XCircle className="w-3 h-3" /> Out of Stock
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-700 bg-red-50 px-2.5 py-1 rounded-md border border-red-200">
+                <XCircle className="w-3.5 h-3.5" /> Out of Stock
               </span>
             )}
           </div>
+
+          {/* Pincode Delivery Check (Part 3) */}
+          <div className="bg-warm-50/80 border border-warm-200 rounded-lg p-3 space-y-2">
+            <label className="block text-[11px] font-semibold text-warm-900">
+              Check Delivery Availability
+            </label>
+            <form onSubmit={handleCheckPincode} className="flex gap-2">
+              <input
+                type="text"
+                value={pincodeInput}
+                onChange={(e) => {
+                  setPincodeInput(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setPincodeStatus(null);
+                }}
+                placeholder="Enter 6-digit Pincode"
+                className="flex-1 px-3 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+              />
+              <button
+                type="submit"
+                disabled={pincodeLoading}
+                className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50"
+              >
+                {pincodeLoading ? 'Checking...' : 'Check'}
+              </button>
+            </form>
+            {pincodeStatus && (
+              <p
+                className={`text-[11px] font-medium flex items-center gap-1 ${
+                  pincodeStatus.type === 'success' ? 'text-emerald-700' : 'text-red-600'
+                }`}
+              >
+                {pincodeStatus.type === 'success' ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                )}
+                <span>{pincodeStatus.message}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Product Add-ons (Part 5) */}
+          {Array.isArray(product.addons) && product.addons.length > 0 && (
+            <div className="bg-white border border-warm-200 rounded-lg p-3 space-y-2">
+              <span className="block text-[11px] font-bold text-warm-900 uppercase tracking-wider">
+                Optional Add-ons
+              </span>
+              <div className="space-y-2">
+                {product.addons.map((addon) => {
+                  const isChecked = selectedAddons.some((a) => a.id === addon.id);
+                  return (
+                    <label
+                      key={addon.id}
+                      onClick={() => toggleAddon(addon)}
+                      className={`flex items-center justify-between p-2 rounded-md border text-[11px] cursor-pointer transition-colors ${
+                        isChecked
+                          ? 'border-brand-600 bg-brand-50/30 font-semibold'
+                          : 'border-warm-200 bg-warm-50/40 hover:bg-warm-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="rounded border-warm-300 text-brand-600 focus:ring-brand-500"
+                        />
+                        {addon.imageUrl && (
+                          <img
+                            src={addon.imageUrl}
+                            alt=""
+                            className="w-7 h-7 rounded object-cover border border-warm-200 shrink-0"
+                          />
+                        )}
+                        <span className="text-warm-900">{addon.name}</span>
+                      </div>
+                      <span className="font-bold text-brand-700">
+                        {addon.isFree ? 'Free' : `+${formatCurrency(addon.price)}`}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Short Description */}
           {product.description && (
@@ -434,8 +583,8 @@ export default function ProductDetailPage() {
           )}
 
           {/* Quantity & Cart Action */}
-          {product.stock > 0 && (
-            <div className="flex flex-col sm:flex-row gap-2 pt-1.5">
+          <div className="flex flex-col sm:flex-row gap-2 pt-1.5">
+            {!isOutOfStock && (
               <div className="flex items-center border border-warm-200 rounded-md overflow-hidden shrink-0 bg-white">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -453,48 +602,70 @@ export default function ProductDetailPage() {
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
+            )}
 
-              <button
-                onClick={handleAddToCart}
-                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 bg-warm-900 text-white text-[11px] sm:text-[12px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all shadow-xs"
-              >
-                <ShoppingCart className="w-3.5 h-3.5" />
-                Add to Cart
-              </button>
+            <button
+              onClick={handleAddToCart}
+              disabled={isOutOfStock}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-[11px] sm:text-[12px] font-semibold rounded-md transition-all shadow-xs ${
+                isOutOfStock
+                  ? 'bg-warm-200 text-warm-400 cursor-not-allowed border border-warm-300'
+                  : 'bg-warm-900 text-white hover:bg-warm-800 active:scale-[0.99]'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
+            </button>
 
-              <button
-                onClick={async () => {
-                  if (!product) return;
-                  if (isWishlisted) {
-                    dispatch(removeFromWishlist(product.id));
-                    toast.info(`Removed ${product.name} from wishlist`);
-                    if (user) {
-                      try { await fetch(`/api/wishlist/${product.id}`, { method: 'DELETE' }); } catch {}
-                    }
-                  } else {
-                    dispatch(addToWishlist(product));
-                    toast.success(`Added ${product.name} to wishlist!`);
-                    if (user) {
-                      try {
-                        await fetch('/api/wishlist', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ productId: product.id }),
-                        });
-                      } catch {}
-                    }
+            <button
+              onClick={async () => {
+                if (!product) return;
+                if (isWishlisted) {
+                  dispatch(removeFromWishlist(product.id));
+                  toast.info(`Removed ${product.name} from wishlist`);
+                  if (user) {
+                    try { await fetch(`/api/wishlist/${product.id}`, { method: 'DELETE' }); } catch {}
                   }
-                }}
-                className={`p-2 border rounded-md transition-colors shrink-0 ${
-                  isWishlisted
-                    ? 'border-rose-300 bg-rose-50 text-rose-600'
-                    : 'border-warm-200 text-warm-500 hover:text-rose-600 hover:bg-rose-50'
-                }`}
-                title={isWishlisted ? 'Remove from Wishlist' : 'Save to Wishlist'}
-              >
-                <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-rose-600' : ''}`} />
-              </button>
-            </div>
+                } else {
+                  dispatch(addToWishlist(product));
+                  toast.success(`Added ${product.name} to wishlist!`);
+                  if (user) {
+                    try {
+                      await fetch('/api/wishlist', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ productId: product.id }),
+                      });
+                    } catch {}
+                  }
+                }
+              }}
+              className={`p-2 border rounded-md transition-colors shrink-0 ${
+                isWishlisted
+                  ? 'border-rose-300 bg-rose-50 text-rose-600'
+                  : 'border-warm-200 text-warm-500 hover:text-rose-600 hover:bg-rose-50'
+              }`}
+              title={isWishlisted ? 'Remove from Wishlist' : 'Save to Wishlist'}
+            >
+              <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-rose-600' : ''}`} />
+            </button>
+          </div>
+
+          {/* WhatsApp Contact Action */}
+          {whatsappNumber && whatsappNumber.trim() !== '' && (
+            <button
+              type="button"
+              onClick={() => {
+                const cleanNumber = whatsappNumber.trim().replace(/\D/g, '');
+                const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+                const text = encodeURIComponent(`Hi! I'm interested in *${product.name}*: ${currentUrl}`);
+                window.open(`https://wa.me/${cleanNumber}?text=${text}`, '_blank');
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-[11px] sm:text-[12px] font-bold rounded-md transition-all shadow-xs cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4 fill-white/20" />
+              <span>Contact on WhatsApp</span>
+            </button>
           )}
         </div>
       </div>
@@ -618,7 +789,7 @@ export default function ProductDetailPage() {
                     value={reviewForm.mediaUrls || []}
                     onChange={(urls) => setReviewForm({ ...reviewForm, mediaUrls: urls })}
                     multiple={true}
-                    maxFiles={4}
+                    maxFiles={5}
                     maxSizeMB={50}
                     label="Attach Photos or Short Video Clips (Optional)"
                   />
@@ -626,8 +797,8 @@ export default function ProductDetailPage() {
 
                 <button
                   type="submit"
-                  disabled={submittingReview}
-                  className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all flex items-center gap-1.5 disabled:opacity-60"
+                  disabled={submittingReview || (!reviewForm.rating && !reviewForm.comment?.trim())}
+                  className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
                 >
                   {submittingReview ? (
                     <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -670,7 +841,9 @@ export default function ProductDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <StarRating rating={review.rating} size="sm" />
+                      {review.rating && review.rating > 0 ? (
+                        <StarRating rating={review.rating} size="sm" />
+                      ) : null}
                     </div>
 
                     {review.comment && (

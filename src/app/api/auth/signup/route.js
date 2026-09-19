@@ -21,9 +21,9 @@ export async function POST(request) {
     const { name, email, password } = await request.json();
 
     // Basic validation
-    if (!name || !email || !password) {
+    if (!email || !password) {
       return NextResponse.json(
-        { error: 'Name, email, and password are required' },
+        { error: 'Email and password are required' },
         { status: 400 }
       );
     }
@@ -48,10 +48,11 @@ export async function POST(request) {
       if (!user.isVerified) {
         const otp = generateOTP();
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        const userName = name && typeof name === 'string' && name.trim() ? name.trim() : null;
 
         await db
           .update(users)
-          .set({ otp, otpExpiresAt, name, passwordHash: await bcrypt.hash(password, 10) })
+          .set({ otp, otpExpiresAt, ...(userName && { name: userName }), passwordHash: await bcrypt.hash(password, 10) })
           .where(eq(users.id, user.id));
 
         await sendOTPEmail(email, otp);
@@ -76,11 +77,13 @@ export async function POST(request) {
     const otp = generateOTP();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    const userName = name && typeof name === 'string' && name.trim() ? name.trim() : null;
+
     // Create user
     const [newUser] = await db
       .insert(users)
       .values({
-        name: name.trim(),
+        name: userName,
         email: email.toLowerCase().trim(),
         passwordHash,
         role: 'customer',

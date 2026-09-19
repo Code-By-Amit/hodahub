@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import StarRating from '@/components/ui/StarRating';
+import ImageUpload from '@/components/ui/ImageUpload';
 import { Eye, EyeOff, Trash2, Film, ImageIcon, X } from 'lucide-react';
 import { isVideoUrl } from '@/lib/utils';
 
@@ -14,9 +15,35 @@ export default function AdminReviewsPage() {
   const [loading, setLoading] = useState(true);
   const [modalMedia, setModalMedia] = useState(null);
 
+  // Admin Create Review states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [productsList, setProductsList] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [addForm, setAddForm] = useState({
+    productId: '',
+    userName: '',
+    rating: 5,
+    comment: '',
+    mediaUrls: [],
+  });
+
   useEffect(() => {
     fetchReviews();
+    fetchProducts();
   }, [pagination.page]);
+
+  async function fetchProducts() {
+    try {
+      const res = await fetch('/api/admin/products?limit=100');
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.products)) {
+        setProductsList(data.products);
+        if (data.products.length > 0) {
+          setAddForm((prev) => ({ ...prev, productId: data.products[0].id }));
+        }
+      }
+    } catch {}
+  }
 
   async function fetchReviews() {
     try {
@@ -26,6 +53,44 @@ export default function AdminReviewsPage() {
       setPagination(data.pagination || pagination);
     } catch {}
     setLoading(false);
+  }
+
+  async function handleCreateReview(e) {
+    e.preventDefault();
+    if (!addForm.productId || !addForm.userName.trim()) {
+      toast.error('Please select a product and provide an author name');
+      return;
+    }
+    if (!addForm.rating && (!addForm.comment || !addForm.comment.trim())) {
+      toast.error('Please provide either a star rating or a review comment');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId: addForm.productId,
+          userName: addForm.userName.trim(),
+          rating: addForm.rating ? Number(addForm.rating) : null,
+          comment: addForm.comment.trim() || null,
+          mediaUrls: Array.isArray(addForm.mediaUrls) ? addForm.mediaUrls : [],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Customer review published successfully!');
+        setShowAddModal(false);
+        setAddForm({ productId: productsList[0]?.id || '', userName: '', rating: 5, comment: '', mediaUrls: [] });
+        fetchReviews();
+      } else {
+        toast.error(data.error || 'Failed to create review');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+    setSubmitting(false);
   }
 
   async function toggleHide(id) {
@@ -55,9 +120,19 @@ export default function AdminReviewsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-base font-bold text-warm-900">Review Moderation</h1>
-        <p className="text-[11px] text-warm-500">Moderate customer ratings, feedback, and attached media</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-base font-bold text-warm-900">Review Moderation</h1>
+          <p className="text-[11px] text-warm-500">Moderate customer ratings, feedback, or publish verified reviews</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-all shadow-xs cursor-pointer"
+        >
+          + Add Customer Review
+        </button>
       </div>
 
       <div className="bg-white rounded-md border border-warm-200 overflow-x-auto shadow-xs">
@@ -185,6 +260,118 @@ export default function AdminReviewsPage() {
             ) : (
               <img src={modalMedia} alt="" className="max-h-[80vh] w-auto mx-auto object-contain" />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Customer Review Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-warm-200 shadow-xl max-w-md w-full p-5 space-y-4 relative animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-warm-100 pb-3">
+              <h3 className="font-bold text-warm-900 text-sm">Publish Customer Review</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-warm-400 hover:text-warm-700 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateReview} className="space-y-3.5">
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Target Product *
+                </label>
+                <select
+                  value={addForm.productId}
+                  onChange={(e) => setAddForm({ ...addForm, productId: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  required
+                >
+                  {productsList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Author Display Name *
+                </label>
+                <input
+                  type="text"
+                  value={addForm.userName}
+                  onChange={(e) => setAddForm({ ...addForm, userName: e.target.value })}
+                  placeholder="e.g. Priya Sharma"
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Star Rating (Optional)
+                </label>
+                <select
+                  value={addForm.rating || ''}
+                  onChange={(e) => setAddForm({ ...addForm, rating: e.target.value ? Number(e.target.value) : '' })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                >
+                  <option value="5">5 Stars (Excellent)</option>
+                  <option value="4">4 Stars (Very Good)</option>
+                  <option value="3">3 Stars (Average)</option>
+                  <option value="2">2 Stars (Below Average)</option>
+                  <option value="1">1 Star (Poor)</option>
+                  <option value="">No Star Rating (Comment Only)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Review Comment (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={addForm.comment}
+                  onChange={(e) => setAddForm({ ...addForm, comment: e.target.value })}
+                  placeholder="Write customer review feedback or commentary..."
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                />
+              </div>
+
+              <div>
+                <ImageUpload
+                  uploadType="review-media"
+                  value={addForm.mediaUrls || []}
+                  onChange={(urls) => setAddForm({ ...addForm, mediaUrls: urls })}
+                  multiple={true}
+                  maxFiles={5}
+                  maxSizeMB={50}
+                  label="Attach Photos or Video Clips (Optional)"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-3.5 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || (!addForm.rating && !addForm.comment.trim())}
+                  className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? 'Publishing...' : 'Publish Review'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

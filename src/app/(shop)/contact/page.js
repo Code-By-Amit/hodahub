@@ -1,14 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
-import { FiMail, FiUser, FiMessageSquare, FiSend, FiPhone, FiMapPin } from 'react-icons/fi';
+import { FiMail, FiUser, FiSend, FiPhone, FiMapPin, FiClock } from 'react-icons/fi';
 
 export default function ContactPage() {
   const toast = useToast();
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState({
+    storeName: 'HodaHub',
+    contactEmail: '',
+    contactPhone: '',
+    address: '',
+    businessHours: '',
+  });
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.settings) {
+          setSettings(data.settings);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -37,7 +55,7 @@ export default function ContactPage() {
       <Breadcrumbs items={[{ label: 'Contact Us' }]} />
 
       <div className="max-w-3xl mx-auto text-center py-4">
-        <h1 className="text-2xl font-bold text-warm-900 tracking-tight">Contact HodaHub</h1>
+        <h1 className="text-2xl font-bold text-warm-900 tracking-tight">Contact {settings.storeName}</h1>
         <p className="text-xs text-warm-500 mt-2">
           Have questions about your order or our products? We&apos;re here to help!
         </p>
@@ -52,32 +70,59 @@ export default function ContactPage() {
           </div>
 
           <div className="space-y-4 text-[11px] text-warm-300">
-            <div className="flex items-start gap-3">
-              <FiMail className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-white">Email Us</p>
-                <p className="text-[11px] text-warm-400">support@hodahub.com</p>
+            {settings.contactEmail && (
+              <div className="flex items-start gap-3">
+                <FiMail className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">Email Us</p>
+                  <a href={`mailto:${settings.contactEmail}`} className="text-[11px] text-warm-400 hover:underline">
+                    {settings.contactEmail}
+                  </a>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <FiPhone className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-white">Call Us</p>
-                <p className="text-[11px] text-warm-400">+1 (555) 000-0000</p>
+            )}
+
+            {settings.contactPhone && (
+              <div className="flex items-start gap-3">
+                <FiPhone className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">Call Us</p>
+                  <a href={`tel:${settings.contactPhone}`} className="text-[11px] text-warm-400 hover:underline">
+                    {settings.contactPhone}
+                  </a>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <FiMapPin className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-white">Location</p>
-                <p className="text-[11px] text-warm-400">HodaHub Store Operations</p>
+            )}
+
+            {settings.address && (
+              <div className="flex items-start gap-3">
+                <FiMapPin className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">Location</p>
+                  <p className="text-[11px] text-warm-400 leading-relaxed">{settings.address}</p>
+                </div>
               </div>
-            </div>
+            )}
+
+            {settings.businessHours && (
+              <div className="flex items-start gap-3">
+                <FiClock className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-white">Business Hours</p>
+                  <p className="text-[11px] text-warm-400">{settings.businessHours}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Contact Form */}
         <div className="lg:col-span-2 p-6 sm:p-8 bg-white rounded-2xl border border-warm-200 shadow-xs">
+          {!settings.contactEmail && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[11px] mb-4 font-medium">
+              Contact form is temporarily unavailable.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
@@ -90,6 +135,7 @@ export default function ContactPage() {
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                     className="w-full pl-10 pr-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
                     placeholder="Jane Doe"
+                    disabled={!settings.contactEmail}
                     required
                   />
                 </div>
@@ -105,6 +151,7 @@ export default function ContactPage() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                     className="w-full pl-10 pr-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
                     placeholder="jane@example.com"
+                    disabled={!settings.contactEmail}
                     required
                   />
                 </div>
@@ -119,6 +166,7 @@ export default function ContactPage() {
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
                 className="w-full px-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors"
                 placeholder="Order Inquiry, Product Info..."
+                disabled={!settings.contactEmail}
                 required
               />
             </div>
@@ -131,14 +179,15 @@ export default function ContactPage() {
                 rows={4}
                 className="w-full px-4 py-2.5 border border-warm-200 rounded-lg text-[11px] outline-none focus:border-warm-900 transition-colors resize-none"
                 placeholder="How can we help you?"
+                disabled={!settings.contactEmail}
                 required
               />
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 px-6 py-1.5 bg-warm-900 text-white font-bold text-[11px] rounded-lg hover:bg-warm-800 disabled:opacity-50 transition-all shadow-xs"
+              disabled={loading || !settings.contactEmail}
+              className="inline-flex items-center justify-center gap-2 px-6 py-1.5 bg-warm-900 text-white font-bold text-[11px] rounded-lg hover:bg-warm-800 disabled:opacity-50 transition-all shadow-xs cursor-pointer"
             >
               <FiSend className="w-3 h-3" />
               {loading ? 'Sending...' : 'Send Message'}
@@ -149,4 +198,3 @@ export default function ContactPage() {
     </div>
   );
 }
-

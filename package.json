@@ -11,7 +11,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "node src/lib/db/seed.js"
+    "db:seed": "node src/lib/db/seed.js",
+    "db:migrate-categories": "node src/lib/db/migrate-category-relations.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

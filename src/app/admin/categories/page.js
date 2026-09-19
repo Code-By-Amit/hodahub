@@ -3,9 +3,8 @@
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
-import { Folder, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
+import { Folder, Plus, Edit2, Trash2, X, Check, ChevronDown } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
-import CustomSelect from '@/components/ui/CustomSelect';
 
 export default function AdminCategoriesPage() {
   const toast = useToast();
@@ -13,8 +12,9 @@ export default function AdminCategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentId: '' });
+  const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentIds: [] });
   const [saving, setSaving] = useState(false);
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -35,20 +35,31 @@ export default function AdminCategoriesPage() {
       name: cat.name,
       slug: cat.slug,
       imageUrl: cat.imageUrl || '',
-      parentId: cat.parentId || '',
+      parentIds: Array.isArray(cat.parentIds) ? cat.parentIds : [],
     });
     setShowForm(true);
   }
 
   function resetForm() {
     setEditingId(null);
-    setForm({ name: '', slug: '', imageUrl: '', parentId: '' });
+    setForm({ name: '', slug: '', imageUrl: '', parentIds: [] });
     setShowForm(false);
+    setParentDropdownOpen(false);
   }
 
   function handleNameChange(name) {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     setForm((prev) => ({ ...prev, name, slug }));
+  }
+
+  function toggleParentId(id) {
+    setForm((prev) => {
+      const current = prev.parentIds || [];
+      const updated = current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id];
+      return { ...prev, parentIds: updated };
+    });
   }
 
   async function handleSubmit(e) {
@@ -64,15 +75,15 @@ export default function AdminCategoriesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, parentId: form.parentId || null }),
+        body: JSON.stringify({ ...form, parentIds: form.parentIds || [] }),
       });
+      const data = await res.json();
       if (res.ok) {
         toast.success(editingId ? 'Category updated!' : 'Category created!');
         resetForm();
         fetchCategories();
       } else {
-        const d = await res.json();
-        toast.error(d.error || 'Failed');
+        toast.error(data.error || 'Failed');
       }
     } catch {
       toast.error('Network error');
@@ -93,12 +104,7 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  const parentOptions = [
-    { value: '', label: 'No Parent (Top-level Category)' },
-    ...categories
-      .filter((c) => c.id !== editingId)
-      .map((c) => ({ value: c.id, label: c.name })),
-  ];
+  const availableParents = categories.filter((c) => c.id !== editingId);
 
   return (
     <div className="space-y-4">
@@ -106,7 +112,7 @@ export default function AdminCategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-base font-bold text-warm-900">Category Management</h1>
-          <p className="text-[11px] text-warm-500">Organize store products into logical groups</p>
+          <p className="text-[11px] text-warm-500">Organize store products into logical groups with multi-parent support</p>
         </div>
         <button
           onClick={() => {
@@ -170,16 +176,74 @@ export default function AdminCategoriesPage() {
               </div>
             </div>
 
-            <div>
+            {/* Multi-Select Parent Categories */}
+            <div className="relative">
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Parent Category
+                Parent Categories (Select zero, one, or multiple)
               </label>
-              <CustomSelect
-                options={parentOptions}
-                value={form.parentId || ''}
-                onChange={(val) => setForm({ ...form, parentId: val })}
-                placeholder="Select parent..."
-              />
+              
+              <button
+                type="button"
+                onClick={() => setParentDropdownOpen(!parentDropdownOpen)}
+                className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 flex items-center justify-between text-left focus:outline-none focus:border-brand-600"
+              >
+                <span className="truncate">
+                  {form.parentIds.length === 0
+                    ? 'No Parents (Top-level Category)'
+                    : `${form.parentIds.length} Parent${form.parentIds.length > 1 ? 's' : ''} Selected`}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 text-warm-400 transition-transform ${parentDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Selected Parent Badges */}
+              {form.parentIds.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {form.parentIds.map((pId) => {
+                    const pCat = categories.find((c) => c.id === pId);
+                    return (
+                      <span
+                        key={pId}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-warm-100 text-warm-800 rounded-md text-[10px] font-medium"
+                      >
+                        {pCat?.name || pId}
+                        <button
+                          type="button"
+                          onClick={() => toggleParentId(pId)}
+                          className="text-warm-400 hover:text-warm-900"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {parentDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white border border-warm-200 rounded-md shadow-lg z-20 p-2 space-y-1">
+                  {availableParents.length === 0 ? (
+                    <div className="p-2 text-center text-warm-400 text-[10px]">No other categories available</div>
+                  ) : (
+                    availableParents.map((c) => {
+                      const isChecked = form.parentIds.includes(c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className="flex items-center gap-2 px-2 py-1 hover:bg-warm-50 rounded-md cursor-pointer text-[11px] select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleParentId(c.id)}
+                            className="accent-warm-900 w-3.5 h-3.5 rounded"
+                          />
+                          <span className="font-medium text-warm-800">{c.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
@@ -224,7 +288,7 @@ export default function AdminCategoriesPage() {
             <tr className="bg-warm-50/80 text-warm-600 text-[10px] font-semibold border-b border-warm-200">
               <th className="px-3 py-2 text-left">Category</th>
               <th className="px-3 py-2 text-left">Slug</th>
-              <th className="px-3 py-2 text-left">Parent Category</th>
+              <th className="px-3 py-2 text-left">Parent Categories</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
@@ -242,46 +306,62 @@ export default function AdminCategoriesPage() {
                 </td>
               </tr>
             ) : (
-              categories.map((c) => (
-                <tr key={c.id} className="hover:bg-warm-50/50 transition-colors">
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      {c.imageUrl ? (
-                        <div className="relative w-7 h-7 rounded-md overflow-hidden border border-warm-200 shrink-0">
-                          <Image src={c.imageUrl} alt={c.name} fill className="object-cover" sizes="28px" />
+              categories.map((c) => {
+                const parentNames = (c.parentIds || [])
+                  .map((pId) => categories.find((p) => p.id === pId)?.name)
+                  .filter(Boolean);
+
+                return (
+                  <tr key={c.id} className="hover:bg-warm-50/50 transition-colors">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        {c.imageUrl ? (
+                          <div className="relative w-7 h-7 rounded-md overflow-hidden border border-warm-200 shrink-0">
+                            <Image src={c.imageUrl} alt={c.name} fill className="object-cover" sizes="28px" />
+                          </div>
+                        ) : (
+                          <div className="w-7 h-7 bg-warm-100 rounded-md flex items-center justify-center text-warm-500 shrink-0">
+                            <Folder className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                        <span className="font-semibold text-warm-900">{c.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-warm-500 font-mono text-[10px]">{c.slug}</td>
+                    <td className="px-3 py-2 text-warm-600">
+                      {parentNames.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {parentNames.map((name, i) => (
+                            <span key={i} className="px-1.5 py-0.5 bg-warm-100 text-warm-800 rounded text-[10px] font-medium">
+                              {name}
+                            </span>
+                          ))}
                         </div>
                       ) : (
-                        <div className="w-7 h-7 bg-warm-100 rounded-md flex items-center justify-center text-warm-500 shrink-0">
-                          <Folder className="w-3.5 h-3.5" />
-                        </div>
+                        <span className="text-warm-400 text-[10px]">Top-level (Root)</span>
                       )}
-                      <span className="font-semibold text-warm-900">{c.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-warm-500 font-mono text-[10px]">{c.slug}</td>
-                  <td className="px-3 py-2 text-warm-600">
-                    {categories.find((p) => p.id === c.parentId)?.name || '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => startEdit(c)}
-                        className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors"
-                        title="Edit category"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(c.id, c.name)}
-                        className="p-1 text-warm-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Delete category"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => startEdit(c)}
+                          className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors"
+                          title="Edit category"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c.id, c.name)}
+                          className="p-1 text-warm-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title="Delete category"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

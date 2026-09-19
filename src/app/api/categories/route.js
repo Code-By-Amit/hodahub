@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { categories } from '@/lib/db/schema';
-import { asc, isNull } from 'drizzle-orm';
+import { categories, categoryRelations } from '@/lib/db/schema';
+import { asc } from 'drizzle-orm';
+import { buildCategoryTree } from '@/lib/category-tree';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,22 +13,16 @@ export async function GET() {
       .from(categories)
       .orderBy(asc(categories.name));
 
-    // Build hierarchy
-    const rootCategories = allCategories.filter((c) => !c.parentId);
-    const childMap = {};
-    allCategories.forEach((c) => {
-      if (c.parentId) {
-        if (!childMap[c.parentId]) childMap[c.parentId] = [];
-        childMap[c.parentId].push(c);
-      }
+    const allRelations = await db
+      .select()
+      .from(categoryRelations);
+
+    const tree = buildCategoryTree(allCategories, allRelations);
+
+    return NextResponse.json({
+      categories: tree.rootCategories,
+      allCategories: tree.allCategories,
     });
-
-    const categoriesWithChildren = rootCategories.map((cat) => ({
-      ...cat,
-      children: childMap[cat.id] || [],
-    }));
-
-    return NextResponse.json({ categories: categoriesWithChildren });
   } catch (error) {
     console.error('Categories API error:', error);
     return NextResponse.json(

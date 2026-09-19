@@ -15,6 +15,7 @@ export default function CategoryDetailPage() {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [apiBreadcrumbs, setApiBreadcrumbs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [minPrice, setMinPrice] = useState('');
@@ -48,6 +49,7 @@ export default function CategoryDetailPage() {
         setCategory(data.category);
         setSubcategories(data.subcategories || []);
         setProducts(data.products || []);
+        setApiBreadcrumbs(data.breadcrumbs || []);
       }
     } catch {}
     setLoading(false);
@@ -100,15 +102,19 @@ export default function CategoryDetailPage() {
     );
   }
 
+  const breadcrumbItems = [
+    { label: 'Categories', href: '/categories' },
+    ...apiBreadcrumbs.map((crumb, idx) =>
+      idx === apiBreadcrumbs.length - 1
+        ? { label: crumb.name }
+        : { label: crumb.name, href: `/categories/${crumb.slug}` }
+    ),
+  ];
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Breadcrumbs */}
-      <Breadcrumbs
-        items={[
-          { label: 'Categories', href: '/categories' },
-          { label: category.name },
-        ]}
-      />
+      <Breadcrumbs items={breadcrumbItems} />
 
       {/* Category Header */}
       <div className="flex items-end justify-between border-b border-warm-200/80 pb-3">

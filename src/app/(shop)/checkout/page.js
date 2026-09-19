@@ -26,6 +26,7 @@ import {
   FiUserPlus,
   FiArrowRight,
   FiLoader,
+  FiMessageSquare,
 } from 'react-icons/fi';
 
 export default function CheckoutPage() {
@@ -177,7 +178,7 @@ export default function CheckoutPage() {
 
   async function fetchStoreSettings() {
     try {
-      const res = await fetch('/api/admin/settings');
+      const res = await fetch('/api/settings');
       const data = await res.json();
       if (res.ok && data.settings) {
         setStoreSettings({
@@ -244,9 +245,66 @@ export default function CheckoutPage() {
       }
     }
 
+    // Handle WhatsApp Direct Handoff (No DB order created)
+    if (paymentMethod === 'whatsapp') {
+      let custName = '';
+      let custPhone = '';
+      let addrText = '';
+
+      if (isGuestOrder) {
+        custName = guestForm.name;
+        custPhone = guestForm.phone || '';
+        addrText = `${guestForm.line1}${guestForm.line2 ? ', ' + guestForm.line2 : ''}, ${guestForm.city}, ${guestForm.state} - ${guestForm.pincode}`;
+      } else {
+        const addr = addresses.find((a) => a.id === selectedAddress);
+        custName = user?.name || 'Valued Customer';
+        custPhone = user?.phone || addr?.phone || '';
+        addrText = addr ? `${addr.line1}${addr.line2 ? ', ' + addr.line2 : ''}, ${addr.city}, ${addr.state} - ${addr.pincode}` : '';
+      }
+
+      const itemsText = items
+        .map((i) => {
+          let line = `• ${i.name} x${i.quantity} — ₹${((i.discountPrice || i.price) * i.quantity).toFixed(2)}`;
+          if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
+            const addonsList = i.selectedAddons.map((a) => `+ ${a.name} (₹${a.price})`).join(', ');
+            line += `\n   Addons: ${addonsList}`;
+          }
+          return line;
+        })
+        .join('\n');
+
+      const waText = `🛍️ *New Order Request from HodaHub*
+----------------------------------
+*Customer:* ${custName} ${custPhone ? `(${custPhone})` : ''}
+*Delivery Address:* ${addrText}
+
+*Items:*
+${itemsText}
+
+*Subtotal:* ₹${subtotal.toFixed(2)}
+*Shipping Fee:* ₹${shippingFee.toFixed(2)}
+${discount > 0 ? `*Discount:* -₹${discount.toFixed(2)}\n` : ''}*Total Amount:* ₹${total.toFixed(2)}
+----------------------------------
+Hi! I'd like to place this order via WhatsApp. Please confirm item availability and send payment details.`;
+
+      const waNumber = storeSettings?.whatsappNumber?.trim();
+      if (!waNumber) {
+        toast.error('WhatsApp checkout is currently unavailable.');
+        return;
+      }
+      const cleanNum = waNumber.replace(/\D/g, '');
+      window.open(`https://wa.me/${cleanNum}?text=${encodeURIComponent(waText)}`, '_blank');
+      toast.success('WhatsApp opened with your complete order details!');
+      return;
+    }
+
     setPaying(true);
     try {
-      const cartItems = items.map((i) => ({ productId: i.productId, quantity: i.quantity }));
+      const cartItems = items.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        selectedAddonIds: Array.isArray(i.selectedAddons) ? i.selectedAddons.map((a) => a.id) : [],
+      }));
 
       const payload = isGuestOrder
         ? {
@@ -286,19 +344,22 @@ export default function CheckoutPage() {
         return;
       }
 
-      if (createData.isCod) {
+      // Pure COD without online advance required
+      if (createData.isCod && !createData.requiresAdvance) {
         dispatch(clearCart());
         toast.success('Order placed successfully via Cash on Delivery!');
-        router.push(`/orders/${createData.orderId}`);
+        const redirectUrl = `/orders/${createData.orderId}${createData.accessCode ? `?accessCode=${createData.accessCode}` : ''}`;
+        router.push(redirectUrl);
         return;
       }
 
+      // Online Razorpay Payment (Either full payment OR COD Advance token payment)
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: createData.amount,
         currency: 'INR',
         name: 'HodaHub',
-        description: 'Order Payment',
+        description: createData.requiresAdvance ? `COD Advance Payment (₹${createData.codAdvanceAmount})` : 'Order Payment',
         order_id: createData.razorpayOrderId,
         handler: async function (response) {
           try {
@@ -315,8 +376,10 @@ export default function CheckoutPage() {
             const verifyData = await verifyRes.json();
             if (verifyRes.ok) {
               dispatch(clearCart());
-              toast.success('Payment successful! Order placed.');
-              router.push(`/orders/${verifyData.orderId}`);
+              toast.success(createData.requiresAdvance ? 'COD advance paid! Order confirmed.' : 'Payment successful! Order placed.');
+              const accessCode = verifyData.accessCode || createData.accessCode;
+              const redirectUrl = `/orders/${verifyData.orderId}${accessCode ? `?accessCode=${accessCode}` : ''}`;
+              router.push(redirectUrl);
             } else {
               toast.error(verifyData.error || 'Payment verification failed');
             }
@@ -325,7 +388,10 @@ export default function CheckoutPage() {
           }
           setPaying(false);
         },
-        prefill: { name: user?.name, email: user?.email },
+        prefill: {
+          name: isGuestOrder ? guestForm.name : user?.name,
+          email: isGuestOrder ? guestForm.email : user?.email,
+        },
         theme: { color: '#18181b' },
         modal: {
           ondismiss: () => {
@@ -337,7 +403,7 @@ export default function CheckoutPage() {
 
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', () => {
-        toast.error('Payment failed. Please try again or choose COD.');
+        toast.error('Payment failed. Please try again.');
         setPaying(false);
       });
       rzp.open();
@@ -493,9 +559,10 @@ export default function CheckoutPage() {
                       />
                       <input
                         type="tel"
+                        maxLength={10}
                         value={guestForm.phone}
-                        onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value })}
-                        placeholder="Phone Number (Optional)"
+                        onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                        placeholder="10-digit Phone Number (Optional)"
                         className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
                       />
                       <input
@@ -628,9 +695,11 @@ export default function CheckoutPage() {
                           required
                         />
                         <input
+                          type="tel"
+                          maxLength={10}
                           value={addrForm.phone}
-                          onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value })}
-                          placeholder="Phone"
+                          onChange={(e) => setAddrForm({ ...addrForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                          placeholder="10-digit Phone"
                           className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
                         />
                         <div className="col-span-2 flex gap-2 pt-0.5">
@@ -703,12 +772,12 @@ export default function CheckoutPage() {
                     <FiCreditCard className="w-3.5 h-3.5 text-warm-900" /> Payment Method
                   </h2>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {/* Razorpay Online Option */}
                     <label
                       className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
                         paymentMethod === 'razorpay'
-                          ? 'border-warm-900 bg-warm-50/50 shadow-xs'
+                          ? 'border-warm-900 bg-warm-50/50 shadow-xs ring-1 ring-warm-900/10'
                           : 'border-warm-200 hover:border-warm-300'
                       }`}
                     >
@@ -724,7 +793,7 @@ export default function CheckoutPage() {
                         <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
                           <FiCreditCard className="w-3 h-3 text-warm-700" /> Online Payment
                         </p>
-                        <p className="text-[10px] text-warm-500 mt-0.5">UPI, Cards, NetBanking via Razorpay</p>
+                        <p className="text-[10px] text-warm-500 mt-0.5">UPI, Cards, NetBanking</p>
                       </div>
                     </label>
 
@@ -733,7 +802,7 @@ export default function CheckoutPage() {
                       <label
                         className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
                           paymentMethod === 'cod'
-                            ? 'border-warm-900 bg-warm-50/50 shadow-xs'
+                            ? 'border-warm-900 bg-warm-50/50 shadow-xs ring-1 ring-warm-900/10'
                             : 'border-warm-200 hover:border-warm-300'
                         }`}
                       >
@@ -749,11 +818,67 @@ export default function CheckoutPage() {
                           <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
                             <FiTruck className="w-3 h-3 text-warm-700" /> Cash on Delivery
                           </p>
-                          <p className="text-[10px] text-warm-500 mt-0.5">Pay in cash upon package delivery</p>
+                          <p className="text-[10px] text-warm-500 mt-0.5">₹{storeSettings.codAdvanceAmount || 99} advance online</p>
+                        </div>
+                      </label>
+                    )}
+
+                    {/* WhatsApp Checkout Option */}
+                    {storeSettings?.whatsappNumber && storeSettings.whatsappNumber.trim() !== '' && (
+                      <label
+                        className={`flex items-center gap-2 p-3 rounded-md border cursor-pointer transition-all ${
+                          paymentMethod === 'whatsapp'
+                            ? 'border-emerald-600 bg-emerald-50/50 shadow-xs ring-1 ring-emerald-600/10'
+                            : 'border-warm-200 hover:border-warm-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="whatsapp"
+                          checked={paymentMethod === 'whatsapp'}
+                          onChange={() => setPaymentMethod('whatsapp')}
+                          className="accent-emerald-600 w-3.5 h-3.5"
+                        />
+                        <div>
+                          <p className="text-[11px] font-bold text-emerald-900 flex items-center gap-1">
+                            <FiMessageSquare className="w-3 h-3 text-emerald-700" /> WhatsApp Order
+                          </p>
+                          <p className="text-[10px] text-emerald-700/80 mt-0.5">Manual order handoff</p>
                         </div>
                       </label>
                     )}
                   </div>
+
+                  {/* COD Advance Breakdown Notice */}
+                  {paymentMethod === 'cod' && isCodAvailable && (
+                    <div className="mt-3 p-3 bg-amber-50/70 border border-amber-200 rounded-md text-[11px] text-amber-900 space-y-1">
+                      <div className="flex justify-between font-medium text-[10px] text-amber-800">
+                        <span>Total Order Amount:</span>
+                        <span>{formatCurrency(total)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-emerald-700 text-[11px]">
+                        <span>Upfront Online Token Advance:</span>
+                        <span>{formatCurrency(Math.min(storeSettings.codAdvanceAmount, total))}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-amber-900 text-[11px] border-t border-amber-200/80 pt-1">
+                        <span>Balance Cash Due on Delivery:</span>
+                        <span>{formatCurrency(Math.max(0, total - Math.min(storeSettings.codAdvanceAmount, total)))}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* WhatsApp Info Notice */}
+                  {paymentMethod === 'whatsapp' && (
+                    <div className="mt-3 p-3 bg-emerald-50/70 border border-emerald-200 rounded-md text-[11px] text-emerald-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1 text-emerald-900">
+                        <FiMessageSquare className="w-3.5 h-3.5 text-emerald-700" /> Direct WhatsApp Checkout
+                      </p>
+                      <p className="text-[10px] text-emerald-800 leading-relaxed">
+                        Your cart summary and shipping details will be sent directly to our store WhatsApp team. No online payment required right now!
+                      </p>
+                    </div>
+                  )}
 
                   {nonCodItems.length > 0 && (
                     <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200/80 rounded-md flex items-start gap-2 text-amber-800 text-[10px] leading-relaxed">
@@ -776,7 +901,7 @@ export default function CheckoutPage() {
 
                   <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
                     {items.map((item) => (
-                      <div key={item.productId} className="flex justify-between text-[11px]">
+                      <div key={item.itemKey || item.productId} className="flex justify-between text-[11px]">
                         <span className="text-warm-600 truncate max-w-[150px]">
                           {item.name} × {item.quantity}
                         </span>
@@ -817,19 +942,27 @@ export default function CheckoutPage() {
                   <button
                     onClick={handleCheckout}
                     disabled={paying || (paymentMethod === 'razorpay' && !razorpayLoaded)}
-                    className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 bg-warm-900 text-white font-medium text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 text-white font-bold text-[11px] rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xs cursor-pointer ${
+                      paymentMethod === 'whatsapp'
+                        ? 'bg-emerald-600 hover:bg-emerald-700'
+                        : 'bg-warm-900 hover:bg-warm-800'
+                    }`}
                   >
                     {paying ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
-                        {paymentMethod === 'cod' ? (
+                        {paymentMethod === 'whatsapp' ? (
                           <>
-                            <FiCheck className="w-2.5 h-2.5" /> Confirm Order (COD)
+                            <FiMessageSquare className="w-3.5 h-3.5" /> Checkout via WhatsApp
+                          </>
+                        ) : paymentMethod === 'cod' ? (
+                          <>
+                            <FiTruck className="w-3.5 h-3.5" /> Pay ₹{Math.min(storeSettings.codAdvanceAmount, total)} Advance & Place COD Order
                           </>
                         ) : (
                           <>
-                            <FiCreditCard className="w-2.5 h-2.5" /> Pay {formatCurrency(total)}
+                            <FiCreditCard className="w-3.5 h-3.5" /> Pay {formatCurrency(total)} Online
                           </>
                         )}
                       </>

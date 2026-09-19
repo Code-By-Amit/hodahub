@@ -5,7 +5,7 @@ import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import { Plus, Edit2, Trash2, X, Check, Tag } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import CustomSelect from '@/components/ui/CustomSelect';
+import NumericInput from '@/components/ui/NumericInput';
 
 export default function AdminCouponsPage() {
   const toast = useToast();
@@ -183,11 +183,9 @@ export default function AdminCouponsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Discount Value ({form.type === 'percent' ? '%' : '₹'}) *
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
+                <NumericInput
                   value={form.value}
-                  onChange={(e) => setForm({ ...form, value: e.target.value })}
+                  onChange={(val) => setForm({ ...form, value: val })}
                   placeholder={form.type === 'percent' ? '20' : '15.00'}
                   className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
                   required
@@ -198,11 +196,9 @@ export default function AdminCouponsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Min Order Amount (₹)
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
+                <NumericInput
                   value={form.minOrderAmount}
-                  onChange={(e) => setForm({ ...form, minOrderAmount: e.target.value })}
+                  onChange={(val) => setForm({ ...form, minOrderAmount: val })}
                   placeholder="0.00"
                   className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
                 />

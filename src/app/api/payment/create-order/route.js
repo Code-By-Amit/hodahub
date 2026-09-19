@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { db } from '@/lib/db';
-import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings } from '@/lib/db/schema';
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings, productAddons, orderItemAddons } from '@/lib/db/schema';
+import { eq, and, inArray, sql, gte } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { createOrderSchema } from '@/lib/validations';
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '@/lib/email';
+import { cleanupAbandonedOrders } from '@/lib/order-cleanup';
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -20,6 +22,9 @@ if (razorpayKeyId && razorpayKeySecret) {
 
 export async function POST(request) {
   try {
+    // Non-blocking opportunistic cleanup of expired abandoned orders
+    cleanupAbandonedOrders().catch(() => {});
+
     const user = await getAuthUser(request);
     const body = await request.json();
 
@@ -75,6 +80,13 @@ export async function POST(request) {
       }
     }
 
+    // Fetch selected add-ons from DB if any
+    const allAddonIds = items.flatMap((i) => i.selectedAddonIds || []);
+    let dbAddons = [];
+    if (allAddonIds.length > 0) {
+      dbAddons = await db.select().from(productAddons).where(and(inArray(productAddons.id, allAddonIds), eq(productAddons.isActive, true)));
+    }
+
     let subtotal = 0;
     const validatedItems = [];
 
@@ -83,24 +95,47 @@ export async function POST(request) {
       if (!product) {
         return NextResponse.json({ error: `Product not found: ${item.productId}` }, { status: 400 });
       }
-      if (!product.isActive) {
-        return NextResponse.json({ error: `${product.name} is currently unavailable` }, { status: 400 });
+      if (!product.isActive || product.isOutOfStock) {
+        return NextResponse.json({ error: `"${product.name}" is currently unavailable or out of stock.` }, { status: 400 });
       }
       if (product.stock < item.quantity) {
         return NextResponse.json(
-          { error: `Insufficient stock for ${product.name}. Only ${product.stock} left in stock.` },
+          { error: `Insufficient stock for "${product.name}". Only ${product.stock} left in stock.` },
           { status: 400 }
         );
       }
 
       const unitPrice = product.discountPrice ? Number(product.discountPrice) : Number(product.price);
-      subtotal += unitPrice * item.quantity;
+      
+      // Calculate selected add-ons price
+      const itemAddons = [];
+      let itemAddonsTotal = 0;
+      if (item.selectedAddonIds && item.selectedAddonIds.length > 0) {
+        for (const addonId of item.selectedAddonIds) {
+          const addon = dbAddons.find((a) => a.id === addonId && a.productId === item.productId);
+          if (addon) {
+            const addonPrice = addon.isFree ? 0 : Number(addon.price);
+            itemAddonsTotal += addonPrice;
+            itemAddons.push({
+              addonId: addon.id,
+              name: addon.name,
+              priceAtPurchase: addonPrice.toFixed(2),
+              imageUrl: addon.imageUrl || null,
+            });
+          }
+        }
+      }
+
+      const itemTotal = (unitPrice + itemAddonsTotal) * item.quantity;
+      subtotal += itemTotal;
 
       validatedItems.push({
         productId: item.productId,
         quantity: item.quantity,
         priceAtPurchase: unitPrice.toFixed(2),
         name: product.name,
+        image: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null,
+        addons: itemAddons,
       });
     }
 
@@ -129,16 +164,146 @@ export async function POST(request) {
     const shippingCharge = subtotal >= minFreeShipping ? 0 : defaultShippingFee;
     const totalAmount = Math.max(0, subtotal - discount + shippingCharge);
 
-    // Handle COD Order Creation
+    // Atomic stock decrement helper wrapped in a single DB transaction
+    async function decrementStockAtomic(itemsToDecrement) {
+      try {
+        await db.transaction(async (tx) => {
+          for (const item of itemsToDecrement) {
+            const res = await tx
+              .update(products)
+              .set({
+                stock: sql`${products.stock} - ${item.quantity}`,
+                isOutOfStock: sql`CASE WHEN ${products.stock} - ${item.quantity} <= 0 THEN true ELSE ${products.isOutOfStock} END`,
+              })
+              .where(and(eq(products.id, item.productId), gte(products.stock, item.quantity)))
+              .returning();
+
+            if (res.length === 0) {
+              const err = new Error(`INSUFFICIENT_STOCK:${item.name}`);
+              err.failedProductName = item.name;
+              throw err;
+            }
+          }
+        });
+        return { success: true };
+      } catch (error) {
+        if (error.failedProductName || error.message?.startsWith('INSUFFICIENT_STOCK:')) {
+          const failedProductName = error.failedProductName || error.message.replace('INSUFFICIENT_STOCK:', '');
+          return { success: false, failedProductName };
+        }
+        throw error;
+      }
+    }
+
+    // Handle COD Order Creation with Advance Token Payment
     if (paymentMethod === 'cod') {
-      // Decrement stock upon order confirmation
-      for (const item of validatedItems) {
-        await db
-          .update(products)
-          .set({ stock: sql`${products.stock} - ${item.quantity}` })
-          .where(eq(products.id, item.productId));
+      const codAdvanceAmountNum = settings ? Number(settings.codAdvanceAmount || 99) : 99;
+      const actualAdvance = Math.min(codAdvanceAmountNum, totalAmount);
+
+      if (actualAdvance > 0) {
+        if (!razorpay) {
+          return NextResponse.json(
+            { error: 'Razorpay keys not configured on server for COD advance payment' },
+            { status: 500 }
+          );
+        }
+
+        const stockResult = await decrementStockAtomic(validatedItems);
+        if (!stockResult.success) {
+          return NextResponse.json(
+            { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
+            { status: 400 }
+          );
+        }
+
+        const advancePaise = Math.round(actualAdvance * 100);
+        const rzpOrder = await razorpay.orders.create({
+          amount: advancePaise,
+          currency: 'INR',
+          receipt: `cod_adv_${Date.now().toString().slice(-10)}`,
+        });
+
+        const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
+        const [order] = await db
+          .insert(orders)
+          .values({
+            userId: user ? user.id : null,
+            guestName: guestName || null,
+            guestEmail: guestEmail || null,
+            guestPhone: guestPhone || null,
+            shippingAddress: shippingAddress || null,
+            status: 'pending',
+            paymentStatus: 'pending',
+            paymentMethod: 'cod',
+            shippingCharge: shippingCharge.toFixed(2),
+            totalAmount: totalAmount.toFixed(2),
+            codAdvanceAmount: actualAdvance.toFixed(2),
+            addressId: addressId || null,
+            couponCode: validCouponCode,
+            discountAmount: discount.toFixed(2),
+            razorpayOrderId: rzpOrder.id,
+            accessCode: guestAccessCode,
+          })
+          .returning();
+
+        // Insert Order Items and their Add-ons
+        for (const item of validatedItems) {
+          const [insertedOrderItem] = await db
+            .insert(orderItems)
+            .values({
+              orderId: order.id,
+              productId: item.productId,
+              productName: item.name,
+              productImage: item.image || null,
+              quantity: item.quantity,
+              priceAtPurchase: item.priceAtPurchase,
+            })
+            .returning();
+
+          if (item.addons && item.addons.length > 0) {
+            await db.insert(orderItemAddons).values(
+              item.addons.map((addon) => ({
+                orderItemId: insertedOrderItem.id,
+                addonId: addon.addonId,
+                name: addon.name,
+                priceAtPurchase: addon.priceAtPurchase,
+                imageUrl: addon.imageUrl || null,
+              }))
+            );
+          }
+        }
+
+        // Status History
+        await db.insert(orderStatusHistory).values({
+          orderId: order.id,
+          status: 'pending',
+          note: `COD order initialized. Awaiting ₹${actualAdvance.toFixed(2)} advance payment.`,
+        });
+
+        return NextResponse.json({
+          orderId: order.id,
+          razorpayOrderId: rzpOrder.id,
+          amount: advancePaise,
+          codAdvanceAmount: actualAdvance.toFixed(2),
+          totalAmount,
+          subtotal,
+          discount,
+          shippingCharge,
+          isCod: true,
+          requiresAdvance: true,
+        });
       }
 
+      // If COD advance is 0 (pure COD without advance)
+      const stockResult = await decrementStockAtomic(validatedItems);
+      if (!stockResult.success) {
+        return NextResponse.json(
+          { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
+          { status: 400 }
+        );
+      }
+
+      const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
       const [order] = await db
         .insert(orders)
         .values({
@@ -152,30 +317,46 @@ export async function POST(request) {
           paymentMethod: 'cod',
           shippingCharge: shippingCharge.toFixed(2),
           totalAmount: totalAmount.toFixed(2),
+          codAdvanceAmount: '0.00',
           addressId: addressId || null,
           couponCode: validCouponCode,
           discountAmount: discount.toFixed(2),
+          accessCode: guestAccessCode,
         })
         .returning();
 
-      // Insert Order Items
-      await db.insert(orderItems).values(
-        validatedItems.map((item) => ({
-          orderId: order.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          priceAtPurchase: item.priceAtPurchase,
-        }))
-      );
+      for (const item of validatedItems) {
+        const [insertedOrderItem] = await db
+          .insert(orderItems)
+          .values({
+            orderId: order.id,
+            productId: item.productId,
+            productName: item.name,
+            productImage: item.image || null,
+            quantity: item.quantity,
+            priceAtPurchase: item.priceAtPurchase,
+          })
+          .returning();
 
-      // Status History
+        if (item.addons && item.addons.length > 0) {
+          await db.insert(orderItemAddons).values(
+            item.addons.map((addon) => ({
+              orderItemId: insertedOrderItem.id,
+              addonId: addon.addonId,
+              name: addon.name,
+              priceAtPurchase: addon.priceAtPurchase,
+              imageUrl: addon.imageUrl || null,
+            }))
+          );
+        }
+      }
+
       await db.insert(orderStatusHistory).values({
         orderId: order.id,
         status: 'confirmed',
         note: user ? 'COD order placed by user.' : 'COD order placed by guest.',
       });
 
-      // Send Emails
       const targetEmail = user?.email || guestEmail;
       if (targetEmail) {
         sendOrderConfirmationEmail(targetEmail, order, validatedItems);
@@ -186,7 +367,9 @@ export async function POST(request) {
 
       return NextResponse.json({
         orderId: order.id,
+        accessCode: order.accessCode,
         isCod: true,
+        requiresAdvance: false,
         totalAmount,
         message: 'COD Order confirmed!',
       });
@@ -200,6 +383,14 @@ export async function POST(request) {
       );
     }
 
+    const stockResult = await decrementStockAtomic(validatedItems);
+    if (!stockResult.success) {
+      return NextResponse.json(
+        { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
+        { status: 400 }
+      );
+    }
+
     const amountInPaise = Math.round(totalAmount * 100);
 
     const rzpOrder = await razorpay.orders.create({
@@ -208,14 +399,7 @@ export async function POST(request) {
       receipt: `order_${Date.now().toString().slice(-10)}`,
     });
 
-    // Decrement stock only after Razorpay order creation succeeds
-    for (const item of validatedItems) {
-      await db
-        .update(products)
-        .set({ stock: sql`${products.stock} - ${item.quantity}` })
-        .where(eq(products.id, item.productId));
-    }
-
+    const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
     const [order] = await db
       .insert(orders)
       .values({
@@ -233,18 +417,36 @@ export async function POST(request) {
         couponCode: validCouponCode,
         discountAmount: discount.toFixed(2),
         razorpayOrderId: rzpOrder.id,
+        accessCode: guestAccessCode,
       })
       .returning();
 
-    // Insert Order Items
-    await db.insert(orderItems).values(
-      validatedItems.map((item) => ({
-        orderId: order.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        priceAtPurchase: item.priceAtPurchase,
-      }))
-    );
+    // Insert Order Items and their Add-ons
+    for (const item of validatedItems) {
+      const [insertedOrderItem] = await db
+        .insert(orderItems)
+        .values({
+          orderId: order.id,
+          productId: item.productId,
+          productName: item.name,
+          productImage: item.image || null,
+          quantity: item.quantity,
+          priceAtPurchase: item.priceAtPurchase,
+        })
+        .returning();
+
+      if (item.addons && item.addons.length > 0) {
+        await db.insert(orderItemAddons).values(
+          item.addons.map((addon) => ({
+            orderItemId: insertedOrderItem.id,
+            addonId: addon.addonId,
+            name: addon.name,
+            priceAtPurchase: addon.priceAtPurchase,
+            imageUrl: addon.imageUrl || null,
+          }))
+        );
+      }
+    }
 
     // Status History
     await db.insert(orderStatusHistory).values({
@@ -255,6 +457,7 @@ export async function POST(request) {
 
     return NextResponse.json({
       orderId: order.id,
+      accessCode: order.accessCode,
       razorpayOrderId: rzpOrder.id,
       amount: amountInPaise,
       totalAmount,

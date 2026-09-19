@@ -13,16 +13,24 @@ export async function POST(request) {
     const webhookSecret =
       process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
 
-    if (webhookSecret && signature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(rawBody)
-        .digest('hex');
+    if (!webhookSecret) {
+      console.error('[WEBHOOK ERROR] Neither RAZORPAY_WEBHOOK_SECRET nor RAZORPAY_KEY_SECRET is configured.');
+      return NextResponse.json({ error: 'Webhook secret missing on server' }, { status: 500 });
+    }
 
-      if (expectedSignature !== signature) {
-        console.warn('[WEBHOOK] Invalid Razorpay webhook signature');
-        return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
-      }
+    if (!signature) {
+      console.warn('[WEBHOOK ERROR] Missing x-razorpay-signature header');
+      return NextResponse.json({ error: 'Missing webhook signature header' }, { status: 400 });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(rawBody)
+      .digest('hex');
+
+    if (expectedSignature !== signature) {
+      console.warn('[WEBHOOK ERROR] Invalid Razorpay webhook signature');
+      return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
     }
 
     const payload = JSON.parse(rawBody);
@@ -95,10 +103,15 @@ export async function POST(request) {
           .where(eq(orderItems.orderId, order.id));
 
         for (const item of items) {
-          await db
-            .update(products)
-            .set({ stock: sql`${products.stock} + ${item.quantity}` })
-            .where(eq(products.id, item.productId));
+          if (item.productId) {
+            await db
+              .update(products)
+              .set({
+                stock: sql`${products.stock} + ${item.quantity}`,
+                isOutOfStock: sql`CASE WHEN ${products.stock} + ${item.quantity} > 0 THEN false ELSE ${products.isOutOfStock} END`,
+              })
+              .where(eq(products.id, item.productId));
+          }
         }
       }
     }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Star, Filter, RotateCcw } from 'lucide-react';
+import NumericInput from '@/components/ui/NumericInput';
 
 export default function FilterPanel({
   categories = [],
@@ -107,16 +108,14 @@ export default function FilterPanel({
         {openSections.price && (
           <div className="mt-2 space-y-2">
             <div className="flex items-center gap-2">
-              <input
-                type="number"
+              <NumericInput
                 value={minPrice}
                 onChange={(e) => setMinPrice && setMinPrice(e.target.value)}
                 placeholder="Min"
                 className="w-full px-2 py-1 border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900"
               />
               <span className="text-warm-400 font-bold">–</span>
-              <input
-                type="number"
+              <NumericInput
                 value={maxPrice}
                 onChange={(e) => setMaxPrice && setMaxPrice(e.target.value)}
                 placeholder="Max"

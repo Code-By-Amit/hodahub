@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { coupons } from '@/lib/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 export async function POST(request) {
   try {
+    const ip = getClientIP(request);
+    const rateLimit = await checkRateLimit(`coupon_validate:${ip}`, 10, 60);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many coupon validation attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const { code, subtotal } = await request.json();
 
     if (!code) return NextResponse.json({ error: 'Coupon code is required' }, { status: 400 });

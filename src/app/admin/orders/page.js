@@ -6,10 +6,12 @@ import Pagination from '@/components/ui/Pagination';
 import CustomSelect from '@/components/ui/CustomSelect';
 
 import { formatCurrency } from '@/lib/utils';
+import { Phone } from 'lucide-react';
 
 const statusColors = {
   pending: 'bg-amber-100 text-amber-800',
   confirmed: 'bg-blue-100 text-blue-800',
+  packed: 'bg-indigo-100 text-indigo-800',
   shipped: 'bg-purple-100 text-purple-800',
   delivered: 'bg-emerald-100 text-emerald-800',
   cancelled: 'bg-rose-100 text-rose-800',
@@ -20,6 +22,7 @@ const statusOptions = [
   { value: 'payment_pending', label: 'Payment Pending' },
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
+  { value: 'packed', label: 'Packed' },
   { value: 'shipped', label: 'Shipped' },
   { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
@@ -41,7 +44,7 @@ export default function AdminOrdersPage() {
       if (statusFilter) params.set('status', statusFilter);
       const res = await fetch(`/api/admin/orders?${params}`); const data = await res.json();
       setOrders(data.orders || []); setPagination(data.pagination || pagination);
-    } catch {} setLoading(false);
+    } catch { } setLoading(false);
   }
 
   async function handleMarkPaid(e, orderId) {
@@ -55,7 +58,7 @@ export default function AdminOrdersPage() {
       if (res.ok) {
         fetchOrders();
       }
-    } catch {}
+    } catch { }
   }
 
   return (
@@ -95,7 +98,7 @@ export default function AdminOrdersPage() {
                 onClick={() => router.push(`/admin/orders/${o.id}`)}
                 className="hover:bg-warm-50/50 transition-colors cursor-pointer"
               >
-                <td className="px-3 py-2.5 font-mono text-[10px] text-warm-900 font-medium">{o.id.slice(0,8)}</td>
+                <td className="px-3 py-2.5 font-mono text-[10px] text-warm-900 font-medium">{o.id.slice(0, 8)}</td>
                 <td className="px-3 py-2.5">
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -110,7 +113,10 @@ export default function AdminOrdersPage() {
                     </div>
                     <p className="text-warm-400 text-[10px]">{o.userEmail || o.guestEmail}</p>
                     {(o.userPhone || o.guestPhone) && (
-                      <p className="text-warm-500 text-[10px] font-mono">📞 {o.userPhone || o.guestPhone}</p>
+                      <p className="flex items-center gap-1 text-warm-500 text-[10px] font-mono">
+                        <Phone className="w-1.5 h-1.5 shrink-0" />
+                        <span>{o.userPhone || o.guestPhone}</span>
+                      </p>
                     )}
                   </div>
                 </td>

@@ -29,6 +29,7 @@ function SearchContent() {
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allCategoriesList, setAllCategoriesList] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
@@ -68,6 +69,7 @@ function SearchContent() {
       const res = await fetch('/api/categories');
       const data = await res.json();
       setCategories(data.categories || []);
+      setAllCategoriesList(data.allCategories || data.categories || []);
     } catch {}
   }
 
@@ -96,6 +98,12 @@ function SearchContent() {
   const hasFilters = Boolean(currentCategory || currentMinPrice || currentMaxPrice);
   const selectedCategoryObj = categories.find((c) => c.slug === currentCategory);
 
+  const matchingCategories = query.trim()
+    ? allCategoriesList.filter((c) =>
+        c.name.toLowerCase().includes(query.trim().toLowerCase())
+      )
+    : [];
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
       <Breadcrumbs items={[{ label: 'Search' }]} />
@@ -103,10 +111,10 @@ function SearchContent() {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-warm-200/80 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-warm-900 tracking-tight">
-            {query ? `Search results for "${query}"` : 'Search Products'}
+            {query ? `Search results for "${query}"` : 'Search Catalog'}
           </h1>
           <p className="text-xs sm:text-sm text-warm-500 mt-1">
-            {pagination.total} product{pagination.total !== 1 ? 's' : ''} found
+            {matchingCategories.length} category match{matchingCategories.length !== 1 ? 'es' : ''} &bull; {pagination.total} product{pagination.total !== 1 ? 's' : ''} found
           </p>
         </div>
 
@@ -130,6 +138,43 @@ function SearchContent() {
           </div>
         </div>
       </div>
+
+      {/* Matching Categories Section */}
+      {matchingCategories.length > 0 && (
+        <div className="bg-warm-50/70 border border-warm-200/80 rounded-xl p-4 sm:p-5 space-y-3">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-warm-800 flex items-center gap-2">
+            <Package className="w-4 h-4 text-brand-600" />
+            Matching Categories ({matchingCategories.length})
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {matchingCategories.map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/categories/${cat.slug}`}
+                className="group flex items-center gap-3 p-2.5 bg-white border border-warm-200/90 rounded-lg hover:border-brand-500 hover:shadow-md transition-all"
+              >
+                {cat.imageUrl ? (
+                  <img
+                    src={cat.imageUrl}
+                    alt={cat.name}
+                    className="w-9 h-9 rounded-md object-cover border border-warm-200 shrink-0 group-hover:scale-105 transition-transform"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-md bg-warm-100 text-warm-500 flex items-center justify-center shrink-0">
+                    <Search className="w-4 h-4" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-warm-900 group-hover:text-brand-600 truncate transition-colors">
+                    {cat.name}
+                  </p>
+                  <p className="text-[10px] text-warm-400 truncate">Browse Category</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active Filter Chips */}
       {hasFilters && (

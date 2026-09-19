@@ -25,6 +25,19 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Address, city, state, and pincode are required' }, { status: 400 });
     }
 
+    const cleanPincode = String(pincode).trim();
+    if (!/^\d{6}$/.test(cleanPincode)) {
+      return NextResponse.json({ error: 'Pincode must be a valid 6-digit number' }, { status: 400 });
+    }
+
+    let cleanPhone = null;
+    if (phone) {
+      cleanPhone = String(phone).replace(/\D/g, '');
+      if (!/^\d{10}$/.test(cleanPhone)) {
+        return NextResponse.json({ error: 'Phone number must be a valid 10-digit mobile number' }, { status: 400 });
+      }
+    }
+
     const [address] = await db.insert(addresses).values({
       userId: user.id,
       label: label || null,

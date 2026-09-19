@@ -39,7 +39,7 @@ export async function GET(request, { params }) {
         comment: reviews.comment,
         mediaUrls: reviews.mediaUrls,
         createdAt: reviews.createdAt,
-        userName: users.name,
+        userName: sql`COALESCE(${reviews.userName}, ${users.name}, 'Anonymous Customer')`,
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.userId, users.id))
@@ -71,10 +71,21 @@ export async function POST(request, { params }) {
     }
 
     const { slug } = await params;
-    const { rating, comment, mediaUrls } = await request.json();
+    const body = await request.json();
 
-    if (!rating || rating < 1 || rating > 5) {
+    const { rating, comment, mediaUrls } = body;
+    if (!rating && (!comment || !comment.trim())) {
+      return NextResponse.json({ error: 'Please provide either a star rating or a review comment' }, { status: 400 });
+    }
+    if (rating && (rating < 1 || rating > 5)) {
       return NextResponse.json({ error: 'Rating must be 1-5' }, { status: 400 });
+    }
+
+    let sanitizedMediaUrls = [];
+    if (Array.isArray(mediaUrls)) {
+      sanitizedMediaUrls = mediaUrls
+        .filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url.trim()))
+        .slice(0, 5);
     }
 
     // Find product
@@ -105,16 +116,17 @@ export async function POST(request, { params }) {
       .values({
         productId: product.id,
         userId: user.id,
-        rating,
+        userName: user.name || null,
+        rating: rating || null,
         comment: comment?.trim() || null,
-        mediaUrls: Array.isArray(mediaUrls) ? mediaUrls : [],
+        mediaUrls: sanitizedMediaUrls,
       })
       .returning();
 
-    // Update product rating
+    // Update product rating (averaging only non-null ratings)
     const [stats] = await db
       .select({
-        avg: sql`ROUND(AVG(${reviews.rating})::numeric, 2)`,
+        avg: sql`COALESCE(ROUND(AVG(CASE WHEN ${reviews.rating} IS NOT NULL THEN ${reviews.rating} END)::numeric, 2), 0)`,
         count: sql`count(*)::int`,
       })
       .from(reviews)

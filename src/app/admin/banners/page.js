@@ -5,9 +5,11 @@ import Image from 'next/image';
 import Modal from '@/components/ui/Modal';
 import ImageUpload from '@/components/ui/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
-import { Plus, Edit2, Trash2, Eye, EyeOff, Layers, ExternalLink } from 'lucide-react';
+import NumericInput from '@/components/ui/NumericInput';
+import { Edit2, ExternalLink, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 
 const PRESET_COLORS = [
+  { label: 'No Color (Transparent)', value: '' },
   { label: 'Dark Neutral', value: '#18181b' },
   { label: 'Slate Dark', value: '#0f172a' },
   { label: 'Indigo Deep', value: '#1e1b4b' },
@@ -28,7 +30,7 @@ export default function AdminBannersPage() {
     title: '',
     subtitle: '',
     imageUrl: '',
-    bgColor: '#18181b',
+    bgColor: '',
     linkUrl: '',
     isActive: true,
     sortOrder: 0,
@@ -56,7 +58,7 @@ export default function AdminBannersPage() {
       title: '',
       subtitle: '',
       imageUrl: '',
-      bgColor: '#18181b',
+      bgColor: '',
       linkUrl: '/products',
       isActive: true,
       sortOrder: banners.length,
@@ -278,24 +280,32 @@ export default function AdminBannersPage() {
 
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Banner Background Color
+              Banner Background Color (Optional)
             </label>
-            <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c.value}
                   type="button"
                   onClick={() => setForm({ ...form, bgColor: c.value })}
-                  className={`w-6 h-6 rounded-full border-2 transition-all ${
-                    form.bgColor === c.value ? 'border-warm-900 scale-110 shadow-xs' : 'border-transparent opacity-80 hover:opacity-100'
+                  className={`px-2 py-1 text-[10px] rounded-md border transition-all flex items-center gap-1 ${
+                    form.bgColor === c.value
+                      ? 'border-warm-900 bg-warm-900 text-white font-bold shadow-xs'
+                      : 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50'
                   }`}
-                  style={{ backgroundColor: c.value }}
                   title={c.label}
-                />
+                >
+                  {c.value ? (
+                    <span className="w-2.5 h-2.5 rounded-full inline-block border border-black/10 shrink-0" style={{ backgroundColor: c.value }} />
+                  ) : (
+                    <span className="w-2.5 h-2.5 rounded-full inline-block border border-warm-300 bg-warm-100 shrink-0" />
+                  )}
+                  <span>{c.label}</span>
+                </button>
               ))}
               <input
                 type="color"
-                value={form.bgColor}
+                value={form.bgColor || '#18181b'}
                 onChange={(e) => setForm({ ...form, bgColor: e.target.value })}
                 className="w-7 h-7 rounded-md cursor-pointer border border-warm-200 p-0"
               />
@@ -331,11 +341,12 @@ export default function AdminBannersPage() {
               <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
                 Sort Order
               </label>
-              <input
-                type="number"
+              <NumericInput
+                allowDecimals={false}
+                min={0}
                 value={form.sortOrder}
-                onChange={(e) => setForm({ ...form, sortOrder: parseInt(e.target.value || '0') })}
-                className="w-full px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
+                onChange={(val) => setForm({ ...form, sortOrder: parseInt(val || '0') })}
+                className="w-full px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all font-mono"
               />
             </div>
           </div>

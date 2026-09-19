@@ -7,7 +7,7 @@ import {
 } from '@/lib/auth';
 
 // Routes that require authentication
-const protectedRoutes = ['/orders'];
+const protectedRoutes = ['/orders', '/profile'];
 
 // Routes that require admin role
 const adminRoutes = ['/admin'];
@@ -62,5 +62,5 @@ export function proxy(request) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/orders/:path*'],
+  matcher: ['/admin/:path*', '/orders/:path*', '/profile/:path*'],
 };

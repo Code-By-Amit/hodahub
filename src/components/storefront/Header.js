@@ -140,21 +140,36 @@ export default function Header() {
 
                     {categories.length > 0 ? (
                       categories.slice(0, 8).map((cat) => (
-                        <Link
-                          key={cat.id}
-                          href={`/categories/${cat.slug}`}
-                          onClick={() => setCategoriesOpen(false)}
-                          className="flex items-center gap-2.5 px-2 py-1 rounded-md text-[12px] font-semibold text-warm-700 hover:text-warm-900 hover:bg-warm-50 transition-colors"
-                        >
-                          {cat.imageUrl ? (
-                            <img src={cat.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-warm-200 shrink-0" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-md bg-warm-100 text-warm-500 flex items-center justify-center shrink-0">
-                              <FiPackage className="w-3.5 h-3.5" />
+                        <div key={cat.id} className="space-y-0.5">
+                          <Link
+                            href={`/categories/${cat.slug}`}
+                            onClick={() => setCategoriesOpen(false)}
+                            className="flex items-center gap-2.5 px-2 py-1 rounded-md text-[12px] font-semibold text-warm-700 hover:text-warm-900 hover:bg-warm-50 transition-colors"
+                          >
+                            {cat.imageUrl ? (
+                              <img src={cat.imageUrl} alt="" className="w-6 h-6 rounded-md object-cover border border-warm-200 shrink-0" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-md bg-warm-100 text-warm-500 flex items-center justify-center shrink-0">
+                                <FiPackage className="w-3.5 h-3.5" />
+                              </div>
+                            )}
+                            <span>{cat.name}</span>
+                          </Link>
+                          {Array.isArray(cat.children) && cat.children.length > 0 && (
+                            <div className="pl-8 space-y-0.5 border-l-2 border-warm-100 ml-3 my-0.5">
+                              {cat.children.map((sub) => (
+                                <Link
+                                  key={sub.id}
+                                  href={`/categories/${sub.slug}`}
+                                  onClick={() => setCategoriesOpen(false)}
+                                  className="block px-2 py-0.5 text-[10px] font-medium text-warm-500 hover:text-brand-600 transition-colors truncate"
+                                >
+                                  {sub.name}
+                                </Link>
+                              ))}
                             </div>
                           )}
-                          <span>{cat.name}</span>
-                        </Link>
+                        </div>
                       ))
                     ) : (
                       <p className="text-[14px] text-warm-400 p-2 text-center">Loading categories...</p>
@@ -416,6 +431,7 @@ export default function Header() {
 function SearchOverlay({ onClose }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [categoryResults, setCategoryResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
   const timerRef = useRef(null);
@@ -431,15 +447,30 @@ function SearchOverlay({ onClose }) {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (!query.trim()) {
       setResults([]);
+      setCategoryResults([]);
       return;
     }
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/products?search=${encodeURIComponent(query)}&limit=6`);
-        const data = await res.json();
-        setResults(data.products || []);
-      } catch { setResults([]); }
+        const [prodRes, catRes] = await Promise.all([
+          fetch(`/api/products?search=${encodeURIComponent(query)}&limit=6`),
+          fetch(`/api/categories`),
+        ]);
+        const prodData = await prodRes.json();
+        const catData = await catRes.json();
+        
+        setResults(prodData.products || []);
+        
+        const allCats = catData.allCategories || catData.categories || [];
+        const matched = allCats.filter((c) =>
+          c.name.toLowerCase().includes(query.trim().toLowerCase())
+        );
+        setCategoryResults(matched.slice(0, 4));
+      } catch {
+        setResults([]);
+        setCategoryResults([]);
+      }
       setLoading(false);
     }, 300);
   }, [query]);
@@ -467,7 +498,7 @@ function SearchOverlay({ onClose }) {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search products..."
+              placeholder="Search products or categories..."
               className="flex-1 px-3 py-1 text-sm text-warm-900 placeholder-warm-400 outline-none"
             />
             <button type="button" onClick={onClose} className="p-1.5 text-warm-400 hover:text-warm-600">
@@ -476,34 +507,66 @@ function SearchOverlay({ onClose }) {
           </form>
 
           {query.trim() && (
-            <div className="max-h-72 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto divide-y divide-warm-100">
               {loading ? (
                 <div className="p-6 text-center text-warm-400 text-xs">Searching...</div>
-              ) : results.length > 0 ? (
-                <div className="py-1.5">
-                  {results.map((product) => (
-                    <Link
-                      key={product.id}
-                      href={`/products/${product.slug}`}
-                      onClick={onClose}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-warm-50 transition-colors"
-                    >
-                      <div className="w-10 h-10 bg-warm-100 rounded-md overflow-hidden shrink-0">
-                        {product.images?.[0] && (
-                          <img src={product.images[0]} alt="" className="w-full h-full object-cover" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-warm-900 truncate">{product.name}</p>
-                        <p className="text-xs text-brand-600 font-semibold">
-                          ${product.discountPrice || product.price}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+              ) : categoryResults.length === 0 && results.length === 0 ? (
+                <div className="p-6 text-center text-warm-400 text-xs">No products or categories found</div>
               ) : (
-                <div className="p-6 text-center text-warm-400 text-xs">No products found</div>
+                <>
+                  {/* Category Results */}
+                  {categoryResults.length > 0 && (
+                    <div className="p-2 bg-warm-50/50">
+                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-warm-500">
+                        Categories
+                      </div>
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        {categoryResults.map((cat) => (
+                          <Link
+                            key={cat.id}
+                            href={`/categories/${cat.slug}`}
+                            onClick={onClose}
+                            className="flex items-center gap-2 p-2 bg-white border border-warm-200 rounded-md hover:border-brand-500 transition-colors"
+                          >
+                            <div className="w-6 h-6 rounded bg-warm-100 flex items-center justify-center shrink-0">
+                              <FiGrid className="w-3.5 h-3.5 text-warm-600" />
+                            </div>
+                            <span className="text-xs font-semibold text-warm-800 truncate">{cat.name}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Product Results */}
+                  {results.length > 0 && (
+                    <div className="py-1.5">
+                      <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-warm-500">
+                        Products
+                      </div>
+                      {results.map((product) => (
+                        <Link
+                          key={product.id}
+                          href={`/products/${product.slug}`}
+                          onClick={onClose}
+                          className="flex items-center gap-3 px-4 py-2 hover:bg-warm-50 transition-colors"
+                        >
+                          <div className="w-10 h-10 bg-warm-100 rounded-md overflow-hidden shrink-0">
+                            {product.images?.[0] && (
+                              <img src={product.images[0]} alt="" className="w-full h-full object-cover" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-warm-900 truncate">{product.name}</p>
+                            <p className="text-xs text-brand-600 font-semibold">
+                              ${product.discountPrice || product.price}
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

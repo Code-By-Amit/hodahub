@@ -1,7 +1,13 @@
 import { Resend } from 'resend';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM_EMAIL = 'HodaHub <onboarding@resend.dev>';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'HodaHub <onboarding@resend.dev>';
+
+function formatError(error) {
+  if (!error) return null;
+  if (typeof error === 'string') return error;
+  return error.message || error.name || JSON.stringify(error);
+}
 
 /**
  * Send OTP Verification Email
@@ -42,13 +48,13 @@ export async function sendOTPEmail(email, otp) {
 
     if (error) {
       console.error('Resend API error:', error);
-      return { success: false, error };
+      return { success: false, error: formatError(error) };
     }
 
     return { success: true, data };
   } catch (err) {
     console.error('Failed to send OTP email:', err);
-    return { success: false, error: err.message };
+    return { success: false, error: formatError(err) };
   }
 }
 

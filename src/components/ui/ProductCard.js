@@ -198,7 +198,7 @@ export default function ProductCard({ product, variant = 'default' }) {
             </div>
 
             {/* Quick actions */}
-            <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+            <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 z-10">
               <button
                 className={`w-6 h-6 rounded-full shadow-xs flex items-center justify-center transition-all ${isWishlisted
                   ? 'bg-rose-500 text-white hover:bg-rose-600'
@@ -219,7 +219,7 @@ export default function ProductCard({ product, variant = 'default' }) {
             </div>
 
             {/* Add to cart button overlay */}
-            <div className="absolute bottom-1.5 left-1.5 right-1.5 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-200 z-10">
+            <div className="absolute bottom-1.5 left-1.5 right-1.5 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto translate-y-1 group-hover:translate-y-0 transition-all duration-200 z-10">
               <button
                 onClick={handleAddToCart}
                 className="w-full py-1.5 bg-warm-900 text-white text-[10px] font-semibold rounded-md hover:bg-warm-800 transition-colors flex items-center justify-center gap-1 shadow-sm"

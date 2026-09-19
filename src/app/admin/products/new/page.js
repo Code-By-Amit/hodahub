@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, Check, Package } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
 import CustomSelect from '@/components/ui/CustomSelect';
+import NumericInput from '@/components/ui/NumericInput';
 
 export default function NewProductPage() {
   return <ProductForm />;
@@ -29,11 +30,22 @@ export function ProductForm({ initialData, productId }) {
     stock: '0',
     images: [],
     specifications: [],
+    addons: [],
     productLink: '',
     isActive: true,
     codAvailable: true,
     ...initialData,
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setForm((prev) => ({
+        ...prev,
+        ...initialData,
+        addons: initialData.addons || [],
+      }));
+    }
+  }, [initialData]);
 
   useEffect(() => {
     fetch('/api/admin/categories')
@@ -70,10 +82,33 @@ export function ProductForm({ initialData, productId }) {
     });
   };
 
+  // Add-ons Row Helpers
+  const addAddonRow = () => {
+    setForm((prev) => ({
+      ...prev,
+      addons: [...(prev.addons || []), { name: '', price: '0', isFree: false, isActive: true }],
+    }));
+  };
+
+  const removeAddonRow = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      addons: (prev.addons || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateAddonRow = (index, field, val) => {
+    setForm((prev) => {
+      const updated = [...(prev.addons || [])];
+      updated[index] = { ...updated[index], [field]: val };
+      return { ...prev, addons: updated };
+    });
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name || !form.slug || !form.price) {
-      toast.error('Name, slug, and price are required');
+    if (!form.name || !form.slug || !form.price || !form.categoryId) {
+      toast.error('Name, slug, price, and Category are required');
       return;
     }
     setLoading(true);
@@ -82,6 +117,16 @@ export function ProductForm({ initialData, productId }) {
     const cleanSpecs = (form.specifications || []).filter(
       (s) => s.label.trim() !== '' && s.value.trim() !== ''
     );
+
+    // Clean addon rows
+    const cleanAddons = (form.addons || [])
+      .filter((a) => a.name.trim() !== '')
+      .map((a) => ({
+        name: a.name.trim(),
+        price: parseFloat(a.price) || 0,
+        isFree: a.isFree === true,
+        isActive: a.isActive !== false,
+      }));
 
     try {
       const url = isEditing ? `/api/admin/products/${productId}` : '/api/admin/products';
@@ -94,8 +139,9 @@ export function ProductForm({ initialData, productId }) {
           price: parseFloat(form.price),
           discountPrice: form.discountPrice ? parseFloat(form.discountPrice) : null,
           stock: parseInt(form.stock) || 0,
-          categoryId: form.categoryId || null,
+          categoryId: form.categoryId,
           specifications: cleanSpecs,
+          addons: cleanAddons,
         }),
       });
 
@@ -114,7 +160,7 @@ export function ProductForm({ initialData, productId }) {
   }
 
   const categoryOptions = [
-    { value: '', label: 'None (Uncategorized)' },
+    { value: '', label: 'Select category (Required)...' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
   ];
 
@@ -237,11 +283,9 @@ export function ProductForm({ initialData, productId }) {
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                 Regular Price ($) *
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <NumericInput
                 value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                onChange={(val) => setForm({ ...form, price: val })}
                 className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
                 placeholder="99.99"
                 required
@@ -252,11 +296,9 @@ export function ProductForm({ initialData, productId }) {
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                 Sale Price ($)
               </label>
-              <input
-                type="number"
-                step="0.01"
+              <NumericInput
                 value={form.discountPrice || ''}
-                onChange={(e) => setForm({ ...form, discountPrice: e.target.value })}
+                onChange={(val) => setForm({ ...form, discountPrice: val })}
                 className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
                 placeholder="79.99"
               />
@@ -266,10 +308,11 @@ export function ProductForm({ initialData, productId }) {
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                 Available Stock *
               </label>
-              <input
-                type="number"
+              <NumericInput
+                allowDecimals={false}
+                min={0}
                 value={form.stock}
-                onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                onChange={(val) => setForm({ ...form, stock: val })}
                 className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
                 required
               />
@@ -277,7 +320,7 @@ export function ProductForm({ initialData, productId }) {
 
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Category
+                Category *
               </label>
               <CustomSelect
                 options={categoryOptions}
@@ -376,6 +419,88 @@ export function ProductForm({ initialData, productId }) {
                     title="Remove specification"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Section 5: Product Add-ons Builder (Part 5) */}
+        <div className="bg-white border border-warm-200 rounded-md p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-warm-100 pb-2">
+            <div>
+              <h2 className="text-[13px] font-bold text-warm-900">Product Add-ons (Optional Sub-products)</h2>
+              <p className="text-[10px] text-warm-500">Configure optional add-ons like premium gift boxes, extra straps, warranty, etc.</p>
+            </div>
+            <button
+              type="button"
+              onClick={addAddonRow}
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-50 text-brand-700 text-[11px] font-semibold rounded-md hover:bg-brand-100 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Add Add-on Option</span>
+            </button>
+          </div>
+
+          {(form.addons || []).length === 0 ? (
+            <div className="text-center py-4 border-2 border-dashed border-warm-100 rounded-md text-warm-400 text-[11px]">
+              No add-ons created for this product yet. Click &quot;Add Add-on Option&quot; to offer extras at purchase time.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {form.addons.map((addon, index) => (
+                <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-warm-50/60 border border-warm-200 rounded-md text-[11px]">
+                  {/* Thumbnail Uploader */}
+                  <div className="shrink-0">
+                    <label className="block text-[9px] font-bold text-warm-600 uppercase tracking-wider mb-1">
+                      Add-on Photo
+                    </label>
+                    <ImageUpload
+                      type="review-media"
+                      images={addon.imageUrl ? [addon.imageUrl] : []}
+                      onChange={(urls) => updateAddonRow(index, 'imageUrl', urls[0] || '')}
+                      maxFiles={1}
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-1.5 min-w-0">
+                    <input
+                      type="text"
+                      placeholder="Add-on Name (e.g. Premium Gift Box)"
+                      value={addon.name || ''}
+                      onChange={(e) => updateAddonRow(index, 'name', e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                    />
+                    <div className="flex items-center gap-3">
+                      <div className="w-28">
+                        <NumericInput
+                          disabled={addon.isFree}
+                          placeholder="Price ($)"
+                          value={addon.isFree ? '0' : addon.price || ''}
+                          onChange={(val) => updateAddonRow(index, 'price', val)}
+                          className="w-full px-2.5 py-1 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 disabled:bg-warm-100 disabled:text-warm-400"
+                        />
+                      </div>
+                      <label className="flex items-center gap-1 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={addon.isFree || false}
+                          onChange={(e) => updateAddonRow(index, 'isFree', e.target.checked)}
+                          className="accent-brand-600 w-3.5 h-3.5 rounded"
+                        />
+                        <span className="text-[10px] font-semibold text-warm-700">Free</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => removeAddonRow(index)}
+                    className="p-1.5 text-warm-400 hover:text-red-600 rounded-md transition-colors self-end sm:self-center"
+                    title="Remove add-on"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
