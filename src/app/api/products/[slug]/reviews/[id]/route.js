@@ -20,7 +20,14 @@ export async function PUT(request, { params }) {
       );
     }
 
-    const { rating, comment, imageUrl } = result.data;
+    const { rating, comment, mediaUrls, imageUrl } = result.data;
+
+    let sanitizedMediaUrls = [];
+    if (Array.isArray(mediaUrls)) {
+      sanitizedMediaUrls = mediaUrls
+        .filter((url) => typeof url === 'string' && /^https?:\/\//i.test(url.trim()))
+        .slice(0, 5);
+    }
 
     // Check review author
     const [existing] = await db
@@ -36,9 +43,10 @@ export async function PUT(request, { params }) {
     const [updated] = await db
       .update(reviews)
       .set({
-        rating,
-        comment: comment || null,
+        rating: rating || null,
+        comment: comment?.trim() || null,
         imageUrl: imageUrl || null,
+        mediaUrls: sanitizedMediaUrls,
       })
       .where(eq(reviews.id, id))
       .returning();
@@ -46,7 +54,7 @@ export async function PUT(request, { params }) {
     // Recalculate rating
     const [stats] = await db
       .select({
-        avg: sql`ROUND(AVG(${reviews.rating})::numeric, 2)`,
+        avg: sql`COALESCE(ROUND(AVG(CASE WHEN ${reviews.rating} IS NOT NULL THEN ${reviews.rating} END)::numeric, 2), 0)`,
         count: sql`count(*)::int`,
       })
       .from(reviews)

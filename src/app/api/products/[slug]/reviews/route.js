@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { reviews, users, products as productsTable } from '@/lib/db/schema';
-import { eq, and, desc, sql, or } from 'drizzle-orm';
+import { reviews, users, products as productsTable, orders, orderItems } from '@/lib/db/schema';
+import { eq, and, desc, sql, or, ne } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { reviewSchema } from '@/lib/validations';
+import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 function getProductWhereCondition(slug) {
   const rawSlug = slug || '';
@@ -53,18 +55,52 @@ export async function GET(request, { params }) {
       .from(reviews)
       .where(and(eq(reviews.productId, product.id), eq(reviews.isHidden, false)));
 
+    let userHasOrdered = false;
+    let userReview = null;
+
+    const user = await getAuthUser(request);
+    if (user) {
+      const userOrders = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .innerJoin(orderItems, eq(orders.id, orderItems.orderId))
+        .where(
+          and(
+            eq(orders.userId, user.id),
+            eq(orderItems.productId, product.id),
+            ne(orders.status, 'cancelled')
+          )
+        )
+        .limit(1);
+
+      userHasOrdered = userOrders.length > 0;
+
+      const [existingReview] = await db
+        .select({
+          id: reviews.id,
+          rating: reviews.rating,
+          comment: reviews.comment,
+          mediaUrls: reviews.mediaUrls,
+          createdAt: reviews.createdAt,
+        })
+        .from(reviews)
+        .where(and(eq(reviews.productId, product.id), eq(reviews.userId, user.id)))
+        .limit(1);
+
+      userReview = existingReview || null;
+    }
+
     return NextResponse.json({
       reviews: reviewList,
       pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
+      userHasOrdered,
+      userReview,
     });
   } catch (error) {
     console.error('Reviews GET error:', error);
     return NextResponse.json({ error: 'Failed to fetch reviews' }, { status: 500 });
   }
 }
-
-import { reviewSchema } from '@/lib/validations';
-import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function POST(request, { params }) {
   try {
@@ -104,6 +140,27 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
+    // Check purchase history (must have non-cancelled order containing this product)
+    const userOrders = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .innerJoin(orderItems, eq(orders.id, orderItems.orderId))
+      .where(
+        and(
+          eq(orders.userId, user.id),
+          eq(orderItems.productId, product.id),
+          ne(orders.status, 'cancelled')
+        )
+      )
+      .limit(1);
+
+    if (userOrders.length === 0) {
+      return NextResponse.json(
+        { error: "You can only review products you've purchased." },
+        { status: 403 }
+      );
+    }
+
     // Check if already reviewed
     const [existing] = await db
       .select({ id: reviews.id })
@@ -112,7 +169,10 @@ export async function POST(request, { params }) {
       .limit(1);
 
     if (existing) {
-      return NextResponse.json({ error: 'You already reviewed this product' }, { status: 409 });
+      return NextResponse.json(
+        { error: 'You have already reviewed this product. You can edit your existing review.' },
+        { status: 409 }
+      );
     }
 
     // Create review

@@ -37,6 +37,9 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Edit3,
+  Trash2,
+  AlertCircle,
 } from 'lucide-react';
 
 export default function ProductDetailPage() {
@@ -56,6 +59,9 @@ export default function ProductDetailPage() {
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [userHasOrdered, setUserHasOrdered] = useState(false);
+  const [userReview, setUserReview] = useState(null);
+  const [isEditingReview, setIsEditingReview] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '', mediaUrls: [] });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [modalMedia, setModalMedia] = useState(null);
@@ -119,7 +125,7 @@ export default function ProductDetailPage() {
     if (activeTab === 'reviews' && product) {
       fetchReviews();
     }
-  }, [activeTab, product]);
+  }, [activeTab, product, user]);
 
   async function fetchProduct() {
     setLoading(true);
@@ -156,8 +162,42 @@ export default function ProductDetailPage() {
       const res = await fetch(`/api/products/${encodeURIComponent(slug)}/reviews`);
       const data = await res.json();
       setReviews(data.reviews || []);
+      setUserHasOrdered(!!data.userHasOrdered);
+      setUserReview(data.userReview || null);
     } catch {}
     setReviewsLoading(false);
+  }
+
+  function startEditingOwnReview() {
+    if (!userReview) return;
+    setReviewForm({
+      rating: userReview.rating || 5,
+      comment: userReview.comment || '',
+      mediaUrls: Array.isArray(userReview.mediaUrls) ? userReview.mediaUrls : [],
+    });
+    setIsEditingReview(true);
+  }
+
+  async function handleDeleteOwnReview() {
+    if (!userReview) return;
+    if (!confirm('Are you sure you want to delete your review?')) return;
+    try {
+      const res = await fetch(`/api/products/${slug}/reviews/${userReview.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Your review was deleted');
+        setIsEditingReview(false);
+        setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
+        fetchReviews();
+        fetchProduct();
+      } else {
+        toast.error(data.error || 'Failed to delete review');
+      }
+    } catch {
+      toast.error('Network error');
+    }
   }
 
   async function handleSubmitReview(e) {
@@ -172,14 +212,21 @@ export default function ProductDetailPage() {
     }
     setSubmittingReview(true);
     try {
-      const res = await fetch(`/api/products/${slug}/reviews`, {
-        method: 'POST',
+      const isEdit = isEditingReview && userReview?.id;
+      const endpoint = isEdit
+        ? `/api/products/${slug}/reviews/${userReview.id}`
+        : `/api/products/${slug}/reviews`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(reviewForm),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Review submitted successfully!');
+        toast.success(isEdit ? 'Review updated successfully!' : 'Review submitted successfully!');
+        setIsEditingReview(false);
         setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
         fetchReviews();
         fetchProduct();
@@ -747,10 +794,108 @@ export default function ProductDetailPage() {
         {/* Tab 3: Reviews with Media Upload & Gallery */}
         {activeTab === 'reviews' && (
           <div className="py-4 max-w-3xl space-y-5">
-            {/* Write Review Form */}
-            {user ? (
+            {!user ? (
+              <div className="p-4 bg-warm-50 border border-warm-200 rounded-md text-[11px] sm:text-[12px] text-warm-700 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-warm-500 shrink-0" />
+                  <span>Please sign in to leave a review for products you've purchased.</span>
+                </div>
+                <Link
+                  href="/login"
+                  className="px-3 py-1 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors shrink-0"
+                >
+                  Sign In
+                </Link>
+              </div>
+            ) : !userHasOrdered ? (
+              <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-md text-[11px] sm:text-[12px] text-amber-900 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Verified Purchase Required</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    Only customers who have purchased this product can leave a review. Once your order is placed, you'll be able to rate and share feedback here.
+                  </p>
+                </div>
+              </div>
+            ) : userReview && !isEditingReview ? (
+              <div className="p-4 bg-warm-50/80 border border-warm-200 rounded-md space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-warm-900 text-white text-[10px] font-bold rounded-md uppercase tracking-wider">
+                      Your Review
+                    </span>
+                    <span className="text-[11px] text-warm-500">
+                      {new Date(userReview.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={startEditingOwnReview}
+                      className="px-2.5 py-1 bg-white border border-warm-300 text-warm-800 hover:text-brand-600 hover:border-brand-300 text-[11px] font-semibold rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit Review</span>
+                    </button>
+                    <button
+                      onClick={handleDeleteOwnReview}
+                      className="px-2 py-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-semibold rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Delete review"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {userReview.rating && userReview.rating > 0 ? (
+                  <StarRating rating={userReview.rating} size="sm" />
+                ) : null}
+
+                {userReview.comment && (
+                  <p className="text-[11px] sm:text-[12px] text-warm-800 leading-relaxed">{userReview.comment}</p>
+                )}
+
+                {Array.isArray(userReview.mediaUrls) && userReview.mediaUrls.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pt-1">
+                    {userReview.mediaUrls.map((mediaUrl, idx) => {
+                      const isVid = isVideoUrl(mediaUrl);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setModalMedia(mediaUrl)}
+                          className="relative w-14 h-14 rounded-md overflow-hidden border border-warm-200 bg-warm-100 shrink-0 cursor-pointer group hover:border-brand-600 transition-colors"
+                        >
+                          {isVid ? (
+                            <>
+                              <video src={mediaUrl} className="w-full h-full object-cover" muted />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                <Film className="w-4 h-4 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <img src={mediaUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
               <form onSubmit={handleSubmitReview} className="p-3.5 sm:p-4 bg-white border border-warm-200 rounded-md space-y-3 shadow-xs">
-                <h3 className="text-[13px] font-bold text-warm-900">Write a Customer Review</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[13px] font-bold text-warm-900">
+                    {isEditingReview ? 'Edit Your Review' : 'Write a Customer Review'}
+                  </h3>
+                  {isEditingReview && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingReview(false)}
+                      className="text-[11px] text-warm-500 hover:text-warm-800 font-medium"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
 
                 <div>
                   <label className="block text-[10px] font-semibold text-warm-700 mb-1">Your Rating</label>
@@ -760,7 +905,7 @@ export default function ProductDetailPage() {
                         key={star}
                         type="button"
                         onClick={() => setReviewForm({ ...reviewForm, rating: star })}
-                        className="p-0.5 text-warm-300 hover:scale-110 transition-transform"
+                        className="p-0.5 text-warm-300 hover:scale-110 transition-transform cursor-pointer"
                       >
                         <Star
                           className={`w-4 h-4 ${
@@ -796,27 +941,30 @@ export default function ProductDetailPage() {
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={submittingReview || (!reviewForm.rating && !reviewForm.comment?.trim())}
-                  className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
-                >
-                  {submittingReview ? (
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <CheckCircle className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={submittingReview || (!reviewForm.rating && !reviewForm.comment?.trim())}
+                    className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                  >
+                    {submittingReview ? (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    )}
+                    <span>{submittingReview ? 'Saving...' : isEditingReview ? 'Update Review' : 'Submit Review'}</span>
+                  </button>
+                  {isEditingReview && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingReview(false)}
+                      className="px-3 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
                   )}
-                  <span>{submittingReview ? 'Submitting...' : 'Submit Review'}</span>
-                </button>
+                </div>
               </form>
-            ) : (
-              <div className="p-3 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-600">
-                Please{' '}
-                <Link href="/login" className="font-semibold text-brand-600 hover:underline">
-                  sign in
-                </Link>{' '}
-                to share your review and upload media.
-              </div>
             )}
 
             {/* Reviews List */}
