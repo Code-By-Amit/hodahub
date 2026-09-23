@@ -161,18 +161,28 @@ export default function InvoicePage() {
                       <div>{item.productName || 'Product'}</div>
                       {item.addons && item.addons.length > 0 && (
                         <div className="mt-1 space-y-1 pl-2 border-l-2 border-warm-200">
-                          {item.addons.map((addon) => (
-                            <div key={addon.id} className="flex items-center gap-2 text-[10px] text-warm-600">
-                              {addon.imageUrl && (
-                                <img
-                                  src={addon.imageUrl}
-                                  alt={addon.name}
-                                  className="w-5 h-5 object-cover rounded border border-warm-200"
-                                />
-                              )}
-                              <span>+ {addon.name} ({formatCurrency(addon.priceAtPurchase)})</span>
-                            </div>
-                          ))}
+                          {item.addons.map((addon) => {
+                            const aQty = addon.quantity || 1;
+                            const aPrice = Number(addon.priceAtPurchase || 0);
+                            const aTotal = aPrice * aQty;
+                            return (
+                              <div key={addon.id} className="flex items-center justify-between gap-2 text-[10px] text-warm-600">
+                                <div className="flex items-center gap-1.5">
+                                  {addon.imageUrl && (
+                                    <img
+                                      src={addon.imageUrl}
+                                      alt={addon.name}
+                                      className="w-4 h-4 object-cover rounded border border-warm-200"
+                                    />
+                                  )}
+                                  <span>+ {addon.name} × {aQty}</span>
+                                </div>
+                                <span className="font-semibold text-warm-800">
+                                  {aPrice === 0 ? 'Free' : formatCurrency(aTotal)}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </td>
@@ -206,16 +216,9 @@ export default function InvoicePage() {
             <span>Grand Total</span>
             <span>{formatCurrency(order.totalAmount)}</span>
           </div>
-          {order.paymentMethod === 'cod' && Number(order.codAdvanceAmount) > 0 && (
-            <div className="w-56 pt-2 border-t border-dashed border-warm-300 text-[10px] space-y-1">
-              <div className="flex justify-between text-emerald-700 font-semibold">
-                <span>Advance Paid Online</span>
-                <span>{formatCurrency(order.codAdvanceAmount)}</span>
-              </div>
-              <div className="flex justify-between text-amber-800 font-bold">
-                <span>Cash Balance Due</span>
-                <span>{formatCurrency(Math.max(0, Number(order.totalAmount) - Number(order.codAdvanceAmount)))}</span>
-              </div>
+          {order.paymentMethod === 'cod' && (
+            <div className="w-56 pt-2 border-t border-dashed border-warm-300 text-[10px] text-warm-700 font-medium text-right">
+              <span>Cash on Delivery order — You will receive a confirmation call shortly.</span>
             </div>
           )}
         </div>

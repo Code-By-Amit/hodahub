@@ -7,8 +7,12 @@ import { useSelector, useDispatch } from 'react-redux';
 import {
   selectCartItems,
   selectCartSubtotal,
+  selectCartProductsSubtotal,
+  selectCartAddonsSubtotal,
   selectCartCoupon,
   updateQuantity,
+  updateAddonQuantity,
+  removeAddonFromCartItem,
   removeItem,
   applyCoupon,
   removeCoupon,
@@ -23,6 +27,8 @@ export default function CartPage() {
   const toast = useToast();
   const items = useSelector(selectCartItems);
   const subtotal = useSelector(selectCartSubtotal);
+  const productsSubtotal = useSelector(selectCartProductsSubtotal);
+  const addonsSubtotal = useSelector(selectCartAddonsSubtotal);
   const coupon = useSelector(selectCartCoupon);
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
@@ -162,16 +168,83 @@ export default function CartPage() {
                 </div>
 
                 {Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0 && (
-                  <div className="mt-1.5 space-y-1">
-                    {item.selectedAddons.map((a) => (
-                      <div key={a.id} className="flex items-center gap-1.5 text-[10px] text-warm-600 bg-warm-50 px-2 py-0.5 rounded border border-warm-200">
-                        {a.imageUrl && (
-                          <img src={a.imageUrl} alt="" className="w-4 h-4 rounded object-cover border border-warm-200 shrink-0" />
-                        )}
-                        <span className="font-semibold text-warm-900">+ {a.name}</span>
-                        <span className="text-brand-700 font-bold ml-auto">{a.isFree ? 'Free' : formatCurrency(a.price)}</span>
-                      </div>
-                    ))}
+                  <div className="mt-2 pl-3 border-l-2 border-brand-200 space-y-1.5">
+                    {item.selectedAddons.map((a) => {
+                      const aQty = a.quantity || 1;
+                      const aPrice = a.isFree ? 0 : Number(a.price || 0);
+                      return (
+                        <div key={a.id} className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-warm-700 bg-warm-50/80 px-2.5 py-1 rounded border border-warm-200">
+                          <div className="flex items-center gap-1.5">
+                            {a.imageUrl && (
+                              <img src={a.imageUrl} alt="" className="w-4 h-4 rounded object-cover border border-warm-200 shrink-0" />
+                            )}
+                            <span className="font-semibold text-warm-900">+ {a.name}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {/* Independent Addon Stepper */}
+                            <div className="flex items-center border border-warm-300 rounded overflow-hidden bg-white">
+                              <button
+                                onClick={() =>
+                                  dispatch(
+                                    updateAddonQuantity({
+                                      itemKey: item.itemKey,
+                                      productId: item.productId,
+                                      addonId: a.id,
+                                      quantity: aQty - 1,
+                                    })
+                                  )
+                                }
+                                disabled={aQty <= 1}
+                                className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                title="Decrease add-on quantity"
+                              >
+                                -
+                              </button>
+                              <span className="px-1.5 text-[10px] font-bold text-warm-900 min-w-[18px] text-center">
+                                {aQty}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  dispatch(
+                                    updateAddonQuantity({
+                                      itemKey: item.itemKey,
+                                      productId: item.productId,
+                                      addonId: a.id,
+                                      quantity: aQty + 1,
+                                    })
+                                  )
+                                }
+                                className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 cursor-pointer"
+                                title="Increase add-on quantity"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            <span className="text-brand-700 font-bold">
+                              {a.isFree ? 'Free' : formatCurrency(aPrice * aQty)}
+                            </span>
+
+                            <button
+                              onClick={() =>
+                                dispatch(
+                                  removeAddonFromCartItem({
+                                    itemKey: item.itemKey,
+                                    productId: item.productId,
+                                    addonId: a.id,
+                                  })
+                                )
+                              }
+                              className="text-warm-400 hover:text-red-600 p-0.5 cursor-pointer"
+                              title="Remove add-on"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -269,6 +342,18 @@ export default function CartPage() {
             {/* Calculations */}
             <div className="space-y-2.5 text-[11px] text-warm-700 pt-2 border-t border-warm-100">
               <div className="flex justify-between">
+                <span>Products Subtotal</span>
+                <span className="font-semibold text-warm-900">{formatCurrency(productsSubtotal)}</span>
+              </div>
+
+              {addonsSubtotal > 0 && (
+                <div className="flex justify-between text-brand-700 font-medium">
+                  <span>Add-ons Subtotal</span>
+                  <span className="font-semibold">{formatCurrency(addonsSubtotal)}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between border-t border-warm-100 pt-1.5">
                 <span>Subtotal ({items.reduce((s, i) => s + i.quantity, 0)} items)</span>
                 <span className="font-semibold text-warm-900">{formatCurrency(subtotal)}</span>
               </div>

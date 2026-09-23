@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { db } from '@/lib/db';
-import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings, productAddons, orderItemAddons } from '@/lib/db/schema';
+import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings, productAddons, orderItemAddons, addons } from '@/lib/db/schema';
 import { eq, and, inArray, sql, gte } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { createOrderSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '@/lib/email';
 import { cleanupAbandonedOrders } from '@/lib/order-cleanup';
+
+import { resolveAddonPricing } from '@/lib/addon-utils';
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -81,11 +83,32 @@ export async function POST(request) {
       }
     }
 
-    // Fetch selected add-ons from DB if any
-    const allAddonIds = items.flatMap((i) => i.selectedAddonIds || []);
-    let dbAddons = [];
+    // Fetch selected add-ons from DB with per-product link overrides
+    // Fetch selected add-ons from DB with per-product link overrides
+    const allAddonIds = items.flatMap((i) => {
+      if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
+        return i.selectedAddons.map((a) => a.addonId || a.id).filter(Boolean);
+      }
+      return i.selectedAddonIds || [];
+    });
+
+    let dbAddonLinks = [];
     if (allAddonIds.length > 0) {
-      dbAddons = await db.select().from(productAddons).where(and(inArray(productAddons.id, allAddonIds), eq(productAddons.isActive, true)));
+      dbAddonLinks = await db
+        .select({
+          id: addons.id,
+          name: addons.name,
+          price: addons.price,
+          isFree: addons.isFree,
+          imageUrl: addons.imageUrl,
+          isActive: addons.isActive,
+          productId: productAddons.productId,
+          priceOverride: productAddons.priceOverride,
+          isFreeOverride: productAddons.isFreeOverride,
+        })
+        .from(productAddons)
+        .innerJoin(addons, eq(productAddons.addonId, addons.id))
+        .where(and(inArray(addons.id, allAddonIds), eq(addons.isActive, true)));
     }
 
     let subtotal = 0;
@@ -108,26 +131,43 @@ export async function POST(request) {
 
       const unitPrice = product.discountPrice ? Number(product.discountPrice) : Number(product.price);
       
-      // Calculate selected add-ons price
+      // Calculate selected add-ons price with resolved per-product link overrides
       const itemAddons = [];
       let itemAddonsTotal = 0;
-      if (item.selectedAddonIds && item.selectedAddonIds.length > 0) {
-        for (const addonId of item.selectedAddonIds) {
-          const addon = dbAddons.find((a) => a.id === addonId && a.productId === item.productId);
-          if (addon) {
-            const addonPrice = addon.isFree ? 0 : Number(addon.price);
-            itemAddonsTotal += addonPrice;
-            itemAddons.push({
-              addonId: addon.id,
-              name: addon.name,
-              priceAtPurchase: addonPrice.toFixed(2),
-              imageUrl: addon.imageUrl || null,
-            });
-          }
+
+      let addonSelections = [];
+      if (Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0) {
+        addonSelections = item.selectedAddons;
+      } else if (Array.isArray(item.selectedAddonIds) && item.selectedAddonIds.length > 0) {
+        addonSelections = item.selectedAddonIds.map((id) => ({ addonId: id, quantity: 1 }));
+      }
+
+      for (const selection of addonSelections) {
+        const addonId = selection.addonId || selection.id;
+        const addonQty = Math.max(1, Number(selection.quantity || 1));
+        const rawAddon = dbAddonLinks.find(
+          (a) => a.id === addonId && a.productId === item.productId
+        ) || dbAddonLinks.find((a) => a.id === addonId);
+
+        if (rawAddon) {
+          const resolved = resolveAddonPricing(rawAddon, {
+            priceOverride: rawAddon.priceOverride,
+            isFreeOverride: rawAddon.isFreeOverride,
+          });
+
+          const addonUnitPrice = Number(resolved.price);
+          itemAddonsTotal += addonUnitPrice * addonQty;
+          itemAddons.push({
+            addonId: resolved.id,
+            name: resolved.name,
+            priceAtPurchase: addonUnitPrice.toFixed(2),
+            quantity: addonQty,
+            imageUrl: resolved.imageUrl || null,
+          });
         }
       }
 
-      const itemTotal = (unitPrice + itemAddonsTotal) * item.quantity;
+      const itemTotal = unitPrice * item.quantity + itemAddonsTotal;
       subtotal += itemTotal;
 
       validatedItems.push({
@@ -196,106 +236,8 @@ export async function POST(request) {
       }
     }
 
-    // Handle COD Order Creation with Advance Token Payment
+    // Handle COD Order Creation (Pure COD - No Advance Required)
     if (paymentMethod === 'cod') {
-      const codAdvanceAmountNum = settings ? Number(settings.codAdvanceAmount || 99) : 99;
-      const actualAdvance = Math.min(codAdvanceAmountNum, totalAmount);
-
-      if (actualAdvance > 0) {
-        if (!razorpay) {
-          return NextResponse.json(
-            { error: 'Razorpay keys not configured on server for COD advance payment' },
-            { status: 500 }
-          );
-        }
-
-        const stockResult = await decrementStockAtomic(validatedItems);
-        if (!stockResult.success) {
-          return NextResponse.json(
-            { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
-            { status: 400 }
-          );
-        }
-
-        const advancePaise = Math.round(actualAdvance * 100);
-        const rzpOrder = await razorpay.orders.create({
-          amount: advancePaise,
-          currency: 'INR',
-          receipt: `cod_adv_${Date.now().toString().slice(-10)}`,
-        });
-
-        const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
-        const [order] = await db
-          .insert(orders)
-          .values({
-            userId: user ? user.id : null,
-            guestName: guestName || null,
-            guestEmail: guestEmail || null,
-            guestPhone: guestPhone || null,
-            shippingAddress: shippingAddress || null,
-            status: 'pending',
-            paymentStatus: 'pending',
-            paymentMethod: 'cod',
-            shippingCharge: shippingCharge.toFixed(2),
-            totalAmount: totalAmount.toFixed(2),
-            codAdvanceAmount: actualAdvance.toFixed(2),
-            addressId: addressId || null,
-            couponCode: validCouponCode,
-            discountAmount: discount.toFixed(2),
-            razorpayOrderId: rzpOrder.id,
-            accessCode: guestAccessCode,
-          })
-          .returning();
-
-        // Insert Order Items and their Add-ons
-        for (const item of validatedItems) {
-          const [insertedOrderItem] = await db
-            .insert(orderItems)
-            .values({
-              orderId: order.id,
-              productId: item.productId,
-              productName: item.name,
-              productImage: item.image || null,
-              quantity: item.quantity,
-              priceAtPurchase: item.priceAtPurchase,
-            })
-            .returning();
-
-          if (item.addons && item.addons.length > 0) {
-            await db.insert(orderItemAddons).values(
-              item.addons.map((addon) => ({
-                orderItemId: insertedOrderItem.id,
-                addonId: addon.addonId,
-                name: addon.name,
-                priceAtPurchase: addon.priceAtPurchase,
-                imageUrl: addon.imageUrl || null,
-              }))
-            );
-          }
-        }
-
-        // Status History
-        await db.insert(orderStatusHistory).values({
-          orderId: order.id,
-          status: 'pending',
-          note: `COD order initialized. Awaiting ₹${actualAdvance.toFixed(2)} advance payment.`,
-        });
-
-        return NextResponse.json({
-          orderId: order.id,
-          razorpayOrderId: rzpOrder.id,
-          amount: advancePaise,
-          codAdvanceAmount: actualAdvance.toFixed(2),
-          totalAmount,
-          subtotal,
-          discount,
-          shippingCharge,
-          isCod: true,
-          requiresAdvance: true,
-        });
-      }
-
-      // If COD advance is 0 (pure COD without advance)
       const stockResult = await decrementStockAtomic(validatedItems);
       if (!stockResult.success) {
         return NextResponse.json(
@@ -313,7 +255,7 @@ export async function POST(request) {
           guestEmail: guestEmail || null,
           guestPhone: guestPhone || null,
           shippingAddress: shippingAddress || null,
-          status: 'confirmed',
+          status: 'pending',
           paymentStatus: 'pending',
           paymentMethod: 'cod',
           shippingCharge: shippingCharge.toFixed(2),
@@ -346,6 +288,7 @@ export async function POST(request) {
               addonId: addon.addonId,
               name: addon.name,
               priceAtPurchase: addon.priceAtPurchase,
+              quantity: addon.quantity || 1,
               imageUrl: addon.imageUrl || null,
             }))
           );
@@ -354,7 +297,7 @@ export async function POST(request) {
 
       await db.insert(orderStatusHistory).values({
         orderId: order.id,
-        status: 'confirmed',
+        status: 'pending',
         note: user ? 'COD order placed by user.' : 'COD order placed by guest.',
       });
 
@@ -372,7 +315,7 @@ export async function POST(request) {
         isCod: true,
         requiresAdvance: false,
         totalAmount,
-        message: 'COD Order confirmed!',
+        message: "COD Order placed successfully! You'll receive a confirmation call from us shortly to confirm your order.",
       });
     }
 
@@ -443,6 +386,7 @@ export async function POST(request) {
             addonId: addon.addonId,
             name: addon.name,
             priceAtPurchase: addon.priceAtPurchase,
+            quantity: addon.quantity || 1,
             imageUrl: addon.imageUrl || null,
           }))
         );

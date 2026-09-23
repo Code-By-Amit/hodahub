@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import {
   selectCartItems,
   selectCartSubtotal,
+  selectCartProductsSubtotal,
+  selectCartAddonsSubtotal,
   selectCartCoupon,
   clearCart,
 } from '@/lib/store/cartSlice';
@@ -38,6 +40,8 @@ export default function CheckoutPage() {
   const toast = useToast();
   const items = useSelector(selectCartItems);
   const subtotal = useSelector(selectCartSubtotal);
+  const productsSubtotal = useSelector(selectCartProductsSubtotal);
+  const addonsSubtotal = useSelector(selectCartAddonsSubtotal);
   const coupon = useSelector(selectCartCoupon);
   const user = useSelector(selectUser);
   const authLoading = useSelector(selectAuthLoading);
@@ -273,7 +277,9 @@ export default function CheckoutPage() {
         .map((i) => {
           let line = `• ${i.name} x${i.quantity} — ₹${((i.discountPrice || i.price) * i.quantity).toFixed(2)}`;
           if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
-            const addonsList = i.selectedAddons.map((a) => `+ ${a.name} (₹${a.price})`).join(', ');
+            const addonsList = i.selectedAddons
+              .map((a) => `+ ${a.name} x${a.quantity || 1} (₹${((a.isFree ? 0 : Number(a.price || 0)) * (a.quantity || 1)).toFixed(2)})`)
+              .join(', ');
             line += `\n   Addons: ${addonsList}`;
           }
           return line;
@@ -288,7 +294,8 @@ export default function CheckoutPage() {
 *Items:*
 ${itemsText}
 
-*Subtotal:* ₹${subtotal.toFixed(2)}
+*Products Subtotal:* ₹${productsSubtotal.toFixed(2)}
+${addonsSubtotal > 0 ? `*Add-ons Subtotal:* ₹${addonsSubtotal.toFixed(2)}\n` : ''}*Subtotal:* ₹${subtotal.toFixed(2)}
 *Shipping Fee:* ₹${shippingFee.toFixed(2)}
 ${discount > 0 ? `*Discount:* -₹${discount.toFixed(2)}\n` : ''}*Total Amount:* ₹${total.toFixed(2)}
 ----------------------------------
@@ -311,6 +318,12 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
         productId: i.productId,
         quantity: i.quantity,
         selectedAddonIds: Array.isArray(i.selectedAddons) ? i.selectedAddons.map((a) => a.id) : [],
+        selectedAddons: Array.isArray(i.selectedAddons)
+          ? i.selectedAddons.map((a) => ({
+              addonId: a.id,
+              quantity: a.quantity || 1,
+            }))
+          : [],
       }));
 
       const payload = isGuestOrder
@@ -825,7 +838,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                           <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
                             <FiTruck className="w-3 h-3 text-warm-700" /> Cash on Delivery
                           </p>
-                          <p className="text-[10px] text-warm-500 mt-0.5">₹{storeSettings.codAdvanceAmount || 99} advance online</p>
+                          <p className="text-[10px] text-emerald-700 font-medium mt-0.5">No advance payment required</p>
                         </div>
                       </label>
                     )}
@@ -857,21 +870,15 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                     )}
                   </div>
 
-                  {/* COD Advance Breakdown Notice */}
+                  {/* COD Confirmation Notice */}
                   {paymentMethod === 'cod' && isCodAvailable && (
-                    <div className="mt-3 p-3 bg-amber-50/70 border border-amber-200 rounded-md text-[11px] text-amber-900 space-y-1">
-                      <div className="flex justify-between font-medium text-[10px] text-amber-800">
-                        <span>Total Order Amount:</span>
-                        <span>{formatCurrency(total)}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-emerald-700 text-[11px]">
-                        <span>Upfront Online Token Advance:</span>
-                        <span>{formatCurrency(Math.min(storeSettings.codAdvanceAmount, total))}</span>
-                      </div>
-                      <div className="flex justify-between font-bold text-amber-900 text-[11px] border-t border-amber-200/80 pt-1">
-                        <span>Balance Cash Due on Delivery:</span>
-                        <span>{formatCurrency(Math.max(0, total - Math.min(storeSettings.codAdvanceAmount, total)))}</span>
-                      </div>
+                    <div className="mt-3 p-3 bg-emerald-50/80 border border-emerald-200 rounded-md text-[11px] text-emerald-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                        <FiTruck className="w-3.5 h-3.5 text-emerald-700" /> Cash on Delivery Notice
+                      </p>
+                      <p className="text-[10px] text-emerald-800 leading-relaxed font-semibold">
+                        You&apos;ll receive a confirmation call from us shortly to confirm your order.
+                      </p>
                     </div>
                   )}
 
@@ -906,23 +913,47 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                 <div className="sticky top-20 p-4 bg-white rounded-lg border border-warm-200 shadow-xs">
                   <h2 className="text-[13px] font-bold text-warm-900 mb-3 pb-2 border-b border-warm-100">Order Summary</h2>
 
-                  <div className="space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
+                  <div className="space-y-2 mb-3 max-h-48 overflow-y-auto pr-1">
                     {items.map((item) => (
-                      <div key={item.itemKey || item.productId} className="flex justify-between text-[11px]">
-                        <span className="text-warm-600 truncate max-w-[150px]">
-                          {item.name} × {item.quantity}
-                        </span>
-                        <span className="font-semibold text-warm-900 shrink-0">
-                          {formatCurrency((item.discountPrice || item.price) * item.quantity)}
-                        </span>
+                      <div key={item.itemKey || item.productId} className="space-y-1 border-b border-warm-100 pb-1.5 last:border-0">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-warm-800 font-semibold truncate max-w-[150px]">
+                            {item.name} × {item.quantity}
+                          </span>
+                          <span className="font-semibold text-warm-900 shrink-0">
+                            {formatCurrency((item.discountPrice || item.price) * item.quantity)}
+                          </span>
+                        </div>
+                        {Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0 && (
+                          <div className="pl-2 space-y-0.5 border-l-2 border-brand-200">
+                            {item.selectedAddons.map((a) => (
+                              <div key={a.id} className="flex justify-between text-[10px] text-warm-600">
+                                <span>+ {a.name} × {a.quantity || 1}</span>
+                                <span className="font-semibold text-brand-700">
+                                  {a.isFree ? 'Free' : formatCurrency(Number(a.price || 0) * (a.quantity || 1))}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
 
                   <div className="space-y-2 text-[11px] border-t border-warm-200 pt-3">
                     <div className="flex justify-between text-warm-600">
+                      <span>Products Subtotal</span>
+                      <span className="font-medium text-warm-900">{formatCurrency(productsSubtotal)}</span>
+                    </div>
+                    {addonsSubtotal > 0 && (
+                      <div className="flex justify-between text-brand-700 font-medium">
+                        <span>Add-ons Subtotal</span>
+                        <span className="font-semibold">{formatCurrency(addonsSubtotal)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-warm-600 border-t border-warm-100 pt-1">
                       <span>Subtotal</span>
-                      <span className="font-medium text-warm-900">{formatCurrency(subtotal)}</span>
+                      <span className="font-semibold text-warm-900">{formatCurrency(subtotal)}</span>
                     </div>
                     {discount > 0 && (
                       <div className="flex justify-between text-emerald-700">
@@ -965,7 +996,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                           </>
                         ) : paymentMethod === 'cod' ? (
                           <>
-                            <FiTruck className="w-3.5 h-3.5" /> Pay ₹{Math.min(storeSettings.codAdvanceAmount, total)} Advance & Place COD Order
+                            <FiTruck className="w-3.5 h-3.5" /> Place COD Order ({formatCurrency(total)})
                           </>
                         ) : (
                           <>

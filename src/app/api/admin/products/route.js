@@ -104,8 +104,9 @@ export async function POST(request) {
       );
     }
 
-    const { name, slug, description, price, discountPrice, categoryId, stock, images, specifications, isActive, codAvailable, productLink, addons } = body;
+    const { name, slug, description, price, discountPrice, categoryId, stock, isOutOfStock, images, specifications, isActive, codAvailable, productLink, addonIds, addonLinks } = body;
 
+    const numStock = Number(stock || 0);
     const [product] = await db
       .insert(products)
       .values({
@@ -115,7 +116,8 @@ export async function POST(request) {
         price: price.toString(),
         discountPrice: discountPrice ? discountPrice.toString() : null,
         categoryId: categoryId,
-        stock: stock || 0,
+        stock: numStock,
+        isOutOfStock: isOutOfStock !== undefined ? Boolean(isOutOfStock) : numStock <= 0,
         images: images || [],
         specifications: specifications || [],
         isActive: isActive !== false,
@@ -124,16 +126,32 @@ export async function POST(request) {
       })
       .returning();
 
-    if (Array.isArray(addons) && addons.length > 0) {
+    const linksToProcess = Array.isArray(addonLinks)
+      ? addonLinks
+      : Array.isArray(addonIds)
+      ? addonIds.map((aid) => ({ addonId: aid }))
+      : [];
+
+    if (linksToProcess.length > 0) {
       await db.insert(productAddons).values(
-        addons.map((a) => ({
-          productId: product.id,
-          name: a.name,
-          price: (a.price || 0).toString(),
-          isFree: a.isFree === true,
-          imageUrl: a.imageUrl || null,
-          isActive: a.isActive !== false,
-        }))
+        linksToProcess.map((link) => {
+          const addonId = typeof link === 'string' ? link : link.addonId;
+          const priceOverride =
+            typeof link === 'object' && link.priceOverride !== undefined && link.priceOverride !== null && link.priceOverride !== ''
+              ? link.priceOverride.toString()
+              : null;
+          const isFreeOverride =
+            typeof link === 'object' && link.isFreeOverride !== undefined && link.isFreeOverride !== null
+              ? Boolean(link.isFreeOverride)
+              : null;
+
+          return {
+            productId: product.id,
+            addonId,
+            priceOverride,
+            isFreeOverride,
+          };
+        })
       );
     }
 

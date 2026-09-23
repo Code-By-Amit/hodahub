@@ -8,7 +8,13 @@ const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
 export function generateTokens(user) {
-  const payload = { id: user.id, email: user.email, role: user.role, name: user.name };
+  const payload = {
+    id: user.id,
+    email: user.email || null,
+    phone: user.phone || null,
+    role: user.role,
+    name: user.name || 'Customer',
+  };
 
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_EXPIRY,
@@ -88,7 +94,13 @@ export async function getAuthUser(request) {
   if (token) {
     const decoded = verifyAccessToken(token);
     if (decoded) {
-      userObj = { id: decoded.id, email: decoded.email, role: decoded.role, name: decoded.name };
+      userObj = {
+        id: decoded.id,
+        email: decoded.email || null,
+        phone: decoded.phone || null,
+        role: decoded.role,
+        name: decoded.name || 'Customer',
+      };
     }
   }
 
@@ -98,19 +110,31 @@ export async function getAuthUser(request) {
     if (refreshToken) {
       const refreshDecoded = verifyRefreshToken(refreshToken);
       if (refreshDecoded) {
-        userObj = { id: refreshDecoded.id, email: refreshDecoded.email, role: refreshDecoded.role, name: refreshDecoded.name };
+        userObj = {
+          id: refreshDecoded.id,
+          email: refreshDecoded.email || null,
+          phone: refreshDecoded.phone || null,
+          role: refreshDecoded.role,
+          name: refreshDecoded.name || 'Customer',
+        };
       }
     }
   }
 
   if (!userObj) return null;
 
-  // Auto-heal: If email, role, or name are missing (e.g., from older tokens), fetch from DB
-  if (!userObj.email || !userObj.role || !userObj.name) {
+  // Auto-heal: If role or id missing from older tokens, fetch from DB
+  if (!userObj.role || !userObj.id) {
     try {
       const [dbUser] = await db.select().from(users).where(eq(users.id, userObj.id)).limit(1);
       if (dbUser) {
-        userObj = { id: dbUser.id, email: dbUser.email, role: dbUser.role, name: dbUser.name };
+        userObj = {
+          id: dbUser.id,
+          email: dbUser.email || null,
+          phone: dbUser.phone || null,
+          role: dbUser.role,
+          name: dbUser.name || 'Customer',
+        };
         const newTokens = generateTokens(userObj);
         try {
           cookieStore.set('access_token', newTokens.accessToken, {

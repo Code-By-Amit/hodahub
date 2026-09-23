@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
-import { products, productAddons } from '@/lib/db/schema';
+import { products, productAddons, addons } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
+import { resolveAddonPricing } from '@/lib/addon-utils';
 
 export async function GET(request, { params }) {
   try {
@@ -12,9 +13,41 @@ export async function GET(request, { params }) {
     const [product] = await db.select().from(products).where(eq(products.id, id)).limit(1);
     if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const addons = await db.select().from(productAddons).where(eq(productAddons.productId, id));
+    const rawLinks = await db
+      .select({
+        id: addons.id,
+        name: addons.name,
+        price: addons.price,
+        isFree: addons.isFree,
+        imageUrl: addons.imageUrl,
+        isActive: addons.isActive,
+        priceOverride: productAddons.priceOverride,
+        isFreeOverride: productAddons.isFreeOverride,
+      })
+      .from(productAddons)
+      .innerJoin(addons, eq(productAddons.addonId, addons.id))
+      .where(eq(productAddons.productId, id));
 
-    return NextResponse.json({ product: { ...product, addons: addons || [] } });
+    const resolvedAddons = rawLinks.map((item) =>
+      resolveAddonPricing(item, { priceOverride: item.priceOverride, isFreeOverride: item.isFreeOverride })
+    );
+
+    const addonLinks = rawLinks.map((item) => ({
+      addonId: item.id,
+      priceOverride: item.priceOverride !== null ? Number(item.priceOverride) : null,
+      isFreeOverride: item.isFreeOverride,
+    }));
+
+    const addonIds = rawLinks.map((a) => a.id);
+
+    return NextResponse.json({
+      product: {
+        ...product,
+        addonIds,
+        addonLinks,
+        addons: resolvedAddons,
+      },
+    });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden')
       return NextResponse.json({ error: error.message }, { status: 403 });
@@ -39,37 +72,77 @@ export async function PUT(request, { params }) {
       );
     }
 
-    const { name, slug, description, price, discountPrice, categoryId, stock, images, specifications, isActive, codAvailable, productLink, addons } = body;
+    const {
+      name,
+      slug,
+      description,
+      price,
+      discountPrice,
+      categoryId,
+      stock,
+      isOutOfStock,
+      images,
+      specifications,
+      isActive,
+      codAvailable,
+      productLink,
+      addonIds,
+      addonLinks,
+    } = body;
 
-    const [product] = await db.update(products).set({
-      ...(name && { name }),
-      ...(slug && { slug: slug.toLowerCase().replace(/\s+/g, '-') }),
-      ...(description !== undefined && { description }),
-      ...(price !== undefined && { price: price.toString() }),
-      ...(discountPrice !== undefined && { discountPrice: discountPrice ? discountPrice.toString() : null }),
-      ...(categoryId && { categoryId }),
-      ...(stock !== undefined && { stock }),
-      ...(images !== undefined && { images }),
-      ...(specifications !== undefined && { specifications }),
-      ...(isActive !== undefined && { isActive }),
-      ...(codAvailable !== undefined && { codAvailable }),
-      ...(productLink !== undefined && { productLink: productLink || null }),
-    }).where(eq(products.id, id)).returning();
+    const [product] = await db
+      .update(products)
+      .set({
+        ...(name && { name }),
+        ...(slug && { slug: slug.toLowerCase().replace(/\s+/g, '-') }),
+        ...(description !== undefined && { description }),
+        ...(price !== undefined && { price: price.toString() }),
+        ...(discountPrice !== undefined && { discountPrice: discountPrice ? discountPrice.toString() : null }),
+        ...(categoryId && { categoryId }),
+        ...(stock !== undefined && {
+          stock: Number(stock),
+          isOutOfStock: isOutOfStock !== undefined ? Boolean(isOutOfStock) : Number(stock) <= 0,
+        }),
+        ...(isOutOfStock !== undefined && stock === undefined && { isOutOfStock: Boolean(isOutOfStock) }),
+        ...(images !== undefined && { images }),
+        ...(specifications !== undefined && { specifications }),
+        ...(isActive !== undefined && { isActive }),
+        ...(codAvailable !== undefined && { codAvailable }),
+        ...(productLink !== undefined && { productLink: productLink || null }),
+      })
+      .where(eq(products.id, id))
+      .returning();
 
     if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    if (Array.isArray(addons)) {
+    const linksToProcess = Array.isArray(addonLinks)
+      ? addonLinks
+      : Array.isArray(addonIds)
+      ? addonIds.map((aid) => ({ addonId: aid }))
+      : null;
+
+    if (linksToProcess) {
       await db.delete(productAddons).where(eq(productAddons.productId, id));
-      if (addons.length > 0) {
+      if (linksToProcess.length > 0) {
         await db.insert(productAddons).values(
-          addons.map((a) => ({
-            productId: id,
-            name: a.name,
-            price: (a.price || 0).toString(),
-            isFree: a.isFree === true,
-            imageUrl: a.imageUrl || null,
-            isActive: a.isActive !== false,
-          }))
+          linksToProcess.map((link) => {
+            const addonId = typeof link === 'string' ? link : link.addonId;
+            const priceOverride =
+              typeof link === 'object' && link.priceOverride !== undefined && link.priceOverride !== null && link.priceOverride !== ''
+                ? link.priceOverride.toString()
+                : null;
+            const isFreeOverride =
+              typeof link === 'object' && link.isFreeOverride !== undefined && link.isFreeOverride !== null
+                ? Boolean(link.isFreeOverride)
+                : null;
+
+            return {
+              productId: id,
+              addonId,
+              priceOverride,
+              isFreeOverride,
+            };
+          })
         );
       }
     }
@@ -80,9 +153,41 @@ export async function PUT(request, { params }) {
       revalidatePath('/categories');
     } catch {}
 
-    const updatedAddons = await db.select().from(productAddons).where(eq(productAddons.productId, id));
+    const rawLinks = await db
+      .select({
+        id: addons.id,
+        name: addons.name,
+        price: addons.price,
+        isFree: addons.isFree,
+        imageUrl: addons.imageUrl,
+        isActive: addons.isActive,
+        priceOverride: productAddons.priceOverride,
+        isFreeOverride: productAddons.isFreeOverride,
+      })
+      .from(productAddons)
+      .innerJoin(addons, eq(productAddons.addonId, addons.id))
+      .where(eq(productAddons.productId, id));
 
-    return NextResponse.json({ product: { ...product, addons: updatedAddons } });
+    const resolvedAddons = rawLinks.map((item) =>
+      resolveAddonPricing(item, { priceOverride: item.priceOverride, isFreeOverride: item.isFreeOverride })
+    );
+
+    const updatedAddonLinks = rawLinks.map((item) => ({
+      addonId: item.id,
+      priceOverride: item.priceOverride !== null ? Number(item.priceOverride) : null,
+      isFreeOverride: item.isFreeOverride,
+    }));
+
+    const updatedAddonIds = rawLinks.map((a) => a.id);
+
+    return NextResponse.json({
+      product: {
+        ...product,
+        addonIds: updatedAddonIds,
+        addonLinks: updatedAddonLinks,
+        addons: resolvedAddons,
+      },
+    });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden')
       return NextResponse.json({ error: error.message }, { status: 403 });

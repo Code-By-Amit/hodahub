@@ -56,7 +56,13 @@ export async function GET(request) {
       return NextResponse.redirect(`${origin}/login?error=google_profile_error`);
     }
 
-    const { email, sub: providerAccountId, name, picture } = profile;
+    const providerAccountId = profile.id || profile.sub;
+    const { email, name, picture } = profile;
+
+    if (!providerAccountId) {
+      console.error('Google profile missing account ID:', profile);
+      return NextResponse.redirect(`${origin}/login?error=google_profile_error`);
+    }
 
     let targetUser = null;
 
@@ -83,12 +89,20 @@ export async function GET(request) {
       if (existingUserByEmail) {
         targetUser = existingUserByEmail;
 
-        // Link Google account
-        await db.insert(accounts).values({
-          userId: targetUser.id,
-          provider: 'google',
-          providerAccountId,
-        });
+        // Check if provider link exists
+        const [existingLink] = await db
+          .select()
+          .from(accounts)
+          .where(and(eq(accounts.userId, targetUser.id), eq(accounts.provider, 'google')))
+          .limit(1);
+
+        if (!existingLink) {
+          await db.insert(accounts).values({
+            userId: targetUser.id,
+            provider: 'google',
+            providerAccountId,
+          });
+        }
 
         // Update avatarUrl if empty
         if (!targetUser.avatarUrl && picture) {
@@ -120,6 +134,23 @@ export async function GET(request) {
       }
     }
 
+    // Link guest orders if any
+    try {
+      const { orders } = await import('@/lib/db/schema');
+      const { isNull, sql, and: andOrm } = await import('drizzle-orm');
+      await db
+        .update(orders)
+        .set({ userId: targetUser.id })
+        .where(
+          andOrm(
+            isNull(orders.userId),
+            sql`LOWER(${orders.guestEmail}) = ${targetUser.email.toLowerCase()}`
+          )
+        );
+    } catch (orderLinkErr) {
+      console.error('Failed to link guest orders on Google OAuth:', orderLinkErr);
+    }
+
     // 6. Issue tokens & set auth cookies
     const tokenPayload = {
       id: targetUser.id,
@@ -134,7 +165,7 @@ export async function GET(request) {
 
     return response;
   } catch (error) {
-    console.error('Google OAuth callback error:', error);
+    console.error('Google OAuth callback detailed error:', error?.message, error?.stack, error);
     const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     return NextResponse.redirect(`${origin}/login?error=google_callback_failed`);
   }

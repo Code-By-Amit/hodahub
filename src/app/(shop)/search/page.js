@@ -197,7 +197,7 @@ function SearchContent() {
 
           {(currentMinPrice || currentMaxPrice) && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-warm-200 rounded-md text-xs font-semibold text-warm-800 shadow-2xs">
-              Price: ${currentMinPrice || '0'} – ${currentMaxPrice || '∞'}
+              Price: ₹{currentMinPrice || '0'} – ₹{currentMaxPrice || '∞'}
               <button
                 onClick={() => {
                   setMinPrice('');

@@ -40,7 +40,7 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
 
   if (!token || token === 'your_delhivery_api_token_here') {
     console.log(`[Delhivery Serviceability] Using mock mode for environment: ${env.toUpperCase()}`);
-    return { serviceable: true, isMock: true, pincode, environment: env };
+    return { serviceable: true, isMock: true, pincode, environment: env, estimatedDays: null };
   }
 
   try {
@@ -52,27 +52,54 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
 
     if (!res.ok) {
       console.warn(`[Delhivery Serviceability] HTTP ${res.status}: ${res.statusText}`);
-      return { serviceable: true, isMock: true, pincode, environment: env };
+      return { serviceable: true, isMock: true, pincode, environment: env, estimatedDays: null };
     }
 
     const data = await res.json();
     const deliveryCodes = data?.delivery_codes || [];
-    const matched = deliveryCodes.find((item) => item.postal_code?.code === pincode?.toString());
+    const matched = deliveryCodes.find(
+      (item) =>
+        item.postal_code?.code === pincode?.toString() ||
+        item.postal_code?.pin === pincode?.toString() ||
+        item.postal_code?.pin === parseInt(pincode, 10)
+    );
 
     if (matched && matched.postal_code?.pre_paid !== 'N') {
+      const pObj = matched.postal_code || {};
+      const rawTat =
+        pObj.tat ??
+        pObj.etd ??
+        pObj.estimated_delivery_days ??
+        pObj.turnaround_time ??
+        pObj.tat_days ??
+        matched.tat ??
+        matched.etd;
+
+      let estimatedDays = null;
+      if (rawTat !== undefined && rawTat !== null && rawTat !== '') {
+        const tatNum = parseInt(rawTat, 10);
+        if (!isNaN(tatNum) && tatNum > 0) {
+          estimatedDays = `${tatNum}-${tatNum + 2} business days`;
+        } else if (typeof rawTat === 'string' && rawTat.trim()) {
+          estimatedDays = rawTat.trim();
+        }
+      }
+
       return {
         serviceable: true,
         codAvailable: matched.postal_code?.cod !== 'N',
         city: matched.postal_code?.city,
-        state: matched.postal_code?.state_code,
+        state: matched.postal_code?.state_code || matched.postal_code?.state,
+        estimatedDays,
         environment: env,
       };
     }
 
-    return { serviceable: true, pincode, environment: env };
+    // Pincode not directly confirmed by Delhivery — store has alternate shipping arrangements
+    return { serviceable: true, pincode, estimatedDays: null, environment: env };
   } catch (error) {
     console.error('[Delhivery Serviceability Error]:', error);
-    return { serviceable: true, pincode, environment: env };
+    return { serviceable: true, pincode, estimatedDays: null, environment: env };
   }
 }
 

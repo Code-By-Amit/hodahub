@@ -31,6 +31,8 @@ export default function AdminSettingsPage() {
       minFreeShipping: '50',
       codAdvanceAmount: '99',
       orderExpirationMinutes: '15',
+      maxOtpRequestsPerDay: '4',
+      otpResendCooldownSeconds: '45',
     },
     storeSettingsSchema
   );
@@ -60,6 +62,8 @@ export default function AdminSettingsPage() {
           minFreeShipping: String(data.settings.minFreeShipping ?? '50'),
           codAdvanceAmount: String(data.settings.codAdvanceAmount ?? '99'),
           orderExpirationMinutes: String(data.settings.orderExpirationMinutes || 15),
+          maxOtpRequestsPerDay: String(data.settings.maxOtpRequestsPerDay || 4),
+          otpResendCooldownSeconds: String(data.settings.otpResendCooldownSeconds || 45),
         });
       }
     } catch {}
@@ -75,6 +79,8 @@ export default function AdminSettingsPage() {
       minFreeShipping: parseFloat(form.minFreeShipping) || 0,
       codAdvanceAmount: parseFloat(form.codAdvanceAmount) || 0,
       orderExpirationMinutes: parseInt(form.orderExpirationMinutes) || 15,
+      maxOtpRequestsPerDay: parseInt(form.maxOtpRequestsPerDay) || 4,
+      otpResendCooldownSeconds: parseInt(form.otpResendCooldownSeconds) || 45,
     };
 
     const clientCheck = storeSettingsSchema.safeParse(payloadToValidate);
@@ -387,6 +393,54 @@ export default function AdminSettingsPage() {
                 />
                 <FieldError message={errors.orderExpirationMinutes} />
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Mobile OTP Rate Limiting & Security Rules */}
+        <div className="bg-white border border-warm-200 rounded-md p-4 space-y-3 shadow-xs">
+          <h2 className="text-[13px] font-bold text-warm-900 border-b border-warm-100 pb-2 flex items-center gap-1.5">
+            <Settings className="w-3.5 h-3.5 text-brand-600" />
+            Mobile + OTP Authentication Security & Rate Limits
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                Max OTP Requests Per Mobile (Per Day)
+              </label>
+              <NumericInput
+                allowDecimals={false}
+                min={1}
+                max={50}
+                value={form.maxOtpRequestsPerDay}
+                onChange={(val) => handleChange('maxOtpRequestsPerDay', val)}
+                placeholder="4"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none font-mono ${
+                  errors.maxOtpRequestsPerDay ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
+              />
+              <p className="text-[9px] text-warm-500 mt-1">Default: 4 requests/day</p>
+              <FieldError message={errors.maxOtpRequestsPerDay} />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                OTP Resend Cooldown (Seconds)
+              </label>
+              <NumericInput
+                allowDecimals={false}
+                min={5}
+                max={600}
+                value={form.otpResendCooldownSeconds}
+                onChange={(val) => handleChange('otpResendCooldownSeconds', val)}
+                placeholder="45"
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none font-mono ${
+                  errors.otpResendCooldownSeconds ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
+                }`}
+              />
+              <p className="text-[9px] text-warm-500 mt-1">Default: 45 seconds</p>
+              <FieldError message={errors.otpResendCooldownSeconds} />
             </div>
           </div>
         </div>

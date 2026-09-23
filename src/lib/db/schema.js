@@ -25,7 +25,7 @@ export const returnStatusEnum = pgEnum('return_status', ['none', 'requested', 'a
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 255 }),
-  email: varchar('email', { length: 255 }).notNull().unique(),
+  email: varchar('email', { length: 255 }).unique(),
   phone: varchar('phone', { length: 20 }),
   passwordHash: text('password_hash'),
   role: roleEnum('role').default('customer').notNull(),
@@ -132,19 +132,39 @@ export const products = pgTable('products', {
 ]
 );
 
-// --- Product Add-ons ---
-export const productAddons = pgTable('product_addons', {
+// --- Add-ons Library ---
+export const addons = pgTable('addons', {
   id: uuid('id').defaultRandom().primaryKey(),
-  productId: uuid('product_id')
-    .notNull()
-    .references(() => products.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   price: decimal('price', { precision: 10, scale: 2 }).default('0.00').notNull(),
   isFree: boolean('is_free').default(false).notNull(),
   imageUrl: text('image_url'),
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// --- Product Add-ons (Join Table with Per-Product Overrides) ---
+export const productAddons = pgTable(
+  'product_addons',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    addonId: uuid('addon_id')
+      .notNull()
+      .references(() => addons.id, { onDelete: 'cascade' }),
+    priceOverride: decimal('price_override', { precision: 10, scale: 2 }),
+    isFreeOverride: boolean('is_free_override'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('product_addon_unique').on(table.productId, table.addonId),
+    index('product_addons_product_id_idx').on(table.productId),
+    index('product_addons_addon_id_idx').on(table.addonId),
+  ]
+);
 
 // --- Reviews ---
 export const reviews = pgTable('reviews', {
@@ -259,12 +279,13 @@ export const orderItemAddons = pgTable('order_item_addons', {
   orderItemId: uuid('order_item_id')
     .notNull()
     .references(() => orderItems.id, { onDelete: 'cascade' }),
-  addonId: uuid('addon_id').references(() => productAddons.id, { onDelete: 'set null' }),
+  addonId: uuid('addon_id').references(() => addons.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   priceAtPurchase: decimal('price_at_purchase', {
     precision: 10,
     scale: 2,
   }).notNull(),
+  quantity: integer('quantity').default(1).notNull(),
   imageUrl: text('image_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -311,8 +332,28 @@ export const storeSettings = pgTable('store_settings', {
   whatsappNumber: varchar('whatsapp_number', { length: 50 }),
   codAdvanceAmount: decimal('cod_advance_amount', { precision: 10, scale: 2 }).default('99.00').notNull(),
   orderExpirationMinutes: integer('order_expiration_minutes').default(15).notNull(),
+  maxOtpRequestsPerDay: integer('max_otp_requests_per_day').default(4).notNull(),
+  otpResendCooldownSeconds: integer('otp_resend_cooldown_seconds').default(45).notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// --- Phone OTPs (MSG91 & Mobile Auth Rate Limiting) ---
+export const phoneOtps = pgTable(
+  'phone_otps',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    phone: varchar('phone', { length: 20 }).notNull(),
+    otpHash: text('otp_hash').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    attempts: integer('attempts').default(0).notNull(),
+    lastSentAt: timestamp('last_sent_at').defaultNow().notNull(),
+    dailyCount: integer('daily_count').default(1).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('phone_otps_phone_idx').on(table.phone),
+  ]
+);
 
 // --- Promotional Banners ---
 export const banners = pgTable('banners', {

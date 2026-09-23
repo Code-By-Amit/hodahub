@@ -30,7 +30,9 @@ export async function PATCH(request) {
   try {
     await requireAdmin(request);
     const { userId, role } = await request.json();
-    if (!userId || !role) return NextResponse.json({ error: 'userId and role required' }, { status: 400 });
+    if (!userId || !role || !['customer', 'admin'].includes(role)) {
+      return NextResponse.json({ error: 'Valid userId and role ("customer" or "admin") are required' }, { status: 400 });
+    }
 
     const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
     return NextResponse.json({ user });

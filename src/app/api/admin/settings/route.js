@@ -32,6 +32,8 @@ export async function GET(request) {
           minFreeShipping: '50.00',
           codAdvanceAmount: '99.00',
           orderExpirationMinutes: 15,
+          maxOtpRequestsPerDay: 4,
+          otpResendCooldownSeconds: 45,
         },
       });
     }
@@ -78,6 +80,8 @@ export async function PUT(request) {
       minFreeShipping: data.minFreeShipping.toString(),
       codAdvanceAmount: data.codAdvanceAmount.toString(),
       orderExpirationMinutes: data.orderExpirationMinutes || 15,
+      maxOtpRequestsPerDay: data.maxOtpRequestsPerDay || 4,
+      otpResendCooldownSeconds: data.otpResendCooldownSeconds || 45,
       updatedAt: new Date(),
     };
 

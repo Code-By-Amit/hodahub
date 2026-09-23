@@ -110,14 +110,14 @@ export default function FilterPanel({
             <div className="flex items-center gap-2">
               <NumericInput
                 value={minPrice}
-                onChange={(e) => setMinPrice && setMinPrice(e.target.value)}
+                onChange={(val) => setMinPrice && setMinPrice(val)}
                 placeholder="Min"
                 className="w-full px-2 py-1 border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900"
               />
               <span className="text-warm-400 font-bold">–</span>
               <NumericInput
                 value={maxPrice}
-                onChange={(e) => setMaxPrice && setMaxPrice(e.target.value)}
+                onChange={(val) => setMaxPrice && setMaxPrice(val)}
                 placeholder="Max"
                 className="w-full px-2 py-1 border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900"
               />

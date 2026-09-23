@@ -304,10 +304,15 @@ export default function ProfilePage() {
                 </div>
               </div>
               <ImageUpload
-                images={profileData.avatarUrl ? [profileData.avatarUrl] : []}
-                onChange={(urls) => setProfileData({ ...profileData, avatarUrl: urls[0] || '' })}
-                type="review-media"
+                uploadType="avatar"
+                value={profileData.avatarUrl ? [profileData.avatarUrl] : []}
+                onChange={(urls) => {
+                  const url = Array.isArray(urls) ? (urls[0] || '') : (urls || '');
+                  setProfileData((prev) => ({ ...prev, avatarUrl: url }));
+                }}
+                multiple={false}
                 maxFiles={1}
+                label=""
               />
             </div>
 

@@ -47,6 +47,13 @@ export async function POST(request) {
       );
     }
 
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        { error: 'This account was created using Google Sign-In. Please sign in with Google.' },
+        { status: 400 }
+      );
+    }
+
     // Check password
     const validPassword = await bcrypt.compare(password, user.passwordHash);
     if (!validPassword) {

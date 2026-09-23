@@ -546,14 +546,18 @@ export default function AdminOrderDetailPage() {
                   {/* Add-ons rendering */}
                   {Array.isArray(item.addons) && item.addons.length > 0 && (
                     <div className="mt-0.5 flex flex-wrap gap-1">
-                      {item.addons.map((addon) => (
-                        <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
-                          {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
-                            <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
-                          )}
-                          <span>+ {addon.name} ({Number(addon.priceAtPurchase) === 0 ? 'Free' : formatCurrency(addon.priceAtPurchase)})</span>
-                        </div>
-                      ))}
+                      {item.addons.map((addon) => {
+                        const aQty = addon.quantity || 1;
+                        const aPrice = Number(addon.priceAtPurchase || 0);
+                        return (
+                          <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
+                            {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
+                              <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
+                            )}
+                            <span>+ {addon.name} × {aQty} ({aPrice === 0 ? 'Free' : formatCurrency(aPrice * aQty)})</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 

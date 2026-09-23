@@ -23,6 +23,8 @@ export async function GET() {
       shippingFee: '0.00',
       minFreeShipping: '50.00',
       codAdvanceAmount: '99.00',
+      maxOtpRequestsPerDay: 4,
+      otpResendCooldownSeconds: 45,
     };
 
     if (!settings) {
@@ -45,6 +47,8 @@ export async function GET() {
         shippingFee: settings.shippingFee ?? defaultSettings.shippingFee,
         minFreeShipping: settings.minFreeShipping ?? defaultSettings.minFreeShipping,
         codAdvanceAmount: settings.codAdvanceAmount ?? defaultSettings.codAdvanceAmount,
+        maxOtpRequestsPerDay: settings.maxOtpRequestsPerDay ?? defaultSettings.maxOtpRequestsPerDay,
+        otpResendCooldownSeconds: settings.otpResendCooldownSeconds ?? defaultSettings.otpResendCooldownSeconds,
       },
     });
   } catch (error) {

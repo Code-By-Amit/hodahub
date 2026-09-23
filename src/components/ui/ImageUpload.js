@@ -6,7 +6,9 @@ import { isVideoUrl } from '@/lib/utils';
 
 export default function ImageUpload({
   uploadType = 'product-image',
-  value = [],
+  type,
+  value,
+  images,
   onChange,
   multiple = true,
   maxFiles = 10,
@@ -18,8 +20,11 @@ export default function ImageUpload({
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Normalize value array
-  const mediaList = Array.isArray(value) ? value : value ? [value] : [];
+  const effectiveUploadType = type || uploadType;
+
+  // Normalize value array (supporting value or images prop)
+  const rawMedia = value !== undefined && value !== null ? value : images;
+  const mediaList = Array.isArray(rawMedia) ? rawMedia : rawMedia ? [rawMedia] : [];
 
 
   const uploadFileDirect = async (file) => {
@@ -32,7 +37,7 @@ export default function ImageUpload({
     const sigRes = await fetch('/api/upload/signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uploadType }),
+      body: JSON.stringify({ uploadType: effectiveUploadType }),
     });
 
     if (!sigRes.ok) {

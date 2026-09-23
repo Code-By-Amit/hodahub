@@ -77,6 +77,7 @@ export const productSchema = z.object({
   images: z.array(z.string().url()).default([]),
   isActive: z.boolean().default(true),
   codAvailable: z.boolean().default(true),
+  addonIds: z.array(z.string().uuid()).optional().default([]),
 });
 
 export const productStatusToggleSchema = z.object({
@@ -139,6 +140,14 @@ export const orderItemInputSchema = z.object({
   productId: z.string().uuid('Invalid product ID'),
   quantity: z.number().int().positive('Quantity must be at least 1'),
   selectedAddonIds: z.array(z.string().uuid()).optional(),
+  selectedAddons: z
+    .array(
+      z.object({
+        addonId: z.string().uuid('Invalid add-on ID'),
+        quantity: z.number().int().positive().default(1),
+      })
+    )
+    .optional(),
 });
 
 export const createOrderSchema = z.object({
@@ -202,6 +211,8 @@ export const storeSettingsSchema = z.object({
   minFreeShipping: z.coerce.number().min(0).default(50),
   codAdvanceAmount: z.coerce.number().min(0).default(99),
   orderExpirationMinutes: z.coerce.number().int().min(1).max(1440).default(15),
+  maxOtpRequestsPerDay: z.coerce.number().int().min(1).max(50).default(4),
+  otpResendCooldownSeconds: z.coerce.number().int().min(5).max(600).default(45),
 });
 
 export const contactSchema = z.object({

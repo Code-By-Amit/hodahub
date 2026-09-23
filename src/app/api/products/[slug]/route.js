@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { products, categories, productAddons } from '@/lib/db/schema';
+import { products, categories, productAddons, addons } from '@/lib/db/schema';
 import { eq, or, and } from 'drizzle-orm';
+
+import { resolveAddonPricing } from '@/lib/addon-utils';
 
 export async function GET(request, { params }) {
   try {
@@ -34,7 +36,6 @@ export async function GET(request, { params }) {
         isActive: products.isActive,
         codAvailable: products.codAvailable,
         specifications: products.specifications,
-        productLink: products.productLink,
         createdAt: products.createdAt,
         categoryName: categories.name,
         categorySlug: categories.slug,
@@ -51,11 +52,25 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Fetch active add-ons for product
-    const addons = await db
-      .select()
+    // Fetch active add-ons for product from shared library with per-product link overrides
+    const rawAddonLinks = await db
+      .select({
+        id: addons.id,
+        name: addons.name,
+        price: addons.price,
+        isFree: addons.isFree,
+        imageUrl: addons.imageUrl,
+        isActive: addons.isActive,
+        priceOverride: productAddons.priceOverride,
+        isFreeOverride: productAddons.isFreeOverride,
+      })
       .from(productAddons)
-      .where(and(eq(productAddons.productId, product.id), eq(productAddons.isActive, true)));
+      .innerJoin(addons, eq(productAddons.addonId, addons.id))
+      .where(and(eq(productAddons.productId, product.id), eq(addons.isActive, true)));
+
+    const resolvedAddons = rawAddonLinks.map((item) =>
+      resolveAddonPricing(item, { priceOverride: item.priceOverride, isFreeOverride: item.isFreeOverride })
+    );
 
     const isUnavailable = product.isOutOfStock || product.stock <= 0;
 
@@ -63,7 +78,7 @@ export async function GET(request, { params }) {
       product: {
         ...product,
         isOutOfStock: isUnavailable,
-        addons: addons || [],
+        addons: resolvedAddons || [],
       },
     });
   } catch (error) {

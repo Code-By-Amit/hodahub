@@ -24,6 +24,8 @@ export async function POST(request) {
       folder = 'categories';
     } else if (uploadType === 'review-media') {
       folder = 'reviews';
+    } else if (uploadType === 'avatar' || uploadType === 'profile-image') {
+      folder = 'avatars';
     } else {
       return NextResponse.json({ error: 'Invalid upload type' }, { status: 400 });
     }

@@ -105,8 +105,10 @@ export default function ProductDetailPage() {
   const [whatsappNumber, setWhatsappNumber] = useState('');
 
   useEffect(() => {
-    fetchProduct();
-    fetchSettings();
+    if (slug) {
+      fetchProduct();
+      fetchSettings();
+    }
   }, [slug]);
 
   async function fetchSettings() {
@@ -128,32 +130,44 @@ export default function ProductDetailPage() {
   }, [activeTab, product, user]);
 
   async function fetchProduct() {
+    if (!slug) return;
+    const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(slug)}`);
+      const res = await fetch(`/api/products/${encodeURIComponent(slugStr)}`);
       const data = await res.json();
       if (res.ok && data.product) {
         setProduct(data.product);
-        // Fetch related products
+        setLoading(false);
+
+        // Fetch related products in background without blocking UI render
         if (data.product.categorySlug) {
-          const relRes = await fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`);
-          const relData = await relRes.json();
-          let items = (relData.products || []).filter((p) => p.id !== data.product.id);
-          // Fallback if category has < 4 products
-          if (items.length < 4) {
-            const fallbackRes = await fetch('/api/products?limit=6');
-            const fallbackData = await fallbackRes.json();
-            items = (fallbackData.products || []).filter((p) => p.id !== data.product.id);
-          }
-          setRelatedProducts(items.slice(0, 6));
+          fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`)
+            .then((r) => r.json())
+            .then((relData) => {
+              let items = (relData.products || []).filter((p) => p.id !== data.product.id);
+              if (items.length < 4) {
+                fetch('/api/products?limit=6')
+                  .then((r) => r.json())
+                  .then((fallbackData) => {
+                    const fallbackItems = (fallbackData.products || []).filter((p) => p.id !== data.product.id);
+                    setRelatedProducts(fallbackItems.slice(0, 6));
+                  })
+                  .catch(() => {});
+              } else {
+                setRelatedProducts(items.slice(0, 6));
+              }
+            })
+            .catch(() => {});
         }
       } else {
         setProduct(null);
+        setLoading(false);
       }
     } catch {
       setProduct(null);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function fetchReviews() {
@@ -256,18 +270,18 @@ export default function ProductDetailPage() {
     setPincodeLoading(true);
     setPincodeStatus(null);
     try {
-      const res = await fetch(`https://api.postalpincode.in/pincode/${cleaned}`);
+      const res = await fetch(`/api/pincode/check?pincode=${cleaned}`);
       const data = await res.json();
-      if (Array.isArray(data) && data[0]?.Status === 'Success' && data[0]?.PostOffice?.length > 0) {
+      if (res.ok && data.serviceable) {
         setPincodeStatus({
           type: 'success',
-          message: `Delivered to your location (${data[0].PostOffice[0].District}, ${data[0].PostOffice[0].State} - Est. 3-7 business days)`,
+          message: data.message || 'Delivery available (Est. 3-7 business days)',
         });
       } else {
-        setPincodeStatus({ type: 'error', message: 'Please enter a valid 6-digit pincode' });
+        setPincodeStatus({ type: 'error', message: data.error || 'Please enter a valid 6-digit pincode' });
       }
     } catch {
-      setPincodeStatus({ type: 'error', message: 'Please enter a valid 6-digit pincode' });
+      setPincodeStatus({ type: 'success', message: 'Delivery available (Est. 3-7 business days)' });
     }
     setPincodeLoading(false);
   }
@@ -278,9 +292,15 @@ export default function ProductDetailPage() {
       if (exists) {
         return prev.filter((a) => a.id !== addon.id);
       } else {
-        return [...prev, addon];
+        return [...prev, { ...addon, quantity: 1 }];
       }
     });
+  }
+
+  function updateAddonQty(addonId, newQty) {
+    setSelectedAddons((prev) =>
+      prev.map((a) => (a.id === addonId ? { ...a, quantity: Math.max(1, newQty) } : a))
+    );
   }
 
   function handleAddToCart() {
@@ -586,37 +606,78 @@ export default function ProductDetailPage() {
               </span>
               <div className="space-y-2">
                 {product.addons.map((addon) => {
-                  const isChecked = selectedAddons.some((a) => a.id === addon.id);
+                  const selectedAddon = selectedAddons.find((a) => a.id === addon.id);
+                  const isChecked = Boolean(selectedAddon);
+                  const addonQty = selectedAddon?.quantity || 1;
                   return (
-                    <label
+                    <div
                       key={addon.id}
-                      onClick={() => toggleAddon(addon)}
-                      className={`flex items-center justify-between p-2 rounded-md border text-[11px] cursor-pointer transition-colors ${
+                      className={`flex flex-wrap items-center justify-between gap-2 p-2 rounded-md border text-[11px] transition-colors ${
                         isChecked
                           ? 'border-brand-600 bg-brand-50/30 font-semibold'
                           : 'border-warm-200 bg-warm-50/40 hover:bg-warm-50'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <label
+                        onClick={() => toggleAddon(addon)}
+                        className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+                      >
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {}}
                           className="rounded border-warm-300 text-brand-600 focus:ring-brand-500"
                         />
-                        {addon.imageUrl && (
+                        {addon.imageUrl ? (
                           <img
                             src={addon.imageUrl}
-                            alt=""
-                            className="w-7 h-7 rounded object-cover border border-warm-200 shrink-0"
+                            alt={addon.name || ''}
+                            className="w-8 h-8 rounded object-cover border border-warm-200 shrink-0"
                           />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-warm-100 border border-warm-200 flex items-center justify-center text-warm-400 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
                         )}
-                        <span className="text-warm-900">{addon.name}</span>
+                        <span className="text-warm-900 truncate">{addon.name}</span>
+                      </label>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isChecked && (
+                          <div className="flex items-center border border-warm-300 rounded overflow-hidden bg-white">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateAddonQty(addon.id, addonQty - 1);
+                              }}
+                              disabled={addonQty <= 1}
+                              className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              title="Decrease add-on quantity"
+                            >
+                              -
+                            </button>
+                            <span className="px-2 text-[10px] font-bold text-warm-900 min-w-[20px] text-center">
+                              {addonQty}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateAddonQty(addon.id, addonQty + 1);
+                              }}
+                              className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 cursor-pointer"
+                              title="Increase add-on quantity"
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                        <span className="font-bold text-brand-700">
+                          {addon.isFree ? 'Free' : `+${formatCurrency(Number(addon.price) * (isChecked ? addonQty : 1))}`}
+                        </span>
                       </div>
-                      <span className="font-bold text-brand-700">
-                        {addon.isFree ? 'Free' : `+${formatCurrency(addon.price)}`}
-                      </span>
-                    </label>
+                    </div>
                   );
                 })}
               </div>

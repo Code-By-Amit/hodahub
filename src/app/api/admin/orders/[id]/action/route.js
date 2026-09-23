@@ -48,10 +48,15 @@ export async function POST(request, { params }) {
     async function restoreOrderStock() {
       const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
       for (const item of items) {
-        await db
-          .update(products)
-          .set({ stock: sql`${products.stock} + ${item.quantity}` })
-          .where(eq(products.id, item.productId));
+        if (item.productId) {
+          await db
+            .update(products)
+            .set({
+              stock: sql`${products.stock} + ${item.quantity}`,
+              isOutOfStock: sql`CASE WHEN ${products.stock} + ${item.quantity} > 0 THEN false ELSE ${products.isOutOfStock} END`,
+            })
+            .where(eq(products.id, item.productId));
+        }
       }
     }
 

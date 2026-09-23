@@ -108,14 +108,28 @@ export async function sendOrderConfirmationEmail(toEmail, order, items = [], add
 
   try {
     const itemsListHtml = items
-      .map(
-        (i) => `
+      .map((i) => {
+        let addonsHtml = '';
+        if (Array.isArray(i.addons) && i.addons.length > 0) {
+          addonsHtml = i.addons
+            .map((a) => {
+              const aQty = a.quantity || 1;
+              const aUnitPrice = Number(a.priceAtPurchase || 0);
+              const aTotalPrice = aUnitPrice * aQty;
+              return `<div style="font-size:12px; color:#6b7280; margin-top:2px;">+ ${a.name} × ${aQty} (${aUnitPrice === 0 ? 'Free' : `₹${aTotalPrice.toFixed(2)}`})</div>`;
+            })
+            .join('');
+        }
+        return `
         <tr>
-          <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; color: #111827; font-size: 14px;">${i.name || 'Product'} × ${i.quantity}</td>
+          <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; color: #111827; font-size: 14px;">
+            <div>${i.name || 'Product'} × ${i.quantity}</div>
+            ${addonsHtml}
+          </td>
           <td style="padding: 8px 0; border-bottom: 1px solid #f3f4f6; color: #111827; font-size: 14px; text-align: right; font-weight: 600;">₹${(Number(i.priceAtPurchase || i.price) * i.quantity).toFixed(2)}</td>
         </tr>
-      `
-      )
+      `;
+      })
       .join('');
 
     const { data, error } = await resend.emails.send({
@@ -135,6 +149,7 @@ export async function sendOrderConfirmationEmail(toEmail, order, items = [], add
           <div style="background-color: #f9fafb; padding: 16px; border-radius: 12px; margin-bottom: 24px;">
             <p style="margin:0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600;">Payment Method</p>
             <p style="margin:0; font-size: 14px; font-weight: 700; color: #111827; text-transform: uppercase;">${order.paymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Razorpay Online Payment'}</p>
+            ${order.paymentMethod === 'cod' ? `<p style="margin:8px 0 0 0; font-size: 13px; font-weight: 600; color: #15803d;">You'll receive a confirmation call from us shortly to confirm your order.</p>` : ''}
           </div>
 
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">

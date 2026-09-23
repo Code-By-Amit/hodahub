@@ -76,7 +76,7 @@ export default function Header() {
     setAccountOpen(false);
     router.push('/');
   };
-
+  console.log("User Data: ", user)
   return (
     <>
       <header

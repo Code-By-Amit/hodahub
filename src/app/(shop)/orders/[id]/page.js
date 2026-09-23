@@ -467,14 +467,21 @@ export default function OrderDetailPage() {
                   {/* Add-ons list if present */}
                   {Array.isArray(item.addons) && item.addons.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {item.addons.map((addon) => (
-                        <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
-                          {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
-                            <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
-                          )}
-                          <span>+ {addon.name} ({Number(addon.priceAtPurchase) === 0 ? 'Free' : formatCurrency(addon.priceAtPurchase)})</span>
-                        </div>
-                      ))}
+                      {item.addons.map((addon) => {
+                        const aQty = addon.quantity || 1;
+                        const aUnitPrice = Number(addon.priceAtPurchase || 0);
+                        const aTotalPrice = aUnitPrice * aQty;
+                        return (
+                          <div key={addon.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded text-[9px] font-semibold border border-brand-200">
+                            {addon.imageUrl && typeof addon.imageUrl === 'string' && addon.imageUrl.trim() !== '' && (
+                              <img src={addon.imageUrl} alt="" className="w-3.5 h-3.5 rounded object-cover border border-brand-300 shrink-0" />
+                            )}
+                            <span>
+                              + {addon.name} × {aQty} ({aUnitPrice === 0 ? 'Free' : formatCurrency(aTotalPrice)})
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -535,21 +542,11 @@ export default function OrderDetailPage() {
                 <span>Total Amount</span>
                 <span>{formatCurrency(order.totalAmount)}</span>
               </div>
-              {order.paymentMethod === 'cod' && Number(order.codAdvanceAmount) > 0 && (
+              {order.paymentMethod === 'cod' && (
                 <div className="mt-2 pt-2 border-t border-dashed border-warm-200 space-y-1">
-                  <div className="flex justify-between text-emerald-700 font-semibold text-[11px]">
-                    <span>Advance Paid Online</span>
-                    <span>{formatCurrency(order.codAdvanceAmount)}</span>
+                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[10px] text-emerald-900 font-medium">
+                    You&apos;ll receive a confirmation call from us shortly to confirm your order.
                   </div>
-                  <div className="flex justify-between text-amber-800 font-bold text-[11px]">
-                    <span>Cash Due on Delivery</span>
-                    <span>{formatCurrency(Math.max(0, Number(order.totalAmount) - Number(order.codAdvanceAmount)))}</span>
-                  </div>
-                  {order.codAdvancePaymentId && (
-                    <p className="text-[9px] text-warm-400 font-mono mt-0.5">
-                      Advance Txn: {order.codAdvancePaymentId}
-                    </p>
-                  )}
                 </div>
               )}
             </div>
