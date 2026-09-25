@@ -123,41 +123,27 @@ export async function getAuthUser(request) {
 
   if (!userObj) return null;
 
-  // Auto-heal: If role or id missing from older tokens, fetch from DB
-  if (!userObj.role || !userObj.id) {
-    try {
-      const [dbUser] = await db.select().from(users).where(eq(users.id, userObj.id)).limit(1);
-      if (dbUser) {
-        userObj = {
-          id: dbUser.id,
-          email: dbUser.email || null,
-          phone: dbUser.phone || null,
-          role: dbUser.role,
-          name: dbUser.name || 'Customer',
-        };
-        const newTokens = generateTokens(userObj);
-        try {
-          cookieStore.set('access_token', newTokens.accessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: 15 * 60,
-          });
-          cookieStore.set('refresh_token', newTokens.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: 7 * 24 * 60 * 60,
-          });
-        } catch {}
-      } else {
-        return null;
-      }
-    } catch {
+  // Always sync latest user profile & role from DB so role promotions/demotions take effect immediately
+  try {
+    const [dbUser] = await db
+      .select({ id: users.id, email: users.email, phone: users.phone, role: users.role, name: users.name })
+      .from(users)
+      .where(eq(users.id, userObj.id))
+      .limit(1);
+
+    if (dbUser) {
+      userObj = {
+        id: dbUser.id,
+        email: dbUser.email || null,
+        phone: dbUser.phone || null,
+        role: dbUser.role,
+        name: dbUser.name || 'Customer',
+      };
+    } else {
       return null;
     }
+  } catch {
+    // Fall back to decoded token userObj if DB fails
   }
 
   return userObj;

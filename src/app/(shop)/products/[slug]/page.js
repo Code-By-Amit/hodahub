@@ -124,10 +124,10 @@ export default function ProductDetailPage() {
   }
 
   useEffect(() => {
-    if (activeTab === 'reviews' && product) {
+    if (product) {
       fetchReviews();
     }
-  }, [activeTab, product, user]);
+  }, [product, user]);
 
   async function fetchProduct() {
     if (!slug) return;
@@ -140,58 +140,71 @@ export default function ProductDetailPage() {
         setProduct(data.product);
         setLoading(false);
 
-        // Fetch "You May Also Like" mixed category products feed in parallel
+        // Fetch "You May Also Like" products from same category or brand
         (async () => {
           try {
-            const [sameCatRes, bestSellersRes, newestRes] = await Promise.all([
-              data.product.categorySlug
-                ? fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`)
-                    .then((r) => (r.ok ? r.json() : null))
-                    .catch(() => null)
-                : Promise.resolve(null),
-              fetch('/api/products?sort=best-sellers&limit=8')
-                .then((r) => (r.ok ? r.json() : null))
-                .catch(() => null),
-              fetch('/api/products?sort=newest&limit=8')
-                .then((r) => (r.ok ? r.json() : null))
-                .catch(() => null),
-            ]);
+            const fetches = [];
 
-            const sameCategoryItems = (sameCatRes?.products || []).filter((p) => p.id !== data.product.id);
-            const otherCategoryItems = (bestSellersRes?.products || []).filter(
-              (p) => p.id !== data.product.id && p.categorySlug !== data.product.categorySlug
+            // 1. Same category
+            if (data.product.categorySlug) {
+              fetches.push(
+                fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=10`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .catch(() => null)
+              );
+            } else {
+              fetches.push(Promise.resolve(null));
+            }
+
+            // 2. Same brand
+            const brandTerm = data.product.brandSlug || data.product.brand;
+            if (brandTerm) {
+              fetches.push(
+                fetch(`/api/products?brand=${encodeURIComponent(brandTerm)}&limit=10`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .catch(() => null)
+              );
+            } else {
+              fetches.push(Promise.resolve(null));
+            }
+
+            // 3. Fallback newest
+            fetches.push(
+              fetch('/api/products?sort=newest&limit=10')
+                .then((r) => (r.ok ? r.json() : null))
+                .catch(() => null)
             );
 
-            (newestRes?.products || []).forEach((p) => {
-              if (
-                p.id !== data.product.id &&
-                p.categorySlug !== data.product.categorySlug &&
-                !otherCategoryItems.some((item) => item.id === p.id)
-              ) {
-                otherCategoryItems.push(p);
+            const [catRes, brandRes, newestRes] = await Promise.all(fetches);
+
+            const list = [];
+            const seenIds = new Set([data.product.id]);
+
+            // Add same category items
+            (catRes?.products || []).forEach((p) => {
+              if (!seenIds.has(p.id) && list.length < 6) {
+                seenIds.add(p.id);
+                list.push(p);
               }
             });
 
-            // Interleave and blend items across categories
-            const blendedList = [];
-            const seenIds = new Set([data.product.id]);
-            const maxLength = Math.max(sameCategoryItems.length, otherCategoryItems.length);
-
-            for (let i = 0; i < maxLength; i++) {
-              if (i < sameCategoryItems.length && !seenIds.has(sameCategoryItems[i].id)) {
-                seenIds.add(sameCategoryItems[i].id);
-                blendedList.push(sameCategoryItems[i]);
+            // Add same brand items
+            (brandRes?.products || []).forEach((p) => {
+              if (!seenIds.has(p.id) && list.length < 6) {
+                seenIds.add(p.id);
+                list.push(p);
               }
-              if (blendedList.length >= 6) break;
+            });
 
-              if (i < otherCategoryItems.length && !seenIds.has(otherCategoryItems[i].id)) {
-                seenIds.add(otherCategoryItems[i].id);
-                blendedList.push(otherCategoryItems[i]);
+            // Fallback to newest active products if < 6 items
+            (newestRes?.products || []).forEach((p) => {
+              if (!seenIds.has(p.id) && list.length < 6) {
+                seenIds.add(p.id);
+                list.push(p);
               }
-              if (blendedList.length >= 6) break;
-            }
+            });
 
-            setRelatedProducts(blendedList.slice(0, 6));
+            setRelatedProducts(list.slice(0, 6));
           } catch (e) {
             // Silently swallow recommendation errors
           }
@@ -207,9 +220,11 @@ export default function ProductDetailPage() {
   }
 
   async function fetchReviews() {
+    if (!slug) return;
+    const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setReviewsLoading(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(slug)}/reviews`);
+      const res = await fetch(`/api/products/${encodeURIComponent(slugStr)}/reviews`);
       const data = await res.json();
       setReviews(data.reviews || []);
       setUserHasOrdered(!!data.userHasOrdered);
@@ -859,178 +874,21 @@ export default function ProductDetailPage() {
         {/* Tab 3: Reviews with Media Upload & Gallery */}
         {activeTab === 'reviews' && (
           <div className="py-4 max-w-3xl space-y-5">
-            {!user ? (
-              <div className="p-4 bg-warm-50 border border-warm-200 rounded-md text-[11px] sm:text-[12px] text-warm-700 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-warm-500 shrink-0" />
-                  <span>Please sign in to leave a review for products you've purchased.</span>
-                </div>
-                <Link
-                  href="/login"
-                  className="px-3 py-1 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors shrink-0"
-                >
-                  Sign In
-                </Link>
+            {/* Public Review Guidance Banner */}
+            <div className="p-3.5 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-700 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-brand-600 shrink-0" />
+                <span>
+                  Reviews can be submitted from your <strong className="text-warm-900">My Orders</strong> page after your order has been delivered.
+                </span>
               </div>
-            ) : !userHasOrdered ? (
-              <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-md text-[11px] sm:text-[12px] text-amber-900 flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Verified Purchase Required</p>
-                  <p className="text-[11px] text-amber-800 mt-0.5">
-                    Only customers who have purchased this product can leave a review. Once your order is placed, you'll be able to rate and share feedback here.
-                  </p>
-                </div>
-              </div>
-            ) : userReview && !isEditingReview ? (
-              <div className="p-4 bg-warm-50/80 border border-warm-200 rounded-md space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-warm-900 text-white text-[10px] font-bold rounded-md uppercase tracking-wider">
-                      Your Review
-                    </span>
-                    <span className="text-[11px] text-warm-500">
-                      {new Date(userReview.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={startEditingOwnReview}
-                      className="px-2.5 py-1 bg-white border border-warm-300 text-warm-800 hover:text-brand-600 hover:border-brand-300 text-[11px] font-semibold rounded-md transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Edit Review</span>
-                    </button>
-                    <button
-                      onClick={handleDeleteOwnReview}
-                      className="px-2 py-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-semibold rounded-md transition-colors flex items-center gap-1 cursor-pointer"
-                      title="Delete review"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {userReview.rating && userReview.rating > 0 ? (
-                  <StarRating rating={userReview.rating} size="sm" />
-                ) : null}
-
-                {userReview.comment && (
-                  <p className="text-[11px] sm:text-[12px] text-warm-800 leading-relaxed">{userReview.comment}</p>
-                )}
-
-                {Array.isArray(userReview.mediaUrls) && userReview.mediaUrls.length > 0 && (
-                  <div className="flex gap-2 overflow-x-auto pt-1">
-                    {userReview.mediaUrls.map((mediaUrl, idx) => {
-                      const isVid = isVideoUrl(mediaUrl);
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => setModalMedia(mediaUrl)}
-                          className="relative w-14 h-14 rounded-md overflow-hidden border border-warm-200 bg-warm-100 shrink-0 cursor-pointer group hover:border-brand-600 transition-colors"
-                        >
-                          {isVid ? (
-                            <>
-                              <video src={mediaUrl} className="w-full h-full object-cover" muted />
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                <Film className="w-4 h-4 text-white" />
-                              </div>
-                            </>
-                          ) : (
-                            <img src={mediaUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitReview} className="p-3.5 sm:p-4 bg-white border border-warm-200 rounded-md space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[13px] font-bold text-warm-900">
-                    {isEditingReview ? 'Edit Your Review' : 'Write a Customer Review'}
-                  </h3>
-                  {isEditingReview && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingReview(false)}
-                      className="text-[11px] text-warm-500 hover:text-warm-800 font-medium"
-                    >
-                      Cancel Edit
-                    </button>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold text-warm-700 mb-1">Your Rating</label>
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewForm({ ...reviewForm, rating: star })}
-                        className="p-0.5 text-warm-300 hover:scale-110 transition-transform cursor-pointer"
-                      >
-                        <Star
-                          className={`w-4 h-4 ${
-                            star <= reviewForm.rating ? 'fill-amber-400 text-amber-400' : 'text-warm-300'
-                          }`}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-semibold text-warm-700 mb-1">Review Comment</label>
-                  <textarea
-                    value={reviewForm.comment}
-                    onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
-                    rows={3}
-                    className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] sm:text-[12px] text-warm-900 focus:outline-none focus:border-brand-600 resize-none"
-                    placeholder="Share your thoughts on quality, sizing, delivery..."
-                  />
-                </div>
-
-                {/* Upload Photos or Short Video */}
-                <div>
-                  <ImageUpload
-                    uploadType="review-media"
-                    value={reviewForm.mediaUrls || []}
-                    onChange={(urls) => setReviewForm({ ...reviewForm, mediaUrls: urls })}
-                    multiple={true}
-                    maxFiles={5}
-                    maxSizeMB={50}
-                    label="Attach Photos or Short Video Clips (Optional)"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={submittingReview || (!reviewForm.rating && !reviewForm.comment?.trim())}
-                    className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
-                  >
-                    {submittingReview ? (
-                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-3.5 h-3.5" />
-                    )}
-                    <span>{submittingReview ? 'Saving...' : isEditingReview ? 'Update Review' : 'Submit Review'}</span>
-                  </button>
-                  {isEditingReview && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingReview(false)}
-                      className="px-3 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
-            )}
+              <Link
+                href="/orders"
+                className="px-3 py-1 bg-warm-900 text-white text-[10px] font-semibold rounded-md hover:bg-warm-800 transition-colors shrink-0"
+              >
+                Go to My Orders
+              </Link>
+            </div>
 
             {/* Reviews List */}
             {reviewsLoading ? (

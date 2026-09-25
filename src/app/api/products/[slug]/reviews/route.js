@@ -41,7 +41,7 @@ export async function GET(request, { params }) {
         comment: reviews.comment,
         mediaUrls: reviews.mediaUrls,
         createdAt: reviews.createdAt,
-        userName: sql`COALESCE(${reviews.userName}, ${users.name}, 'Anonymous Customer')`,
+        userName: sql`COALESCE(NULLIF(TRIM(${reviews.userName}), ''), ${users.name}, 'Anonymous Customer')`,
       })
       .from(reviews)
       .leftJoin(users, eq(reviews.userId, users.id))
@@ -68,7 +68,7 @@ export async function GET(request, { params }) {
           and(
             eq(orders.userId, user.id),
             eq(orderItems.productId, product.id),
-            ne(orders.status, 'cancelled')
+            eq(orders.status, 'delivered')
           )
         )
         .limit(1);
@@ -140,8 +140,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    // Check purchase history (must have non-cancelled order containing this product)
-    const userOrders = await db
+    // Check delivered order history (MUST have a DELIVERED order containing this product)
+    const deliveredOrders = await db
       .select({ id: orders.id })
       .from(orders)
       .innerJoin(orderItems, eq(orders.id, orderItems.orderId))
@@ -149,14 +149,14 @@ export async function POST(request, { params }) {
         and(
           eq(orders.userId, user.id),
           eq(orderItems.productId, product.id),
-          ne(orders.status, 'cancelled')
+          eq(orders.status, 'delivered')
         )
       )
       .limit(1);
 
-    if (userOrders.length === 0) {
+    if (deliveredOrders.length === 0) {
       return NextResponse.json(
-        { error: "You can only review products you've purchased." },
+        { error: 'Reviews can only be submitted for delivered orders. Check your My Orders page.' },
         { status: 403 }
       );
     }

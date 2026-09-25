@@ -149,7 +149,13 @@ function LoginContent() {
       }
 
       dispatch(setUser(data.user));
-      await syncWishlistOnAuth(dispatch, guestWishlistItems);
+      try {
+        await syncWishlistOnAuth(dispatch, guestWishlistItems);
+      } catch (syncErr) {
+        console.warn('[Login OTP] Wishlist sync warning:', syncErr);
+      }
+
+      setVerifyingOtp(false);
 
       if (data.user?.role === 'admin') {
         router.push('/admin');

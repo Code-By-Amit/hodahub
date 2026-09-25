@@ -56,7 +56,10 @@ export async function POST(request) {
       })
       .where(eq(users.id, user.id));
 
-    await sendPasswordResetEmail(cleanEmail, resetOtp);
+    const emailResult = await sendPasswordResetEmail(cleanEmail, resetOtp);
+    if (!emailResult.success) {
+      console.error('[Forgot Password] Email send failure:', emailResult.error);
+    }
 
     return NextResponse.json({
       message: 'Password reset code sent to your email.',

@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast';
 import FieldError from '@/components/ui/FieldError';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { ArrowLeft, ArrowRight, Lock, Mail, Key } from 'lucide-react';
+import { forgotPasswordSchema, resetPasswordSchema } from '@/lib/validations';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();

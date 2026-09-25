@@ -10,7 +10,8 @@ import { useToast } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatCurrency } from '@/lib/utils';
-import { Frown, Package } from 'lucide-react';
+import ImageUpload from '@/components/ui/ImageUpload';
+import { Frown, Package, Star } from 'lucide-react';
 import Script from 'next/script';
 import {
   FiPackage,
@@ -22,6 +23,7 @@ import {
   FiRotateCcw,
   FiCreditCard,
   FiPhoneCall,
+  FiStar,
 } from 'react-icons/fi';
 
 const statusSteps = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
@@ -50,6 +52,13 @@ export default function OrderDetailPage() {
 
   const [retryingPayment, setRetryingPayment] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
+  // Delivered Item Review State
+  const [reviewModalItem, setReviewModalItem] = useState(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewMediaUrls, setReviewMediaUrls] = useState([]);
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.Razorpay) {
@@ -214,6 +223,40 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function handleSubmitReview(e) {
+    e.preventDefault();
+    if (!reviewModalItem || !reviewModalItem.productSlug) return;
+    if (!reviewRating && (!reviewComment || !reviewComment.trim())) {
+      toast.error('Please provide a star rating or comment');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(reviewModalItem.productSlug)}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rating: Number(reviewRating),
+          comment: reviewComment.trim(),
+          mediaUrls: reviewMediaUrls,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Review submitted successfully!');
+        setReviewModalItem(null);
+        setReviewComment('');
+        setReviewMediaUrls([]);
+        fetchOrder();
+      } else {
+        toast.error(data.error || 'Failed to submit review');
+      }
+    } catch {
+      toast.error('Network error submitting review');
+    }
+    setSubmittingReview(false);
+  }
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-10">
@@ -325,7 +368,7 @@ export default function OrderDetailPage() {
               Cash on Delivery Order Placed
             </h3>
             <p className="text-[11px] text-emerald-800 font-medium leading-relaxed mt-0.5">
-              You&apos;ll receive a confirmation call from us shortly to confirm your order details and delivery.
+              You&apos;ll receive a confirmation call from our customer executive, and advance payment may be required.
             </p>
           </div>
         </div>
@@ -506,9 +549,26 @@ export default function OrderDetailPage() {
                   <p className="text-[10px] text-warm-500 mt-0.5">
                     Qty: {item.quantity} × {formatCurrency(item.priceAtPurchase)}
                   </p>
-                  <p className="text-[11px] font-semibold text-warm-900 mt-1">
-                    {formatCurrency(item.quantity * Number(item.priceAtPurchase))}
-                  </p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-[11px] font-semibold text-warm-900">
+                      {formatCurrency(item.quantity * Number(item.priceAtPurchase))}
+                    </p>
+                    {order.status === 'delivered' && item.productSlug && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReviewModalItem(item);
+                          setReviewRating(5);
+                          setReviewComment('');
+                          setReviewMediaUrls([]);
+                        }}
+                        className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 text-[10px] font-bold rounded-md transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <FiStar className="w-3 h-3 text-amber-500 fill-amber-400" />
+                        <span>Write a Review</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -677,6 +737,76 @@ export default function OrderDetailPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Review Submission Modal for Delivered Order Item */}
+      <Modal isOpen={!!reviewModalItem} onClose={() => setReviewModalItem(null)} title={`Review: ${reviewModalItem?.productName || 'Product'}`}>
+        <form onSubmit={handleSubmitReview} className="space-y-3.5">
+          <p className="text-[11px] text-warm-600">
+            Share your feedback and rating for <strong className="text-warm-900">{reviewModalItem?.productName}</strong> from Order #{order.id.slice(0, 8)}.
+          </p>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">Your Rating *</label>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewRating(star)}
+                  className="p-1 text-warm-300 hover:scale-110 transition-transform cursor-pointer"
+                >
+                  <Star
+                    className={`w-5 h-5 ${
+                      star <= reviewRating ? 'fill-amber-400 text-amber-400' : 'text-warm-300'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">Review Comment</label>
+            <textarea
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              rows={3}
+              placeholder="Share your experience regarding product quality, fit, or performance..."
+              className="w-full px-3 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all resize-none"
+            />
+          </div>
+
+          <div>
+            <ImageUpload
+              uploadType="review-media"
+              value={reviewMediaUrls}
+              onChange={(urls) => setReviewMediaUrls(urls)}
+              multiple={true}
+              maxFiles={5}
+              maxSizeMB={50}
+              label="Attach Photos or Short Video Clips (Optional)"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+            <button
+              type="button"
+              onClick={() => setReviewModalItem(null)}
+              className="px-3.5 py-1.5 border border-warm-200 text-warm-700 text-[11px] font-semibold rounded-md hover:bg-warm-100 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingReview}
+              className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {submittingReview ? 'Submitting...' : 'Submit Review'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setRazorpayLoaded(true)} />
     </div>
   );

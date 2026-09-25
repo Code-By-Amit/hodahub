@@ -26,11 +26,16 @@ export async function GET(request) {
     ];
 
     if (category) {
-      // Find category by slug or ID
+      // Find category by slug or ID safely without UUID syntax error
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(category);
+      const categoryCondition = isUuid
+        ? or(eq(categories.slug, category), eq(categories.id, category))
+        : eq(categories.slug, category);
+
       const [cat] = await db
         .select({ id: categories.id })
         .from(categories)
-        .where(or(eq(categories.slug, category), eq(categories.id, category)))
+        .where(categoryCondition)
         .limit(1);
       if (cat) {
         // Collect all descendant subcategory IDs recursively

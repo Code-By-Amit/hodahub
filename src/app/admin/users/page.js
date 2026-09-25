@@ -11,6 +11,16 @@ export default function AdminUsersPage() {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
   const [loading, setLoading] = useState(true);
 
+  // Add Admin modal states
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [addForm, setAddForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'admin',
+  });
+
   useEffect(() => { fetchUsers(); }, [pagination.page]);
 
   async function fetchUsers() {
@@ -21,6 +31,34 @@ export default function AdminUsersPage() {
       setPagination(data.pagination || pagination);
     } catch {}
     setLoading(false);
+  }
+
+  async function handleCreateAdmin(e) {
+    e.preventDefault();
+    if (!addForm.email || !addForm.password || addForm.password.length < 6) {
+      toast.error('Valid email and password (min 6 chars) are required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'Admin account created successfully!');
+        setShowAddModal(false);
+        setAddForm({ name: '', email: '', password: '', role: 'admin' });
+        fetchUsers();
+      } else {
+        toast.error(data.error || 'Failed to create admin user');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+    setSubmitting(false);
   }
 
   async function toggleRole(userId, currentRole) {
@@ -42,8 +80,21 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-base font-bold text-warm-900 tracking-tight mb-4">Users</h1>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-base font-bold text-warm-900 tracking-tight">User Management</h1>
+          <p className="text-[11px] text-warm-500">Manage registered customers, permissions, and create admin accounts</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors cursor-pointer"
+        >
+          + Add Admin Account
+        </button>
+      </div>
 
       <div className="bg-white rounded-md border border-warm-200 shadow-xs overflow-x-auto">
         <table className="w-full text-[11px]">
@@ -98,6 +149,98 @@ export default function AdminUsersPage() {
       {pagination.totalPages > 1 && (
         <div className="mt-4">
           <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={(p) => setPagination({ ...pagination, page: p })} />
+        </div>
+      )}
+
+      {/* Add Admin Account Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-warm-200 shadow-xl max-w-md w-full p-5 space-y-4 relative animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-warm-100 pb-3">
+              <h3 className="font-bold text-warm-900 text-sm">Create Admin / User Account</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-warm-400 hover:text-warm-700 p-1 rounded-md cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAdmin} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  placeholder="e.g. Admin Manager"
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  value={addForm.email}
+                  onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                  placeholder="admin@hodahub.in"
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Password * (Min. 6 characters)
+                </label>
+                <input
+                  type="password"
+                  value={addForm.password}
+                  onChange={(e) => setAddForm({ ...addForm, password: e.target.value })}
+                  placeholder="Set secure password"
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Assigned Account Role *
+                </label>
+                <select
+                  value={addForm.role}
+                  onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                >
+                  <option value="admin">Admin (Full Access)</option>
+                  <option value="customer">Customer (Storefront Only)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-3.5 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? 'Creating...' : 'Create Account'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

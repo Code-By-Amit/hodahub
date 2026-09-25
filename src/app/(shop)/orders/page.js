@@ -80,6 +80,11 @@ export default function OrdersPage() {
                   <p className="text-xs text-warm-500 mt-1">{new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {order.status === 'delivered' && (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      ★ Rate & Review
+                    </span>
+                  )}
                   <span className={`px-3 py-1 text-xs font-semibold rounded-full capitalize ${statusColors[order.status] || 'bg-warm-100 text-warm-600'}`}>
                     {order.status}
                   </span>

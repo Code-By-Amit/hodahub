@@ -91,6 +91,7 @@ export async function verifyMSG91AccessToken(accessToken, phone) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (!response.ok && response.status === 404) {
@@ -98,6 +99,7 @@ export async function verifyMSG91AccessToken(accessToken, phone) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
       });
     }
 

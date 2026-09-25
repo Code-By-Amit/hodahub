@@ -836,7 +836,9 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                           <p className="text-[11px] font-bold text-warm-900 flex items-center gap-1">
                             <FiTruck className="w-3 h-3 text-warm-700" /> Cash on Delivery
                           </p>
-                          <p className="text-[10px] text-emerald-700 font-medium mt-0.5">No advance payment required</p>
+                          <p className="text-[10px] text-warm-600 font-medium mt-0.5">
+                            You&apos;ll receive a confirmation call from our customer executive, and advance payment may be required.
+                          </p>
                         </div>
                       </label>
                     )}
@@ -870,12 +872,12 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
 
                   {/* COD Confirmation Notice */}
                   {paymentMethod === 'cod' && isCodAvailable && (
-                    <div className="mt-3 p-3 bg-emerald-50/80 border border-emerald-200 rounded-md text-[11px] text-emerald-900 space-y-1">
-                      <p className="font-bold flex items-center gap-1.5 text-emerald-900">
-                        <FiTruck className="w-3.5 h-3.5 text-emerald-700" /> Cash on Delivery Notice
+                    <div className="mt-3 p-3 bg-amber-50/80 border border-amber-200 rounded-md text-[11px] text-amber-900 space-y-1">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                        <FiTruck className="w-3.5 h-3.5 text-amber-700" /> Cash on Delivery Notice
                       </p>
-                      <p className="text-[10px] text-emerald-800 leading-relaxed font-semibold">
-                        You&apos;ll receive a confirmation call from us shortly to confirm your order.
+                      <p className="text-[10px] text-amber-800 leading-relaxed font-semibold">
+                        You&apos;ll receive a confirmation call from our customer executive, and advance payment may be required.
                       </p>
                     </div>
                   )}

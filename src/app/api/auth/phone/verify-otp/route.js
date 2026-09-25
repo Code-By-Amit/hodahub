@@ -74,11 +74,11 @@ export async function POST(request) {
         .where(
           andOrm(
             isNull(orders.userId),
-            sql`RIGHT(REGEXP_REPLACE(COALESCE(${orders.guestPhone}, ''), '\\D', 'g'), 10) = ${clean10}`
+            sql`RIGHT(REGEXP_REPLACE(COALESCE(${orders.guestPhone}, ''), '[^0-9]', 'g'), 10) = ${clean10}`
           )
         );
     } catch (e) {
-      console.warn('Failed to link guest orders on phone verify OTP:', e);
+      console.warn('[Phone OTP Verify Route] Note on linking guest orders:', e.message || e);
     }
 
     const userPayload = {
