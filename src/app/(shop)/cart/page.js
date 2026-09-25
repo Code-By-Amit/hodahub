@@ -167,13 +167,14 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0 && (
+                {item.selectedAddon && (
                   <div className="mt-2 pl-3 border-l-2 border-brand-200 space-y-1.5">
-                    {item.selectedAddons.map((a) => {
+                    {(() => {
+                      const a = item.selectedAddon;
                       const aQty = a.quantity || 1;
                       const aPrice = a.isFree ? 0 : Number(a.price || 0);
                       return (
-                        <div key={a.id} className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-warm-700 bg-warm-50/80 px-2.5 py-1 rounded border border-warm-200">
+                        <div key={a.id || a.addonId} className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-warm-700 bg-warm-50/80 px-2.5 py-1 rounded border border-warm-200">
                           <div className="flex items-center gap-1.5">
                             {a.imageUrl && (
                               <img src={a.imageUrl} alt="" className="w-4 h-4 rounded object-cover border border-warm-200 shrink-0" />
@@ -190,7 +191,6 @@ export default function CartPage() {
                                     updateAddonQuantity({
                                       itemKey: item.itemKey,
                                       productId: item.productId,
-                                      addonId: a.id,
                                       quantity: aQty - 1,
                                     })
                                   )
@@ -210,20 +210,20 @@ export default function CartPage() {
                                     updateAddonQuantity({
                                       itemKey: item.itemKey,
                                       productId: item.productId,
-                                      addonId: a.id,
                                       quantity: aQty + 1,
                                     })
                                   )
                                 }
-                                className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 cursor-pointer"
-                                title="Increase add-on quantity"
+                                disabled={aQty >= item.quantity}
+                                className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                title={aQty >= item.quantity ? "Add-on quantity cannot exceed product quantity" : "Increase add-on quantity"}
                               >
                                 +
                               </button>
                             </div>
 
                             <span className="text-brand-700 font-bold">
-                              {a.isFree ? 'Free' : formatCurrency(aPrice * aQty)}
+                              {formatCurrency(aPrice * aQty)}
                             </span>
 
                             <button
@@ -232,7 +232,6 @@ export default function CartPage() {
                                   removeAddonFromCartItem({
                                     itemKey: item.itemKey,
                                     productId: item.productId,
-                                    addonId: a.id,
                                   })
                                 )
                               }
@@ -244,7 +243,7 @@ export default function CartPage() {
                           </div>
                         </div>
                       );
-                    })}
+                    })()}
                   </div>
                 )}
 
@@ -252,7 +251,7 @@ export default function CartPage() {
                   <div className="flex items-center border border-warm-200 rounded-lg overflow-hidden bg-white">
                     <button
                       onClick={() =>
-                        dispatch(updateQuantity({ productId: item.productId, itemKey: item.itemKey, quantity: item.quantity - 1 }))
+                        dispatch(updateQuantity({ itemKey: item.itemKey, quantity: item.quantity - 1 }))
                       }
                       disabled={item.quantity <= 1}
                       className="p-2 text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
@@ -265,7 +264,7 @@ export default function CartPage() {
                     </span>
                     <button
                       onClick={() =>
-                        dispatch(updateQuantity({ productId: item.productId, itemKey: item.itemKey, quantity: item.quantity + 1 }))
+                        dispatch(updateQuantity({ itemKey: item.itemKey, quantity: item.quantity + 1 }))
                       }
                       className="p-2 text-warm-600 hover:bg-warm-50 transition-colors"
                       title="Increase quantity"

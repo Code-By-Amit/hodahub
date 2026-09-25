@@ -27,7 +27,8 @@ export async function sendOTPEmail(email, otp) {
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="margin:0; color:#111827; font-size:26px; font-weight:800; tracking-tight: -0.5px;">Hoda<span style="color:#f97316;">Hub</span></h1>
+            <img src="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logof.png" alt="HodaHub" style="height:40px; width:auto; margin:0 auto 6px auto; display:block;" />
+            <h1 style="margin:0; color:#111827; font-size:24px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
           </div>
           <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin-bottom: 12px; text-align: center;">Verify Your Email</h2>
           <p style="color: #4b5563; font-size: 14px; line-height: 1.5; text-align: center; margin-bottom: 24px;">
@@ -74,7 +75,8 @@ export async function sendPasswordResetEmail(email, otp) {
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="margin:0; color:#111827; font-size:26px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
+            <img src="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logof.png" alt="HodaHub" style="height:40px; width:auto; margin:0 auto 6px auto; display:block;" />
+            <h1 style="margin:0; color:#111827; font-size:24px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
           </div>
           <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin-bottom: 12px; text-align: center;">Password Reset Request</h2>
           <p style="color: #4b5563; font-size: 14px; line-height: 1.5; text-align: center; margin-bottom: 24px;">
@@ -139,7 +141,8 @@ export async function sendOrderConfirmationEmail(toEmail, order, items = [], add
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="margin:0; color:#111827; font-size:26px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
+            <img src="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logof.png" alt="HodaHub" style="height:40px; width:auto; margin:0 auto 6px auto; display:block;" />
+            <h1 style="margin:0; color:#111827; font-size:24px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
           </div>
           <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin-bottom: 8px;">Order Placed Successfully!</h2>
           <p style="color: #4b5563; font-size: 14px; margin-bottom: 24px;">
@@ -196,7 +199,8 @@ export async function sendPaymentConfirmationEmail(toEmail, order) {
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="margin:0; color:#111827; font-size:26px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
+            <img src="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logof.png" alt="HodaHub" style="height:40px; width:auto; margin:0 auto 6px auto; display:block;" />
+            <h1 style="margin:0; color:#111827; font-size:24px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
           </div>
           <h2 style="color: #16a34a; font-size: 20px; font-weight: 700; margin-bottom: 12px; text-align: center;">Payment Received</h2>
           <p style="color: #4b5563; font-size: 14px; line-height: 1.5; text-align: center; margin-bottom: 24px;">
@@ -241,7 +245,8 @@ export async function sendOrderStatusEmail(toEmail, order, newStatus, note = '')
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
           <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="margin:0; color:#111827; font-size:26px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
+            <img src="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/logof.png" alt="HodaHub" style="height:40px; width:auto; margin:0 auto 6px auto; display:block;" />
+            <h1 style="margin:0; color:#111827; font-size:24px; font-weight:800;">Hoda<span style="color:#f97316;">Hub</span></h1>
           </div>
           <h2 style="color: #111827; font-size: 20px; font-weight: 700; margin-bottom: 12px; text-align: center;">
             ${statusTitles[newStatus] || `Order Status Updated to ${newStatus}`}
@@ -297,12 +302,14 @@ export async function sendAdminNewOrderEmail(adminEmail, order, items = []) {
  * Send Contact Form Email to Store Owner
  */
 export async function sendContactFormEmail(contactEmail, { name, email, subject, message }) {
-  if (!contactEmail || !resend) return { success: true, mocked: true };
+  const recipient = contactEmail || process.env.CONTACT_FORM_RECIPIENT || 'support@hodahub.in';
+  if (!resend) return { success: true, mocked: true };
 
   try {
     const { data, error } = await resend.emails.send({
       from: FROM_EMAIL,
-      to: [contactEmail],
+      to: [recipient],
+      replyTo: email,
       subject: `Contact Form Message: ${subject}`,
       html: `
         <div style="font-family: 'Inter', -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background-color: #ffffff; border-radius: 16px; border: 1px solid #f3f4f6;">
@@ -315,6 +322,9 @@ export async function sendContactFormEmail(contactEmail, { name, email, subject,
         </div>
       `,
     });
+    if (error) {
+      console.error('[Contact Form Email Error]:', error);
+    }
     return { success: !error, data, error };
   } catch (err) {
     return { success: false, error: err.message };

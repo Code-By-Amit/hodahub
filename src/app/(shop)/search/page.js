@@ -23,12 +23,14 @@ function SearchContent() {
   const query = searchParams.get('q') || '';
   const currentSort = searchParams.get('sort') || 'newest';
   const currentCategory = searchParams.get('category') || '';
+  const currentBrand = searchParams.get('brand') || '';
   const currentMinPrice = searchParams.get('minPrice') || '';
   const currentMaxPrice = searchParams.get('maxPrice') || '';
   const page = parseInt(searchParams.get('page') || '1');
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [allCategoriesList, setAllCategoriesList] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,7 @@ function SearchContent() {
 
   useEffect(() => {
     fetchCategories();
+    fetchBrands();
   }, []);
 
   useEffect(() => {
@@ -51,6 +54,7 @@ function SearchContent() {
         params.set('limit', '12');
         params.set('sort', currentSort);
         if (currentCategory) params.set('category', currentCategory);
+        if (currentBrand) params.set('brand', currentBrand);
         if (currentMinPrice) params.set('minPrice', currentMinPrice);
         if (currentMaxPrice) params.set('maxPrice', currentMaxPrice);
 
@@ -62,7 +66,7 @@ function SearchContent() {
       setLoading(false);
     }
     search();
-  }, [query, page, currentSort, currentCategory, currentMinPrice, currentMaxPrice]);
+  }, [query, page, currentSort, currentCategory, currentBrand, currentMinPrice, currentMaxPrice]);
 
   async function fetchCategories() {
     try {
@@ -73,13 +77,23 @@ function SearchContent() {
     } catch {}
   }
 
+  async function fetchBrands() {
+    try {
+      const res = await fetch(`/api/brands${query ? '?search=' + encodeURIComponent(query) : ''}`);
+      const data = await res.json();
+      setBrands(data.brands || []);
+    } catch {}
+  }
+
   function updateFilters(updates) {
     const params = new URLSearchParams(searchParams);
     Object.entries(updates).forEach(([key, value]) => {
       if (value) params.set(key, value);
       else params.delete(key);
     });
-    params.set('page', '1');
+    if (!('page' in updates)) {
+      params.set('page', '1');
+    }
     router.push(`/search?${params.toString()}`);
   }
 
@@ -95,12 +109,19 @@ function SearchContent() {
     router.push(`/search?${params.toString()}`);
   }
 
-  const hasFilters = Boolean(currentCategory || currentMinPrice || currentMaxPrice);
+  const hasFilters = Boolean(currentCategory || currentBrand || currentMinPrice || currentMaxPrice);
   const selectedCategoryObj = categories.find((c) => c.slug === currentCategory);
+  const selectedBrandObj = brands.find((b) => b.slug === currentBrand);
 
   const matchingCategories = query.trim()
     ? allCategoriesList.filter((c) =>
         c.name.toLowerCase().includes(query.trim().toLowerCase())
+      )
+    : [];
+
+  const matchingBrands = query.trim()
+    ? brands.filter((b) =>
+        b.name.toLowerCase().includes(query.trim().toLowerCase())
       )
     : [];
 
@@ -195,6 +216,27 @@ function SearchContent() {
             </span>
           )}
 
+          {currentBrand && (() => {
+            const brandList = currentBrand.split(',').map((b) => b.trim()).filter(Boolean);
+            return brandList.map((bName) => (
+              <span
+                key={bName}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-warm-200 rounded-md text-xs font-semibold text-warm-800 shadow-2xs"
+              >
+                Brand: {bName}
+                <button
+                  onClick={() => {
+                    const nextList = brandList.filter((b) => b !== bName);
+                    updateFilters({ brand: nextList.join(',') || null });
+                  }}
+                  className="text-warm-400 hover:text-warm-900"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            ));
+          })()}
+
           {(currentMinPrice || currentMaxPrice) && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-warm-200 rounded-md text-xs font-semibold text-warm-800 shadow-2xs">
               Price: ₹{currentMinPrice || '0'} – ₹{currentMaxPrice || '∞'}
@@ -226,12 +268,15 @@ function SearchContent() {
           <div className="bg-white border border-warm-200 rounded-xl p-5 shadow-xs sticky top-24">
             <FilterPanel
               categories={categories}
+              brands={brands}
               currentCategory={currentCategory}
+              currentBrand={currentBrand}
               minPrice={minPrice}
               maxPrice={maxPrice}
               setMinPrice={setMinPrice}
               setMaxPrice={setMaxPrice}
               onCategoryChange={(slug) => updateFilters({ category: slug || null })}
+              onBrandChange={(slug) => updateFilters({ brand: slug || null })}
               onPriceFilter={handlePriceFilter}
               onClear={clearFilters}
               hasFilters={hasFilters}
@@ -282,7 +327,7 @@ function SearchContent() {
               <Search className="w-12 h-12 mx-auto text-warm-300 mb-3" />
               <h3 className="text-base font-bold text-warm-900 mb-1">Type a keyword to start searching</h3>
               <p className="text-xs text-warm-500 max-w-sm mx-auto mb-6">
-                Search by product name, category, or description.
+                Search by product name, brand, category, or description.
               </p>
               <Link
                 href="/products"
@@ -311,13 +356,19 @@ function SearchContent() {
               </div>
               <FilterPanel
                 categories={categories}
+                brands={brands}
                 currentCategory={currentCategory}
+                currentBrand={currentBrand}
                 minPrice={minPrice}
                 maxPrice={maxPrice}
                 setMinPrice={setMinPrice}
                 setMaxPrice={setMaxPrice}
                 onCategoryChange={(slug) => {
                   updateFilters({ category: slug || null });
+                  setShowFilters(false);
+                }}
+                onBrandChange={(slug) => {
+                  updateFilters({ brand: slug || null });
                   setShowFilters(false);
                 }}
                 onPriceFilter={() => {

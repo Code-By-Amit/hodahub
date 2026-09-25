@@ -25,8 +25,10 @@ export default function ProductCard({ product, variant = 'default' }) {
 
   const {
     id, name, slug, price, discountPrice, images, description,
-    ratingAvg, reviewCount, createdAt
+    ratingAvg, reviewCount, createdAt, brand, brandName
   } = product || {};
+
+  const displayBrand = brand || brandName || null;
 
   const productSlug = slug || id;
   const isWishlisted = useSelector(selectIsWishlisted(id));
@@ -117,6 +119,11 @@ export default function ProductCard({ product, variant = 'default' }) {
               {/* Content */}
               <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
                 <div>
+                  {displayBrand && (
+                    <span className="text-[9px] font-semibold text-warm-500 uppercase tracking-wider block mb-0.5 truncate">
+                      {displayBrand}
+                    </span>
+                  )}
                   <h3 className="text-[11px] sm:text-xs font-semibold text-warm-900 line-clamp-1 mb-0.5">
                     {name}
                   </h3>
@@ -232,6 +239,11 @@ export default function ProductCard({ product, variant = 'default' }) {
 
           {/* Info */}
           <div className="p-2 flex-1 flex flex-col">
+            {displayBrand && (
+              <span className="text-[9px] font-semibold text-warm-500 uppercase tracking-wider block mb-0.5 truncate">
+                {displayBrand}
+              </span>
+            )}
             <h3 className="text-[10px] sm:text-[11px] font-semibold text-warm-900 line-clamp-1 mb-0.5">
               {name}
             </h3>

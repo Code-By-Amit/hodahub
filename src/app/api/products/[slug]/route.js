@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { products, categories, productAddons, addons } from '@/lib/db/schema';
+import { products, categories, brands, productAddons, addons } from '@/lib/db/schema';
 import { eq, or, and } from 'drizzle-orm';
 
 import { resolveAddonPricing } from '@/lib/addon-utils';
@@ -28,6 +28,12 @@ export async function GET(request, { params }) {
         price: products.price,
         discountPrice: products.discountPrice,
         categoryId: products.categoryId,
+        categoryName: categories.name,
+        categorySlug: categories.slug,
+        brand: products.brand,
+        brandId: products.brandId,
+        brandName: brands.name,
+        brandSlug: brands.slug,
         stock: products.stock,
         isOutOfStock: products.isOutOfStock,
         images: products.images,
@@ -37,15 +43,14 @@ export async function GET(request, { params }) {
         codAvailable: products.codAvailable,
         specifications: products.specifications,
         createdAt: products.createdAt,
-        categoryName: categories.name,
-        categorySlug: categories.slug,
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
+      .leftJoin(brands, eq(products.brandId, brands.id))
       .where(whereCondition)
       .limit(1);
 
-    if (!product || !product.isActive) {
+    if (!product) {
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }
@@ -77,6 +82,7 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       product: {
         ...product,
+        brand: product.brand || product.brandName || null,
         isOutOfStock: isUnavailable,
         addons: resolvedAddons || [],
       },

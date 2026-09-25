@@ -10,6 +10,7 @@ import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, ArrowRight, Lock, Mail, Eye, EyeOff, Smartphone, ShieldCheck, RefreshCw } from 'lucide-react';
 import FieldError from '@/components/ui/FieldError';
 import PhoneInput from '@/components/ui/PhoneInput';
+import PasswordInput from '@/components/ui/PasswordInput';
 import { loginSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
 import { useMsg91Otp } from '@/hooks/useMsg91Otp';
@@ -158,6 +159,7 @@ function LoginContent() {
         router.push('/');
       }
     } catch (error) {
+      console.error('[Login OTP Verification Exception]:', error);
       setOtpError(error.message || 'Network error verifying OTP. Please try again.');
     } finally {
       setVerifyingOtp(false);
@@ -415,25 +417,17 @@ function LoginContent() {
                 </Link>
               </div>
               <div className="relative">
-                <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
-                <input
+                <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400 z-10 pointer-events-none" />
+                <PasswordInput
                   id="login-password"
-                  type={showPassword ? 'text' : 'password'}
                   value={emailForm.password}
                   onChange={(e) => handleEmailChange('password', e.target.value)}
-                  className={`w-full pl-8 pr-9 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  className={`pl-8 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
                     emailErrors.password ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
                   }`}
                   placeholder="Enter password"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
               </div>
               <FieldError message={emailErrors.password} />
             </div>

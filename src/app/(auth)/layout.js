@@ -14,8 +14,9 @@ export default function AuthLayout({ children }) {
           className="absolute inset-0 opacity-[0.06] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '20px 20px' }}
         />
-        <Link href="/" className="relative text-base font-bold tracking-tight">
-          Hoda<span className="text-brand-400">Hub</span>
+        <Link href="/" className="relative flex items-center gap-2 text-base font-bold tracking-tight">
+          <img src="/logof.png" alt="HodaHub" className="h-9 w-auto object-contain bg-white/10 p-1 rounded" />
+          <span>Hoda<span className="text-brand-400">Hub</span></span>
         </Link>
         <div className="relative">
           <p className="text-2xl font-semibold leading-snug max-w-[15rem]">
@@ -31,6 +32,7 @@ export default function AuthLayout({ children }) {
       <div className="flex-1 flex flex-col min-h-0">
         <header className="sm:hidden p-3 text-center shrink-0">
           <Link href="/" className="inline-flex items-center gap-2">
+            <img src="/logof.png" alt="HodaHub" className="h-7 w-auto object-contain" />
             <span className="text-base font-bold tracking-tight">
               Hoda<span className="text-brand-600">Hub</span>
             </span>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import FieldError from '@/components/ui/FieldError';
-import { forgotPasswordSchema, resetPasswordSchema } from '@/lib/validations';
+import PasswordInput from '@/components/ui/PasswordInput';
 import { ArrowLeft, ArrowRight, Lock, Mail, Key } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
@@ -114,7 +114,7 @@ export default function ForgotPasswordPage() {
                   }}
                   className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
                     errors.email ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
-                  }`}
+                   }`}
                   placeholder="you@example.com"
                   required
                 />
@@ -168,15 +168,14 @@ export default function ForgotPasswordPage() {
                 New Password *
               </label>
               <div className="relative">
-                <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
-                <input
-                  type="password"
+                <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5 z-10 pointer-events-none" />
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => {
                     setNewPassword(e.target.value);
                     if (errors.newPassword) setErrors((prev) => ({ ...prev, newPassword: null }));
                   }}
-                  className={`w-full pl-8 pr-3 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  className={`pl-8 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
                     errors.newPassword ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
                   }`}
                   placeholder="••••••••"

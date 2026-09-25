@@ -89,8 +89,9 @@ export default function Header() {
         <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-12 lg:h-14">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-1 shrink-0">
-              <span className="text-md font-extrabold text-warm-900 tracking-tight">
+            <Link href="/" className="flex items-center gap-2 shrink-0">
+              <img src="/logof.png" alt="HodaHub" className="h-8 lg:h-9 w-auto object-contain" />
+              <span className="text-md font-extrabold text-warm-900 tracking-tight hidden sm:inline">
                 Hoda<span className="text-brand-500">Hub</span>
               </span>
             </Link>

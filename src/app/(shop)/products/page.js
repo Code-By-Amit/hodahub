@@ -22,12 +22,14 @@ export default function ProductsPage() {
   const router = useRouter();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
   const currentSort = searchParams.get('sort') || 'newest';
   const currentCategory = searchParams.get('category') || '';
+  const currentBrand = searchParams.get('brand') || '';
   const currentMinPrice = searchParams.get('minPrice') || '';
   const currentMaxPrice = searchParams.get('maxPrice') || '';
   const currentPage = parseInt(searchParams.get('page') || '1');
@@ -37,17 +39,26 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchCategories();
+    fetchBrands();
   }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, [currentSort, currentCategory, currentMinPrice, currentMaxPrice, currentPage]);
+  }, [currentSort, currentCategory, currentBrand, currentMinPrice, currentMaxPrice, currentPage]);
 
   async function fetchCategories() {
     try {
       const res = await fetch('/api/categories');
       const data = await res.json();
       setCategories(data.categories || []);
+    } catch { }
+  }
+
+  async function fetchBrands() {
+    try {
+      const res = await fetch('/api/brands');
+      const data = await res.json();
+      setBrands(data.brands || []);
     } catch { }
   }
 
@@ -59,6 +70,7 @@ export default function ProductsPage() {
       params.set('limit', '12');
       params.set('sort', currentSort);
       if (currentCategory) params.set('category', currentCategory);
+      if (currentBrand) params.set('brand', currentBrand);
       if (currentMinPrice) params.set('minPrice', currentMinPrice);
       if (currentMaxPrice) params.set('maxPrice', currentMaxPrice);
 
@@ -76,7 +88,9 @@ export default function ProductsPage() {
       if (value) params.set(key, value);
       else params.delete(key);
     });
-    params.set('page', '1');
+    if (!('page' in updates)) {
+      params.set('page', '1');
+    }
     router.push(`/products?${params.toString()}`);
   }
 
@@ -91,23 +105,28 @@ export default function ProductsPage() {
   }
 
   const selectedCategoryObj = categories.find((c) => c.slug === currentCategory);
-  const hasFilters = Boolean(currentCategory || currentMinPrice || currentMaxPrice);
+  const selectedBrandObj = brands.find((b) => b.slug === currentBrand);
+  const hasFilters = Boolean(currentCategory || currentBrand || currentMinPrice || currentMaxPrice);
 
   const pageTitle = selectedCategoryObj
     ? selectedCategoryObj.name
-    : currentSort === 'newest'
-      ? 'New Arrivals'
-      : currentSort === 'best-sellers'
-        ? 'Best Sellers'
-        : 'All Products';
+    : selectedBrandObj
+      ? `${selectedBrandObj.name} Products`
+      : currentSort === 'newest'
+        ? 'New Arrivals'
+        : currentSort === 'best-sellers'
+          ? 'Best Sellers'
+          : 'All Products';
 
   const pageSubtitle = selectedCategoryObj
     ? `Explore our collection of ${selectedCategoryObj.name.toLowerCase()} items (${pagination.total} total)`
-    : currentSort === 'newest'
-      ? `Discover the latest additions to our storefront (${pagination.total} total)`
-      : currentSort === 'best-sellers'
-        ? `Browse our top-rated customer favorite products (${pagination.total} total)`
-        : `Explore quality curated items for your home and lifestyle (${pagination.total} total)`;
+    : selectedBrandObj
+      ? `Browse authentic products from ${selectedBrandObj.name} (${pagination.total} total)`
+      : currentSort === 'newest'
+        ? `Discover the latest additions to our storefront (${pagination.total} total)`
+        : currentSort === 'best-sellers'
+          ? `Browse our top-rated customer favorite products (${pagination.total} total)`
+          : `Explore quality curated items for your home and lifestyle (${pagination.total} total)`;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
@@ -167,9 +186,30 @@ export default function ProductsPage() {
             </span>
           )}
 
+          {currentBrand && (() => {
+            const brandList = currentBrand.split(',').map((b) => b.trim()).filter(Boolean);
+            return brandList.map((bName) => (
+              <span
+                key={bName}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800 shadow-2xs"
+              >
+                Brand: {bName}
+                <button
+                  onClick={() => {
+                    const nextList = brandList.filter((b) => b !== bName);
+                    updateFilters({ brand: nextList.join(',') || null });
+                  }}
+                  className="text-warm-400 hover:text-warm-900"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ));
+          })()}
+
           {(currentMinPrice || currentMaxPrice) && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800 shadow-2xs">
-              Price: ${currentMinPrice || '0'} – ${currentMaxPrice || '∞'}
+              Price: ₹{currentMinPrice || '0'} – ₹{currentMaxPrice || '∞'}
               <button
                 onClick={() => {
                   setMinPrice('');
@@ -199,12 +239,15 @@ export default function ProductsPage() {
           <div className="bg-white border border-warm-200 rounded-lg p-3 shadow-xs sticky top-20">
             <FilterPanel
               categories={categories}
+              brands={brands}
               currentCategory={currentCategory}
+              currentBrand={currentBrand}
               minPrice={minPrice}
               maxPrice={maxPrice}
               setMinPrice={setMinPrice}
               setMaxPrice={setMaxPrice}
               onCategoryChange={(slug) => updateFilters({ category: slug || null })}
+              onBrandChange={(slug) => updateFilters({ brand: slug || null })}
               onPriceFilter={handlePriceFilter}
               onClear={clearFilters}
               hasFilters={hasFilters}
@@ -243,7 +286,7 @@ export default function ProductsPage() {
               <Package className="w-8 h-8 mx-auto text-warm-300 mb-2" />
               <h3 className="text-sm font-bold text-warm-900 mb-1">No products match your criteria</h3>
               <p className="text-[11px] text-warm-500 max-w-sm mx-auto mb-4">
-                Try loosening your category or price range filters to view more items.
+                Try loosening your category, brand, or price range filters to view more items.
               </p>
               <button
                 onClick={clearFilters}
@@ -272,13 +315,19 @@ export default function ProductsPage() {
               </div>
               <FilterPanel
                 categories={categories}
+                brands={brands}
                 currentCategory={currentCategory}
+                currentBrand={currentBrand}
                 minPrice={minPrice}
                 maxPrice={maxPrice}
                 setMinPrice={setMinPrice}
                 setMaxPrice={setMaxPrice}
                 onCategoryChange={(slug) => {
                   updateFilters({ category: slug || null });
+                  setShowFilters(false);
+                }}
+                onBrandChange={(slug) => {
+                  updateFilters({ brand: slug || null });
                   setShowFilters(false);
                 }}
                 onPriceFilter={() => {

@@ -88,9 +88,12 @@ export default function InvoicePage() {
         {/* Header */}
         <div className="flex flex-row justify-between items-start gap-4 pb-6 border-b border-warm-200">
           <div>
-            <h1 className="text-xl font-extrabold text-warm-900 tracking-tight">
-              Hoda<span className="text-brand-500">Hub</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <img src="/logof.png" alt="HodaHub" className="h-8 w-auto object-contain" />
+              <h1 className="text-xl font-extrabold text-warm-900 tracking-tight">
+                Hoda<span className="text-brand-500">Hub</span>
+              </h1>
+            </div>
             <p className="text-[11px] text-warm-500 mt-1">Official Purchase Invoice</p>
           </div>
           <div className="text-right">

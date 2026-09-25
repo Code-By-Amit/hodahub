@@ -74,6 +74,15 @@ export const addresses = pgTable('addresses', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// --- Brands ---
+export const brands = pgTable('brands', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  logoUrl: text('logo_url'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 // --- Categories ---
 export const categories = pgTable('categories', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -113,6 +122,10 @@ export const products = pgTable('products', {
     .references(() => categories.id, {
       onDelete: 'restrict',
     }),
+  brand: text('brand'),
+  brandId: uuid('brand_id').references(() => brands.id, {
+    onDelete: 'set null',
+  }),
   stock: integer('stock').default(0).notNull(),
   isOutOfStock: boolean('is_out_of_stock').default(false).notNull(),
   images: text('images')
@@ -122,13 +135,17 @@ export const products = pgTable('products', {
   ratingAvg: decimal('rating_avg', { precision: 3, scale: 2 }).default('0'),
   reviewCount: integer('review_count').default(0).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
+  showOnHome: boolean('show_on_home').default(true).notNull(),
   codAvailable: boolean('cod_available').default(true).notNull(),
+  isBestSeller: boolean('is_best_seller').default(false).notNull(),
+  unitsSold: integer('units_sold').default(0).notNull(),
   specifications: jsonb('specifications').default([]),
   productLink: text('product_link'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 },
 (table) => [
   index('products_category_id_idx').on(table.categoryId),
+  index('products_brand_id_idx').on(table.brandId),
 ]
 );
 

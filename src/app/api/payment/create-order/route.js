@@ -84,12 +84,20 @@ export async function POST(request) {
     }
 
     // Fetch selected add-ons from DB with per-product link overrides
-    // Fetch selected add-ons from DB with per-product link overrides
     const allAddonIds = items.flatMap((i) => {
-      if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
-        return i.selectedAddons.map((a) => a.addonId || a.id).filter(Boolean);
+      if (i.selectedAddon?.addonId || i.selectedAddon?.id) {
+        return [i.selectedAddon.addonId || i.selectedAddon.id];
       }
-      return i.selectedAddonIds || [];
+      if (i.selectedAddonId) {
+        return [i.selectedAddonId];
+      }
+      if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
+        return [i.selectedAddons[0].addonId || i.selectedAddons[0].id].filter(Boolean);
+      }
+      if (Array.isArray(i.selectedAddonIds) && i.selectedAddonIds.length > 0) {
+        return [i.selectedAddonIds[0]].filter(Boolean);
+      }
+      return [];
     });
 
     let dbAddonLinks = [];
@@ -131,20 +139,27 @@ export async function POST(request) {
 
       const unitPrice = product.discountPrice ? Number(product.discountPrice) : Number(product.price);
       
-      // Calculate selected add-ons price with resolved per-product link overrides
+      // Calculate selected add-on price with resolved per-product link overrides (max 1 add-on per product item)
       const itemAddons = [];
       let itemAddonsTotal = 0;
 
-      let addonSelections = [];
-      if (Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0) {
-        addonSelections = item.selectedAddons;
+      let singleSelection = null;
+      if (item.selectedAddon?.addonId || item.selectedAddon?.id) {
+        singleSelection = item.selectedAddon;
+      } else if (item.selectedAddonId) {
+        singleSelection = { addonId: item.selectedAddonId, quantity: 1 };
+      } else if (Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0) {
+        singleSelection = item.selectedAddons[0];
       } else if (Array.isArray(item.selectedAddonIds) && item.selectedAddonIds.length > 0) {
-        addonSelections = item.selectedAddonIds.map((id) => ({ addonId: id, quantity: 1 }));
+        singleSelection = { addonId: item.selectedAddonIds[0], quantity: 1 };
       }
 
-      for (const selection of addonSelections) {
-        const addonId = selection.addonId || selection.id;
-        const addonQty = Math.max(1, Number(selection.quantity || 1));
+      if (singleSelection) {
+        const addonId = singleSelection.addonId || singleSelection.id;
+        const requestedAddonQty = Math.max(1, Number(singleSelection.quantity || 1));
+        // Server-side clamping: add-on quantity can never exceed attached product quantity
+        const addonQty = Math.min(requestedAddonQty, item.quantity);
+
         const rawAddon = dbAddonLinks.find(
           (a) => a.id === addonId && a.productId === item.productId
         ) || dbAddonLinks.find((a) => a.id === addonId);
@@ -214,6 +229,7 @@ export async function POST(request) {
               .update(products)
               .set({
                 stock: sql`${products.stock} - ${item.quantity}`,
+                unitsSold: sql`${products.unitsSold} + ${item.quantity}`,
                 isOutOfStock: sql`CASE WHEN ${products.stock} - ${item.quantity} <= 0 THEN true ELSE ${products.isOutOfStock} END`,
               })
               .where(and(eq(products.id, item.productId), gte(products.stock, item.quantity)))

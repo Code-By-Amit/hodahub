@@ -5,13 +5,7 @@ const initialState = {
   coupon: null, // { code, type, value, discount }
 };
 
-const generateItemKey = (productId, selectedAddons = []) => {
-  const addonKey = selectedAddons
-    .map((a) => `${a.id}_${a.quantity || 1}`)
-    .sort()
-    .join('-');
-  return addonKey ? `${productId}_${addonKey}` : productId;
-};
+const generateItemKey = (productId) => String(productId);
 
 const cartSlice = createSlice({
   name: 'cart',
@@ -27,20 +21,25 @@ const cartSlice = createSlice({
         discountPrice,
         codAvailable,
         quantity = 1,
-        selectedAddons = [],
+        selectedAddon = null,
       } = action.payload;
 
-      const normalizedAddons = selectedAddons.map((a) => ({
-        ...a,
-        quantity: Math.max(1, a.quantity || 1),
-      }));
+      const itemKey = generateItemKey(productId);
+      const existing = state.items.find((item) => item.itemKey === itemKey || item.productId === productId);
 
-      const itemKey = generateItemKey(productId, normalizedAddons);
-      const existing = state.items.find((item) => (item.itemKey || item.productId) === itemKey);
+      const normalizedAddon = selectedAddon
+        ? {
+            ...selectedAddon,
+            quantity: Math.max(1, Math.min(selectedAddon.quantity || 1, quantity)),
+          }
+        : null;
 
       if (existing) {
         existing.quantity += quantity;
         if (codAvailable !== undefined) existing.codAvailable = codAvailable !== false;
+        if (normalizedAddon) {
+          existing.selectedAddon = normalizedAddon;
+        }
       } else {
         state.items.push({
           itemKey,
@@ -52,43 +51,41 @@ const cartSlice = createSlice({
           discountPrice: discountPrice ? Number(discountPrice) : null,
           codAvailable: codAvailable !== false,
           quantity,
-          selectedAddons: normalizedAddons,
+          selectedAddon: normalizedAddon,
         });
       }
     },
     removeItem: (state, action) => {
-      const target = action.payload; // can be itemKey or productId
+      const target = action.payload; // itemKey or productId
       state.items = state.items.filter(
         (item) => item.itemKey !== target && item.productId !== target
       );
     },
     updateQuantity: (state, action) => {
-      const { productId, itemKey, quantity } = action.payload;
-      const keyToFind = itemKey || productId;
-      const item = state.items.find((item) => (item.itemKey || item.productId) === keyToFind);
+      const { itemKey, quantity } = action.payload;
+      const item = state.items.find((i) => i.itemKey === itemKey || i.productId === action.payload.productId);
       if (item) {
-        item.quantity = Math.max(1, quantity);
-      }
-    },
-    updateAddonQuantity: (state, action) => {
-      const { itemKey, productId, addonId, quantity } = action.payload;
-      const keyToFind = itemKey || productId;
-      const item = state.items.find((i) => (i.itemKey || i.productId) === keyToFind);
-      if (item && Array.isArray(item.selectedAddons)) {
-        const addon = item.selectedAddons.find((a) => a.id === addonId);
-        if (addon) {
-          addon.quantity = Math.max(1, quantity);
-          item.itemKey = generateItemKey(item.productId, item.selectedAddons);
+        const newQty = Math.max(1, quantity);
+        item.quantity = newQty;
+
+        // Downward clamp: if product quantity drops below selectedAddon quantity, clamp down
+        if (item.selectedAddon && item.selectedAddon.quantity > newQty) {
+          item.selectedAddon.quantity = newQty;
         }
       }
     },
+    updateAddonQuantity: (state, action) => {
+      const { itemKey, quantity } = action.payload;
+      const item = state.items.find((i) => i.itemKey === itemKey || i.productId === action.payload.productId);
+      if (item && item.selectedAddon) {
+        item.selectedAddon.quantity = Math.max(1, Math.min(quantity, item.quantity));
+      }
+    },
     removeAddonFromCartItem: (state, action) => {
-      const { itemKey, productId, addonId } = action.payload;
-      const keyToFind = itemKey || productId;
-      const item = state.items.find((i) => (i.itemKey || i.productId) === keyToFind);
-      if (item && Array.isArray(item.selectedAddons)) {
-        item.selectedAddons = item.selectedAddons.filter((a) => a.id !== addonId);
-        item.itemKey = generateItemKey(item.productId, item.selectedAddons);
+      const { itemKey } = action.payload;
+      const item = state.items.find((i) => i.itemKey === itemKey || i.productId === action.payload.productId);
+      if (item) {
+        item.selectedAddon = null;
       }
     },
     clearCart: (state) => {
@@ -128,11 +125,10 @@ export const selectCartProductsSubtotal = (state) =>
 
 export const selectCartAddonsSubtotal = (state) =>
   state.cart.items.reduce((sum, item) => {
-    const addonsTotal = (item.selectedAddons || []).reduce(
-      (aSum, addon) => aSum + (addon.isFree ? 0 : Number(addon.price || 0) * (addon.quantity || 1)),
-      0
-    );
-    return sum + addonsTotal;
+    if (!item.selectedAddon) return sum;
+    const addon = item.selectedAddon;
+    const addonPrice = addon.isFree ? 0 : Number(addon.price || 0);
+    return sum + addonPrice * (addon.quantity || 1);
   }, 0);
 
 export const selectCartSubtotal = (state) =>

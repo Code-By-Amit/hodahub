@@ -276,11 +276,9 @@ export default function CheckoutPage() {
       const itemsText = items
         .map((i) => {
           let line = `• ${i.name} x${i.quantity} — ₹${((i.discountPrice || i.price) * i.quantity).toFixed(2)}`;
-          if (Array.isArray(i.selectedAddons) && i.selectedAddons.length > 0) {
-            const addonsList = i.selectedAddons
-              .map((a) => `+ ${a.name} x${a.quantity || 1} (₹${((a.isFree ? 0 : Number(a.price || 0)) * (a.quantity || 1)).toFixed(2)})`)
-              .join(', ');
-            line += `\n   Addons: ${addonsList}`;
+          if (i.selectedAddon) {
+            const a = i.selectedAddon;
+            line += `\n   Addon: + ${a.name} x${a.quantity || 1} (₹${(Number(a.price || 0) * (a.quantity || 1)).toFixed(2)})`;
           }
           return line;
         })
@@ -317,13 +315,13 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
       const cartItems = items.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
-        selectedAddonIds: Array.isArray(i.selectedAddons) ? i.selectedAddons.map((a) => a.id) : [],
-        selectedAddons: Array.isArray(i.selectedAddons)
-          ? i.selectedAddons.map((a) => ({
-              addonId: a.id,
-              quantity: a.quantity || 1,
-            }))
-          : [],
+        selectedAddonId: i.selectedAddon ? (i.selectedAddon.id || i.selectedAddon.addonId) : null,
+        selectedAddon: i.selectedAddon
+          ? {
+              addonId: i.selectedAddon.id || i.selectedAddon.addonId,
+              quantity: i.selectedAddon.quantity || 1,
+            }
+          : null,
       }));
 
       const payload = isGuestOrder
@@ -924,16 +922,14 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                             {formatCurrency((item.discountPrice || item.price) * item.quantity)}
                           </span>
                         </div>
-                        {Array.isArray(item.selectedAddons) && item.selectedAddons.length > 0 && (
+                        {item.selectedAddon && (
                           <div className="pl-2 space-y-0.5 border-l-2 border-brand-200">
-                            {item.selectedAddons.map((a) => (
-                              <div key={a.id} className="flex justify-between text-[10px] text-warm-600">
-                                <span>+ {a.name} × {a.quantity || 1}</span>
-                                <span className="font-semibold text-brand-700">
-                                  {a.isFree ? 'Free' : formatCurrency(Number(a.price || 0) * (a.quantity || 1))}
-                                </span>
-                              </div>
-                            ))}
+                            <div className="flex justify-between text-[10px] text-warm-600">
+                              <span>+ {item.selectedAddon.name} × {item.selectedAddon.quantity || 1}</span>
+                              <span className="font-semibold text-brand-700">
+                                {formatCurrency(Number(item.selectedAddon.price || 0) * (item.selectedAddon.quantity || 1))}
+                              </span>
+                            </div>
                           </div>
                         )}
                       </div>

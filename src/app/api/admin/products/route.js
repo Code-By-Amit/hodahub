@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
-import { products, categories, productAddons } from '@/lib/db/schema';
+import { products, categories, brands, productAddons } from '@/lib/db/schema';
 import { desc, sql, ilike, or, and, eq, lte, gt } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 
@@ -13,6 +13,7 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const search = searchParams.get('search') || '';
     const categoryFilter = searchParams.get('category') || '';
+    const brandFilter = searchParams.get('brand') || '';
     const activeFilter = searchParams.get('active') || '';
     const stockFilter = searchParams.get('stock') || '';
     const offset = (page - 1) * limit;
@@ -24,6 +25,9 @@ export async function GET(request) {
     }
     if (categoryFilter) {
       conditions.push(eq(products.categoryId, categoryFilter));
+    }
+    if (brandFilter) {
+      conditions.push(eq(products.brandId, brandFilter));
     }
     if (activeFilter === 'active') {
       conditions.push(eq(products.isActive, true));
@@ -50,16 +54,23 @@ export async function GET(request) {
         images: products.images,
         specifications: products.specifications,
         isActive: products.isActive,
+        showOnHome: products.showOnHome,
         codAvailable: products.codAvailable,
+        isBestSeller: products.isBestSeller,
+        unitsSold: products.unitsSold,
         productLink: products.productLink,
         ratingAvg: products.ratingAvg,
         reviewCount: products.reviewCount,
         createdAt: products.createdAt,
         categoryId: products.categoryId,
         categoryName: categories.name,
+        brand: products.brand,
+        brandId: products.brandId,
+        brandName: brands.name,
       })
       .from(products)
       .leftJoin(categories, sql`${products.categoryId} = ${categories.id}`)
+      .leftJoin(brands, sql`${products.brandId} = ${brands.id}`)
       .where(where)
       .orderBy(desc(products.createdAt))
       .limit(limit)
@@ -69,6 +80,7 @@ export async function GET(request) {
       .select({ count: sql`count(*)::int` })
       .from(products)
       .leftJoin(categories, sql`${products.categoryId} = ${categories.id}`)
+      .leftJoin(brands, sql`${products.brandId} = ${brands.id}`)
       .where(where);
 
     return NextResponse.json({
@@ -104,7 +116,7 @@ export async function POST(request) {
       );
     }
 
-    const { name, slug, description, price, discountPrice, categoryId, stock, isOutOfStock, images, specifications, isActive, codAvailable, productLink, addonIds, addonLinks } = body;
+    const { name, slug, description, brand, price, discountPrice, categoryId, brandId, stock, isOutOfStock, images, specifications, isActive, showOnHome, codAvailable, isBestSeller, productLink, addonIds, addonLinks } = body;
 
     const numStock = Number(stock || 0);
     const [product] = await db
@@ -113,15 +125,19 @@ export async function POST(request) {
         name,
         slug: slug.toLowerCase().replace(/\s+/g, '-'),
         description: description || null,
+        brand: brand ? brand.trim() : null,
         price: price.toString(),
         discountPrice: discountPrice ? discountPrice.toString() : null,
         categoryId: categoryId,
+        brandId: brandId || null,
         stock: numStock,
         isOutOfStock: isOutOfStock !== undefined ? Boolean(isOutOfStock) : numStock <= 0,
         images: images || [],
         specifications: specifications || [],
         isActive: isActive !== false,
+        showOnHome: showOnHome !== false,
         codAvailable: codAvailable !== false,
+        isBestSeller: Boolean(isBestSeller),
         productLink: productLink || null,
       })
       .returning();

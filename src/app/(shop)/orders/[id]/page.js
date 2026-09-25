@@ -21,6 +21,7 @@ import {
   FiXCircle,
   FiRotateCcw,
   FiCreditCard,
+  FiPhoneCall,
 } from 'react-icons/fi';
 
 const statusSteps = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
@@ -313,6 +314,23 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
+      {/* Prominent COD Confirmation Call Banner */}
+      {order.paymentMethod === 'cod' && (
+        <div className="mb-4 p-3.5 sm:p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 shadow-2xs flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0 mt-0.5">
+            <FiPhoneCall className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-[12px] sm:text-[13px] font-bold text-emerald-950 flex items-center gap-1.5">
+              Cash on Delivery Order Placed
+            </h3>
+            <p className="text-[11px] text-emerald-800 font-medium leading-relaxed mt-0.5">
+              You&apos;ll receive a confirmation call from us shortly to confirm your order details and delivery.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Return Status Banner */}
       {order.returnStatus !== 'none' && (
         <div className={`p-3 rounded-md border text-[11px] font-medium mb-4 flex items-center justify-between ${
@@ -542,13 +560,6 @@ export default function OrderDetailPage() {
                 <span>Total Amount</span>
                 <span>{formatCurrency(order.totalAmount)}</span>
               </div>
-              {order.paymentMethod === 'cod' && (
-                <div className="mt-2 pt-2 border-t border-dashed border-warm-200 space-y-1">
-                  <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-[10px] text-emerald-900 font-medium">
-                    You&apos;ll receive a confirmation call from us shortly to confirm your order.
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 

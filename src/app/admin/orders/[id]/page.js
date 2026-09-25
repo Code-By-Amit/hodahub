@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
 import Modal from '@/components/ui/Modal';
 import { Package, Phone } from 'lucide-react';
-import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiAlertTriangle, FiEdit3 } from 'react-icons/fi';
+import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiAlertTriangle, FiEdit3, FiExternalLink } from 'react-icons/fi';
 import { formatCurrency } from '@/lib/utils';
 
 const statusOptions = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
@@ -569,14 +569,17 @@ export default function AdminOrderDetailPage() {
                       href={item.productLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] text-brand-600 font-bold hover:underline mt-0.5"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 mt-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-400/50 rounded-md text-[10px] font-bold transition-all shadow-2xs group"
+                      title="Open supplier / source product page to fulfill this item"
                     >
-                      Supplier Link ↗
+                      <FiExternalLink className="w-3.5 h-3.5 text-amber-700 group-hover:scale-110 transition-transform" />
+                      <span>Supplier Link</span>
+                      <span className="text-amber-700 font-mono">↗</span>
                     </a>
                   )}
                 </div>
                 <p className="text-[11px] font-semibold text-warm-900">
-                  ${(item.quantity * Number(item.priceAtPurchase)).toFixed(2)}
+                  {formatCurrency(item.quantity * Number(item.priceAtPurchase))}
                 </p>
               </div>
             ))}
@@ -590,13 +593,13 @@ export default function AdminOrderDetailPage() {
             {Number(order.shippingCharge) > 0 && (
               <div className="flex justify-between">
                 <span>Shipping Fee</span>
-                <span>${order.shippingCharge}</span>
+                <span>{formatCurrency(order.shippingCharge)}</span>
               </div>
             )}
             {Number(order.discountAmount) > 0 && (
               <div className="flex justify-between text-green-600">
                 <span>Discount ({order.couponCode})</span>
-                <span>-${order.discountAmount}</span>
+                <span>-{formatCurrency(order.discountAmount)}</span>
               </div>
             )}
             <div className="flex justify-between text-[11px] font-bold text-warm-900 border-t border-warm-100 pt-1.5">

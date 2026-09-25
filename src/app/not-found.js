@@ -19,7 +19,8 @@ export default function NotFound() {
         </h1>
 
         {/* Brand */}
-        <div className="mb-3">
+        <div className="mb-3 flex items-center justify-center gap-2">
+          <img src="/logof.png" alt="HodaHub" className="h-8 w-auto object-contain" />
           <span className="text-base font-extrabold text-warm-900 tracking-tight">
             Hoda<span className="text-brand-500">Hub</span>
           </span>

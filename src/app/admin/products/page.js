@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import { Package } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { FiPlus, FiEdit, FiTrash2, FiSearch, FiCheck, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit, FiTrash2, FiSearch, FiCheck, FiX, FiExternalLink } from 'react-icons/fi';
 
 export default function AdminProductsPage() {
   const toast = useToast();
@@ -74,6 +74,32 @@ export default function AdminProductsPage() {
       }
     } catch {
       toast.error('Failed to update active status');
+      fetchProducts();
+    }
+    setLoadingId(null);
+  }
+
+  async function handleToggleShowOnHome(id, currentShowOnHome) {
+    const nextVal = !currentShowOnHome;
+    setLoadingId(id + '_showOnHome');
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, showOnHome: nextVal } : p))
+    );
+    try {
+      const res = await fetch(`/api/admin/products/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showOnHome: nextVal }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(`Product home visibility set to ${nextVal ? 'Show on Home' : 'Hide on Home'}`);
+      } else {
+        toast.error(data.error || 'Failed to update home visibility');
+        fetchProducts();
+      }
+    } catch {
+      toast.error('Failed to update home visibility');
       fetchProducts();
     }
     setLoadingId(null);
@@ -196,19 +222,22 @@ export default function AdminProductsPage() {
               <th className="px-3 py-2 text-left">Stock State</th>
               <th className="px-3 py-2 text-left">Category</th>
               <th className="px-3 py-2 text-left">Active Status</th>
+              <th className="px-3 py-2 text-left">Home Display</th>
               <th className="px-3 py-2 text-left">COD</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr></thead>
             <tbody className="divide-y divide-warm-100">
               {loading ? Array.from({length:5}).map((_,i) => (
-                <tr key={i}><td colSpan={7} className="px-3 py-3"><div className="h-8 shimmer rounded" /></td></tr>
+                <tr key={i}><td colSpan={8} className="px-3 py-3"><div className="h-8 shimmer rounded" /></td></tr>
               )) : products.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-8 text-center text-warm-400">No products found</td></tr>
+                <tr><td colSpan={8} className="px-3 py-8 text-center text-warm-400">No products found</td></tr>
               ) : products.map(p => {
                 const isStockUpdating = loadingId === p.id + '_stock';
                 const isActiveUpdating = loadingId === p.id + '_active';
+                const isShowOnHomeUpdating = loadingId === p.id + '_showOnHome';
                 const isOutOfStock = Boolean(p.isOutOfStock);
                 const isActive = Boolean(p.isActive);
+                const showOnHome = p.showOnHome !== false;
 
                 return (
                   <tr key={p.id} className="hover:bg-warm-50/50">
@@ -249,9 +278,24 @@ export default function AdminProductsPage() {
                         activeClass="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 hover:border-emerald-400 hover:shadow-xs"
                         inactiveClass="bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200 hover:border-rose-400 hover:shadow-xs"
                         onClick={() => handleToggleStatus(p.id, isActive)}
-                        title="Click to toggle Active/Inactive visibility"
+                        title="Click to toggle Active/Inactive system status"
                       />
                     </td>
+
+                    {/* Home Display Pill Button */}
+                    <td className="px-3 py-2">
+                      <StatusPillButton
+                        active={showOnHome}
+                        loading={isShowOnHomeUpdating}
+                        activeLabel="Show on Home"
+                        inactiveLabel="Hide on Home"
+                        activeClass="bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 hover:border-blue-400 hover:shadow-xs"
+                        inactiveClass="bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:border-slate-400 hover:shadow-xs"
+                        onClick={() => handleToggleShowOnHome(p.id, showOnHome)}
+                        title="Click to toggle visibility on Home Page sections"
+                      />
+                    </td>
+
                     <td className="px-3 py-2">{p.codAvailable !== false ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 rounded-md">Yes</span> : <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-50 text-red-600 rounded-md">No</span>}</td>
                     <td className="px-3 py-2 text-right"><div className="flex items-center justify-end gap-1">
                       <Link href={`/admin/products/${p.id}/edit`} className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors" title="Edit Full Product Form"><FiEdit className="w-3.5 h-3.5" /></Link>

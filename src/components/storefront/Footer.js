@@ -60,7 +60,8 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-6">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <Link href="/" className="inline-block mb-2">
+            <Link href="/" className="inline-flex items-center gap-2 mb-2">
+              <img src="/logof.png" alt="HodaHub" className="h-8 w-auto object-contain bg-white/10 p-1 rounded" />
               <span className="text-base font-extrabold text-white tracking-tight">
                 {settings.storeName || 'HodaHub'}
               </span>

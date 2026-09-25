@@ -22,6 +22,16 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
       }
       folder = 'categories';
+    } else if (uploadType === 'brand-logo' || uploadType === 'brand-image') {
+      if (user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      }
+      folder = 'brands';
+    } else if (uploadType === 'banner-image' || uploadType === 'banner') {
+      if (user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      }
+      folder = 'banners';
     } else if (uploadType === 'review-media') {
       folder = 'reviews';
     } else if (uploadType === 'avatar' || uploadType === 'profile-image') {

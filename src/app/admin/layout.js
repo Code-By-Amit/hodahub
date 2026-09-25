@@ -28,6 +28,7 @@ const navItems = [
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
   { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Categories', href: '/admin/categories', icon: FolderTree },
+  { label: 'Brands', href: '/admin/brands', icon: Tag },
   { label: 'Add-ons', href: '/admin/addons', icon: Layers },
   { label: 'Coupons', href: '/admin/coupons', icon: Tag },
   { label: 'Reviews', href: '/admin/reviews', icon: Star },
@@ -75,7 +76,8 @@ export default function AdminLayout({ children }) {
         {/* Header - fixed, does not scroll */}
         <div className="shrink-0 flex items-center justify-between px-3.5 py-3 border-b border-warm-800">
           <Link href="/admin" className="flex items-center gap-1.5">
-            <span className="text-sm font-bold tracking-tight text-white">
+            <img src="/logof.png" alt="HodaHub" className="h-6 w-auto object-contain bg-white/10 p-0.5 rounded" />
+            <span className="text-xs font-bold tracking-tight text-white">
               Hoda<span className="text-brand-400">Hub</span>
             </span>
             <span className="text-[9px] px-1 py-0.5 bg-brand-500/20 text-brand-300 rounded font-semibold uppercase tracking-wider">

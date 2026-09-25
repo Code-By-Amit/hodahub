@@ -140,26 +140,62 @@ export default function ProductDetailPage() {
         setProduct(data.product);
         setLoading(false);
 
-        // Fetch related products in background without blocking UI render
-        if (data.product.categorySlug) {
-          fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`)
-            .then((r) => r.json())
-            .then((relData) => {
-              let items = (relData.products || []).filter((p) => p.id !== data.product.id);
-              if (items.length < 4) {
-                fetch('/api/products?limit=6')
-                  .then((r) => r.json())
-                  .then((fallbackData) => {
-                    const fallbackItems = (fallbackData.products || []).filter((p) => p.id !== data.product.id);
-                    setRelatedProducts(fallbackItems.slice(0, 6));
-                  })
-                  .catch(() => {});
-              } else {
-                setRelatedProducts(items.slice(0, 6));
+        // Fetch "You May Also Like" mixed category products feed in parallel
+        (async () => {
+          try {
+            const [sameCatRes, bestSellersRes, newestRes] = await Promise.all([
+              data.product.categorySlug
+                ? fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=6`)
+                    .then((r) => (r.ok ? r.json() : null))
+                    .catch(() => null)
+                : Promise.resolve(null),
+              fetch('/api/products?sort=best-sellers&limit=8')
+                .then((r) => (r.ok ? r.json() : null))
+                .catch(() => null),
+              fetch('/api/products?sort=newest&limit=8')
+                .then((r) => (r.ok ? r.json() : null))
+                .catch(() => null),
+            ]);
+
+            const sameCategoryItems = (sameCatRes?.products || []).filter((p) => p.id !== data.product.id);
+            const otherCategoryItems = (bestSellersRes?.products || []).filter(
+              (p) => p.id !== data.product.id && p.categorySlug !== data.product.categorySlug
+            );
+
+            (newestRes?.products || []).forEach((p) => {
+              if (
+                p.id !== data.product.id &&
+                p.categorySlug !== data.product.categorySlug &&
+                !otherCategoryItems.some((item) => item.id === p.id)
+              ) {
+                otherCategoryItems.push(p);
               }
-            })
-            .catch(() => {});
-        }
+            });
+
+            // Interleave and blend items across categories
+            const blendedList = [];
+            const seenIds = new Set([data.product.id]);
+            const maxLength = Math.max(sameCategoryItems.length, otherCategoryItems.length);
+
+            for (let i = 0; i < maxLength; i++) {
+              if (i < sameCategoryItems.length && !seenIds.has(sameCategoryItems[i].id)) {
+                seenIds.add(sameCategoryItems[i].id);
+                blendedList.push(sameCategoryItems[i]);
+              }
+              if (blendedList.length >= 6) break;
+
+              if (i < otherCategoryItems.length && !seenIds.has(otherCategoryItems[i].id)) {
+                seenIds.add(otherCategoryItems[i].id);
+                blendedList.push(otherCategoryItems[i]);
+              }
+              if (blendedList.length >= 6) break;
+            }
+
+            setRelatedProducts(blendedList.slice(0, 6));
+          } catch (e) {
+            // Silently swallow recommendation errors
+          }
+        })();
       } else {
         setProduct(null);
         setLoading(false);
@@ -253,7 +289,7 @@ export default function ProductDetailPage() {
     setSubmittingReview(false);
   }
 
-  const [selectedAddons, setSelectedAddons] = useState([]);
+  const [selectedAddon, setSelectedAddon] = useState(null);
   const [pincodeInput, setPincodeInput] = useState('');
   const [pincodeStatus, setPincodeStatus] = useState(null);
   const [pincodeLoading, setPincodeLoading] = useState(false);
@@ -286,21 +322,13 @@ export default function ProductDetailPage() {
     setPincodeLoading(false);
   }
 
-  function toggleAddon(addon) {
-    setSelectedAddons((prev) => {
-      const exists = prev.some((a) => a.id === addon.id);
-      if (exists) {
-        return prev.filter((a) => a.id !== addon.id);
-      } else {
-        return [...prev, { ...addon, quantity: 1 }];
+  function selectAddon(addon) {
+    setSelectedAddon((prev) => {
+      if (prev?.id === addon.id) {
+        return null;
       }
+      return { ...addon, quantity: 1 };
     });
-  }
-
-  function updateAddonQty(addonId, newQty) {
-    setSelectedAddons((prev) =>
-      prev.map((a) => (a.id === addonId ? { ...a, quantity: Math.max(1, newQty) } : a))
-    );
   }
 
   function handleAddToCart() {
@@ -315,7 +343,7 @@ export default function ProductDetailPage() {
         discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
         codAvailable: product.codAvailable !== false,
         quantity,
-        selectedAddons,
+        selectedAddon,
       })
     );
     toast.success(`${product.name} added to cart!`);
@@ -506,6 +534,11 @@ export default function ProductDetailPage() {
         {/* Product Details & Actions */}
         <div className="space-y-3.5">
           <div>
+            {product.brand && (
+              <span className="text-xs font-semibold text-warm-500 uppercase tracking-wider block mb-0.5">
+                {product.brand}
+              </span>
+            )}
             {product.categoryName && (
               <Link
                 href={`/categories/${product.categorySlug}`}
@@ -598,35 +631,43 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Product Add-ons (Part 5) */}
+          {/* Product Add-ons (Single-Select Radio Buttons) */}
           {Array.isArray(product.addons) && product.addons.length > 0 && (
             <div className="bg-white border border-warm-200 rounded-lg p-3 space-y-2">
-              <span className="block text-[11px] font-bold text-warm-900 uppercase tracking-wider">
-                Optional Add-ons
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="block text-[11px] font-bold text-warm-900 uppercase tracking-wider">
+                  Select Add-on (Pick 1)
+                </span>
+                {selectedAddon && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAddon(null)}
+                    className="text-[10px] text-warm-500 hover:text-rose-600 font-medium underline"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
               <div className="space-y-2">
                 {product.addons.map((addon) => {
-                  const selectedAddon = selectedAddons.find((a) => a.id === addon.id);
-                  const isChecked = Boolean(selectedAddon);
-                  const addonQty = selectedAddon?.quantity || 1;
+                  const isChecked = selectedAddon?.id === addon.id;
                   return (
                     <div
                       key={addon.id}
-                      className={`flex flex-wrap items-center justify-between gap-2 p-2 rounded-md border text-[11px] transition-colors ${
+                      onClick={() => selectAddon(addon)}
+                      className={`flex items-center justify-between gap-2 p-2 rounded-md border text-[11px] cursor-pointer transition-colors ${
                         isChecked
-                          ? 'border-brand-600 bg-brand-50/30 font-semibold'
+                          ? 'border-brand-600 bg-brand-50/40 font-semibold ring-1 ring-brand-600/30'
                           : 'border-warm-200 bg-warm-50/40 hover:bg-warm-50'
                       }`}
                     >
-                      <label
-                        onClick={() => toggleAddon(addon)}
-                        className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
-                      >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
                         <input
-                          type="checkbox"
+                          type="radio"
+                          name="product-addon-selection"
                           checked={isChecked}
-                          onChange={() => {}}
-                          className="rounded border-warm-300 text-brand-600 focus:ring-brand-500"
+                          onChange={() => selectAddon(addon)}
+                          className="accent-brand-600 w-3.5 h-3.5 border-warm-300 focus:ring-brand-500 cursor-pointer"
                         />
                         {addon.imageUrl ? (
                           <img
@@ -640,41 +681,11 @@ export default function ProductDetailPage() {
                           </div>
                         )}
                         <span className="text-warm-900 truncate">{addon.name}</span>
-                      </label>
+                      </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        {isChecked && (
-                          <div className="flex items-center border border-warm-300 rounded overflow-hidden bg-white">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateAddonQty(addon.id, addonQty - 1);
-                              }}
-                              disabled={addonQty <= 1}
-                              className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                              title="Decrease add-on quantity"
-                            >
-                              -
-                            </button>
-                            <span className="px-2 text-[10px] font-bold text-warm-900 min-w-[20px] text-center">
-                              {addonQty}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateAddonQty(addon.id, addonQty + 1);
-                              }}
-                              className="px-1.5 py-0.5 text-warm-600 hover:bg-warm-100 cursor-pointer"
-                              title="Increase add-on quantity"
-                            >
-                              +
-                            </button>
-                          </div>
-                        )}
                         <span className="font-bold text-brand-700">
-                          {addon.isFree ? 'Free' : `+${formatCurrency(Number(addon.price) * (isChecked ? addonQty : 1))}`}
+                          +{formatCurrency(Number(addon.price))}
                         </span>
                       </div>
                     </div>

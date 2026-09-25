@@ -13,11 +13,13 @@ export default function CategoryDetailPage() {
   const router = useRouter();
   const [category, setCategory] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [apiBreadcrumbs, setApiBreadcrumbs] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [currentBrand, setCurrentBrand] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [minRating, setMinRating] = useState('');
@@ -30,6 +32,7 @@ export default function CategoryDetailPage() {
 
   useEffect(() => {
     fetchCategoryData();
+    fetchCategoryBrands();
   }, [slug]);
 
   async function fetchCategories() {
@@ -37,6 +40,14 @@ export default function CategoryDetailPage() {
       const res = await fetch('/api/categories');
       const data = await res.json();
       setCategories(data.categories || []);
+    } catch {}
+  }
+
+  async function fetchCategoryBrands() {
+    try {
+      const res = await fetch(`/api/brands?category=${slug}`);
+      const data = await res.json();
+      setBrands(data.brands || []);
     } catch {}
   }
 
@@ -55,7 +66,13 @@ export default function CategoryDetailPage() {
     setLoading(false);
   }
 
+  const selectedBrandList = currentBrand.split(',').map((b) => b.trim()).filter(Boolean);
+
   const filteredProducts = products.filter((p) => {
+    if (selectedBrandList.length > 0) {
+      const pBrand = (p.brand || '').trim();
+      if (!pBrand || !selectedBrandList.includes(pBrand)) return false;
+    }
     if (minPrice && Number(p.price) < Number(minPrice)) return false;
     if (maxPrice && Number(p.price) > Number(maxPrice)) return false;
     if (minRating && Number(p.ratingAvg || 0) < Number(minRating)) return false;
@@ -63,9 +80,10 @@ export default function CategoryDetailPage() {
     return true;
   });
 
-  const hasFilters = Boolean(minPrice || maxPrice || minRating || inStockOnly);
+  const hasFilters = Boolean(currentBrand || minPrice || maxPrice || minRating || inStockOnly);
 
   function clearFilters() {
+    setCurrentBrand('');
     setMinPrice('');
     setMaxPrice('');
     setMinRating('');
@@ -162,9 +180,23 @@ export default function CategoryDetailPage() {
       {hasFilters && (
         <div className="flex items-center gap-1.5 flex-wrap bg-warm-50 p-2 rounded-lg border border-warm-200/60">
           <span className="text-[10px] font-bold text-warm-700 uppercase tracking-wider mr-0.5">Active Filters:</span>
+          {selectedBrandList.map((bName) => (
+            <span key={bName} className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800">
+              Brand: {bName}
+              <button
+                onClick={() => {
+                  const nextList = selectedBrandList.filter((b) => b !== bName);
+                  setCurrentBrand(nextList.join(','));
+                }}
+                className="text-warm-400 hover:text-warm-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
           {(minPrice || maxPrice) && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800">
-              Price: ${minPrice || '0'} – ${maxPrice || '∞'}
+              Price: ₹{minPrice || '0'} – ₹{maxPrice || '∞'}
               <button onClick={() => { setMinPrice(''); setMaxPrice(''); }} className="text-warm-400 hover:text-warm-900">
                 <X className="w-3 h-3" />
               </button>
@@ -198,7 +230,9 @@ export default function CategoryDetailPage() {
           <div className="bg-white border border-warm-200 rounded-lg p-3 shadow-xs sticky top-20">
             <FilterPanel
               categories={categories}
+              brands={brands}
               currentCategory={category.slug}
+              currentBrand={currentBrand}
               minPrice={minPrice}
               maxPrice={maxPrice}
               minRating={minRating}
@@ -206,6 +240,7 @@ export default function CategoryDetailPage() {
               setMinPrice={setMinPrice}
               setMaxPrice={setMaxPrice}
               onCategoryChange={(catSlug) => router.push(catSlug ? `/categories/${catSlug}` : '/products')}
+              onBrandChange={setCurrentBrand}
               onPriceFilter={() => {}}
               onRatingChange={setMinRating}
               onInStockChange={setInStockOnly}
@@ -253,7 +288,9 @@ export default function CategoryDetailPage() {
             </div>
             <FilterPanel
               categories={categories}
+              brands={brands}
               currentCategory={category.slug}
+              currentBrand={currentBrand}
               minPrice={minPrice}
               maxPrice={maxPrice}
               minRating={minRating}
@@ -264,6 +301,7 @@ export default function CategoryDetailPage() {
                 router.push(catSlug ? `/categories/${catSlug}` : '/products');
                 setShowFilters(false);
               }}
+              onBrandChange={(bVal) => { setCurrentBrand(bVal); setShowFilters(false); }}
               onPriceFilter={() => setShowFilters(false)}
               onRatingChange={(r) => { setMinRating(r); setShowFilters(false); }}
               onInStockChange={(st) => { setInStockOnly(st); setShowFilters(false); }}

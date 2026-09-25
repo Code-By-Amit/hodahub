@@ -1,7 +1,8 @@
+import { formatCurrency } from '@/lib/utils';
 import { FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 
 const badges = [
-  { icon: FiTruck, title: 'Free Shipping', desc: 'On orders over $50' },
+  { icon: FiTruck, title: 'Free Shipping', desc: `On orders over ${formatCurrency(50)}` },
   { icon: FiShield, title: 'Secure Payments', desc: '100% secure checkout' },
   { icon: FiRefreshCw, title: 'Easy Returns', desc: '30-day return policy' },
   { icon: FiHeadphones, title: '24/7 Support', desc: 'Always here to help' },

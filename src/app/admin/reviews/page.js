@@ -6,7 +6,7 @@ import Pagination from '@/components/ui/Pagination';
 import StarRating from '@/components/ui/StarRating';
 import ImageUpload from '@/components/ui/ImageUpload';
 import FieldError from '@/components/ui/FieldError';
-import { Eye, EyeOff, Trash2, Film, ImageIcon, X } from 'lucide-react';
+import { Eye, EyeOff, Trash2, Film, ImageIcon, X, Pencil } from 'lucide-react';
 import { isVideoUrl } from '@/lib/utils';
 import { adminReviewSchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
@@ -30,6 +30,17 @@ export default function AdminReviewsPage() {
     mediaUrls: [],
   });
   const [errors, setErrors] = useState({});
+
+  // Admin Edit Review states
+  const [editingReview, setEditingReview] = useState(null);
+  const [editForm, setEditForm] = useState({
+    productId: '',
+    userName: '',
+    rating: 5,
+    comment: '',
+    mediaUrls: [],
+    isHidden: false,
+  });
 
   useEffect(() => {
     fetchReviews();
@@ -95,6 +106,55 @@ export default function AdminReviewsPage() {
       } else {
         if (data.errors) setErrors(data.errors);
         toast.error(data.error || 'Failed to create review');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+    setSubmitting(false);
+  }
+
+  function openEditModal(review) {
+    setEditingReview(review);
+    setEditForm({
+      productId: review.productId || productsList[0]?.id || '',
+      userName: review.userName || '',
+      rating: review.rating || 5,
+      comment: review.comment || '',
+      mediaUrls: Array.isArray(review.mediaUrls) ? review.mediaUrls : [],
+      isHidden: !!review.isHidden,
+    });
+    setErrors({});
+  }
+
+  async function handleUpdateReview(e) {
+    e.preventDefault();
+    if (!editingReview) return;
+
+    const payload = {
+      productId: editForm.productId,
+      userName: editForm.userName.trim(),
+      rating: editForm.rating ? Number(editForm.rating) : null,
+      comment: editForm.comment.trim() || null,
+      mediaUrls: Array.isArray(editForm.mediaUrls) ? editForm.mediaUrls : [],
+      isHidden: Boolean(editForm.isHidden),
+    };
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/admin/reviews/${editingReview.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Review updated successfully!');
+        setEditingReview(null);
+        setErrors({});
+        fetchReviews();
+      } else {
+        if (data.errors) setErrors(data.errors);
+        toast.error(data.error || 'Failed to update review');
       }
     } catch {
       toast.error('Network error');
@@ -214,6 +274,13 @@ export default function AdminReviewsPage() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => openEditModal(r)}
+                        className="p-1 text-warm-500 hover:text-warm-900 hover:bg-warm-100 rounded-md transition-colors"
+                        title="Edit review"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => toggleHide(r.id)}
                         className={`p-1 rounded-md transition-colors ${
@@ -388,6 +455,128 @@ export default function AdminReviewsPage() {
                   className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? 'Publishing...' : 'Publish Review'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Review Modal */}
+      {editingReview && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg border border-warm-200 shadow-xl max-w-md w-full p-5 space-y-4 relative animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-warm-100 pb-3">
+              <h3 className="font-bold text-warm-900 text-sm">Edit Review</h3>
+              <button
+                type="button"
+                onClick={() => setEditingReview(null)}
+                className="text-warm-400 hover:text-warm-700 p-1 rounded-md"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateReview} className="space-y-3.5">
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Target Product *
+                </label>
+                <select
+                  value={editForm.productId}
+                  onChange={(e) => setEditForm({ ...editForm, productId: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                >
+                  {productsList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Author Display Name *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.userName}
+                  onChange={(e) => setEditForm({ ...editForm, userName: e.target.value })}
+                  placeholder="Author display name"
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Star Rating (Optional)
+                </label>
+                <select
+                  value={editForm.rating || ''}
+                  onChange={(e) => setEditForm({ ...editForm, rating: e.target.value ? Number(e.target.value) : '' })}
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                >
+                  <option value="5">5 Stars (Excellent)</option>
+                  <option value="4">4 Stars (Very Good)</option>
+                  <option value="3">3 Stars (Average)</option>
+                  <option value="2">2 Stars (Below Average)</option>
+                  <option value="1">1 Star (Poor)</option>
+                  <option value="">No Star Rating (Comment Only)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Review Comment (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editForm.comment}
+                  onChange={(e) => setEditForm({ ...editForm, comment: e.target.value })}
+                  placeholder="Write review commentary..."
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
+                />
+              </div>
+
+              <div>
+                <ImageUpload
+                  uploadType="review-media"
+                  value={editForm.mediaUrls || []}
+                  onChange={(urls) => setEditForm({ ...editForm, mediaUrls: urls })}
+                  multiple={true}
+                  maxFiles={5}
+                  maxSizeMB={50}
+                  label="Attach Photos or Video Clips (Optional)"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isHidden}
+                    onChange={(e) => setEditForm({ ...editForm, isHidden: e.target.checked })}
+                    className="accent-warm-900 w-3.5 h-3.5 rounded"
+                  />
+                  <span className="text-[11px] text-warm-700 font-medium">Hide this review from public store</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingReview(null)}
+                  className="px-3.5 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? 'Saving Changes...' : 'Save Changes'}
                 </button>
               </div>
             </form>

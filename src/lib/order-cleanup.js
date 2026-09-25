@@ -51,6 +51,7 @@ export async function cleanupAbandonedOrders() {
             .update(products)
             .set({
               stock: sql`${products.stock} + ${item.quantity}`,
+              unitsSold: sql`GREATEST(0, ${products.unitsSold} - ${item.quantity})`,
               isOutOfStock: sql`CASE WHEN ${products.stock} + ${item.quantity} > 0 THEN false ELSE ${products.isOutOfStock} END`,
             })
             .where(eq(products.id, item.productId));

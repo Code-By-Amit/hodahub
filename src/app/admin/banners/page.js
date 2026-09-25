@@ -8,16 +8,6 @@ import { useToast } from '@/components/ui/Toast';
 import NumericInput from '@/components/ui/NumericInput';
 import { Edit2, ExternalLink, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 
-const PRESET_COLORS = [
-  { label: 'No Color (Transparent)', value: '' },
-  { label: 'Dark Neutral', value: '#18181b' },
-  { label: 'Slate Dark', value: '#0f172a' },
-  { label: 'Indigo Deep', value: '#1e1b4b' },
-  { label: 'Emerald Dark', value: '#064e3b' },
-  { label: 'Rose Wine', value: '#4c0519' },
-  { label: 'Warm Bronze', value: '#451a03' },
-];
-
 export default function AdminBannersPage() {
   const toast = useToast();
   const [banners, setBanners] = useState([]);
@@ -30,7 +20,6 @@ export default function AdminBannersPage() {
     title: '',
     subtitle: '',
     imageUrl: '',
-    bgColor: '',
     linkUrl: '',
     isActive: true,
     sortOrder: 0,
@@ -58,7 +47,6 @@ export default function AdminBannersPage() {
       title: '',
       subtitle: '',
       imageUrl: '',
-      bgColor: '',
       linkUrl: '/products',
       isActive: true,
       sortOrder: banners.length,
@@ -72,7 +60,6 @@ export default function AdminBannersPage() {
       title: b.title || '',
       subtitle: b.subtitle || '',
       imageUrl: b.imageUrl || '',
-      bgColor: b.bgColor || '#18181b',
       linkUrl: b.linkUrl || '',
       isActive: b.isActive ?? true,
       sortOrder: b.sortOrder ?? 0,
@@ -183,12 +170,9 @@ export default function AdminBannersPage() {
             ) : banners.map((b) => (
               <tr key={b.id} className="hover:bg-warm-50/50 transition-colors">
                 <td className="px-3 py-2.5">
-                  <div
-                    className="w-24 h-11 rounded-md overflow-hidden relative flex items-center justify-center border border-warm-200 p-1.5 text-white text-[9px] font-bold text-center"
-                    style={{ backgroundColor: b.bgColor || '#18181b' }}
-                  >
+                  <div className="w-24 h-11 rounded-md overflow-hidden relative flex items-center justify-center border border-warm-200 p-1.5 text-warm-700 bg-warm-100 text-[9px] font-bold text-center">
                     {b.imageUrl ? (
-                      <Image src={b.imageUrl} alt="" fill className="object-cover opacity-80" sizes="96px" />
+                      <Image src={b.imageUrl} alt="" fill className="object-cover" sizes="96px" />
                     ) : (
                       <span className="line-clamp-2 leading-tight">{b.title}</span>
                     )}
@@ -276,40 +260,6 @@ export default function AdminBannersPage() {
               placeholder="e.g. Discover exclusive deals on apparel and accessories"
               className="w-full px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
             />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Banner Background Color (Optional)
-            </label>
-            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setForm({ ...form, bgColor: c.value })}
-                  className={`px-2 py-1 text-[10px] rounded-md border transition-all flex items-center gap-1 ${
-                    form.bgColor === c.value
-                      ? 'border-warm-900 bg-warm-900 text-white font-bold shadow-xs'
-                      : 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50'
-                  }`}
-                  title={c.label}
-                >
-                  {c.value ? (
-                    <span className="w-2.5 h-2.5 rounded-full inline-block border border-black/10 shrink-0" style={{ backgroundColor: c.value }} />
-                  ) : (
-                    <span className="w-2.5 h-2.5 rounded-full inline-block border border-warm-300 bg-warm-100 shrink-0" />
-                  )}
-                  <span>{c.label}</span>
-                </button>
-              ))}
-              <input
-                type="color"
-                value={form.bgColor || '#18181b'}
-                onChange={(e) => setForm({ ...form, bgColor: e.target.value })}
-                className="w-7 h-7 rounded-md cursor-pointer border border-warm-200 p-0"
-              />
-            </div>
           </div>
 
           <div>

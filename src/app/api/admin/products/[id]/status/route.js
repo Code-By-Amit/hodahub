@@ -31,6 +31,9 @@ export async function PATCH(request, { params }) {
     if (typeof body.isActive === 'boolean') {
       updateFields.isActive = body.isActive;
     }
+    if (typeof body.showOnHome === 'boolean') {
+      updateFields.showOnHome = body.showOnHome;
+    }
     if (typeof body.isOutOfStock === 'boolean') {
       updateFields.isOutOfStock = body.isOutOfStock;
     }

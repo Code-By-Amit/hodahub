@@ -13,7 +13,15 @@ export function useMsg91Otp() {
   const [tokenAuth, setTokenAuth] = useState('');
   const [isConfigured, setIsConfigured] = useState(false);
   const [lastReqId, setLastReqId] = useState(null);
+  const lastReqIdRef = useRef(null);
   const scriptLoadingRef = useRef(false);
+
+  const updateReqId = (id) => {
+    if (id) {
+      lastReqIdRef.current = id;
+      setLastReqId(id);
+    }
+  };
 
   // Fetch widget config from backend
   useEffect(() => {
@@ -101,7 +109,7 @@ export function useMsg91Otp() {
         identifier: formattedPhone,
         exposeMethods: true,
         success: (data) => {
-          if (data && data.reqId) setLastReqId(data.reqId);
+          if (data && data.reqId) updateReqId(data.reqId);
           if (successCb) successCb(data);
         },
         failure: (error) => {
@@ -134,7 +142,7 @@ export function useMsg91Otp() {
 
         const handleSuccess = (response) => {
           const reqId = typeof response === 'object' && response ? response.reqId : null;
-          if (reqId) setLastReqId(reqId);
+          if (reqId) updateReqId(reqId);
           resolve({
             success: true,
             reqId,
@@ -150,26 +158,27 @@ export function useMsg91Otp() {
           reject(new Error(msg));
         };
 
-        // Initialize widget first
-        initWidget(formattedPhone, handleSuccess, handleFailure);
-
-        // If window.sendOtp is available directly
-        if (window.sendOtp) {
-          try {
-            window.sendOtp(formattedPhone, handleSuccess, handleFailure);
-            return;
-          } catch (e) {
-            console.warn('[MSG91 window.sendOtp error]:', e);
+        // If real MSG91 credentials are configured and SDK methods exist
+        if (isConfigured && (window.initSendOTP || window.sendOtp)) {
+          if (window.sendOtp) {
+            try {
+              window.sendOtp(formattedPhone, handleSuccess, handleFailure);
+              return;
+            } catch (e) {
+              console.warn('[MSG91 window.sendOtp error]:', e);
+            }
           }
+          initWidget(formattedPhone, handleSuccess, handleFailure);
+          return;
         }
 
-        // Development Fallback if MSG91 script is not loaded or in stub mode
-        if (!isConfigured || !window.sendOtp) {
-          console.log(`[MSG91 DEV STUB] Sending OTP to +${formattedPhone}`);
-          setTimeout(() => {
-            handleSuccess({ message: 'OTP sent (Dev Stub Mode)', reqId: 'DEV_REQ_ID_' + Date.now() });
-          }, 600);
-        }
+        // Development Fallback if MSG91 is unconfigured or in stub mode
+        console.log(`[MSG91 DEV STUB] Sending OTP to +${formattedPhone}`);
+        setTimeout(() => {
+          const mockReqId = 'DEV_REQ_ID_' + Date.now();
+          updateReqId(mockReqId);
+          handleSuccess({ message: 'OTP sent (Dev Stub Mode)', reqId: mockReqId });
+        }, 600);
       });
     },
     [initWidget, isConfigured]
@@ -198,16 +207,16 @@ export function useMsg91Otp() {
           reject(new Error(msg));
         };
 
-        if (window.retryOtp) {
+        if (isConfigured && window.retryOtp) {
           try {
-            window.retryOtp(null, handleSuccess, handleFailure, lastReqId);
+            window.retryOtp(null, handleSuccess, handleFailure, lastReqIdRef.current);
             return;
           } catch (e) {
             console.warn('[MSG91 window.retryOtp error]:', e);
           }
         }
 
-        if (window.sendOtp) {
+        if (isConfigured && window.sendOtp) {
           try {
             window.sendOtp(formattedPhone, handleSuccess, handleFailure);
             return;
@@ -222,7 +231,7 @@ export function useMsg91Otp() {
         }, 600);
       });
     },
-    [lastReqId]
+    [isConfigured]
   );
 
   /**
@@ -238,7 +247,6 @@ export function useMsg91Otp() {
         }
 
         const handleSuccess = (response) => {
-          // Response contains verification token/data
           const accessToken =
             (typeof response === 'object' && response && (response['access-token'] || response.accessToken || response.token || response.message)) ||
             'DEV_STUB_TOKEN_' + Date.now();
@@ -257,28 +265,27 @@ export function useMsg91Otp() {
           reject(new Error(msg));
         };
 
-        if (window.verifyOtp) {
+        // Only call window.verifyOtp if MSG91 is configured and method is available
+        if (isConfigured && window.verifyOtp) {
           try {
-            window.verifyOtp(cleanOtp, handleSuccess, handleFailure, lastReqId);
+            window.verifyOtp(cleanOtp, handleSuccess, handleFailure, lastReqIdRef.current);
             return;
           } catch (e) {
             console.warn('[MSG91 window.verifyOtp error]:', e);
           }
         }
 
-        // Development fallback if MSG91 script is not loaded or stub mode
-        if (!isConfigured || !window.verifyOtp) {
-          console.log(`[MSG91 DEV STUB] Verifying OTP: ${cleanOtp}`);
-          setTimeout(() => {
-            handleSuccess({
-              'access-token': 'DEV_STUB_TOKEN_' + Date.now(),
-              message: 'OTP verified (Dev Stub Mode)',
-            });
-          }, 600);
-        }
+        // Development fallback if MSG91 script is unconfigured or in dev stub mode
+        console.log(`[MSG91 DEV STUB] Verifying OTP code: ${cleanOtp}`);
+        setTimeout(() => {
+          handleSuccess({
+            'access-token': 'DEV_STUB_TOKEN_' + Date.now(),
+            message: 'OTP verified (Dev Stub Mode)',
+          });
+        }, 600);
       });
     },
-    [lastReqId, isConfigured]
+    [isConfigured]
   );
 
   return {

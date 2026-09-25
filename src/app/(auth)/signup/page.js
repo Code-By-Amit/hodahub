@@ -9,6 +9,7 @@ import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, ArrowRight, Check, Eye, EyeOff, Lock, Mail, Smartphone, User, ShieldCheck, RefreshCw } from 'lucide-react';
 import PhoneInput from '@/components/ui/PhoneInput';
+import PasswordInput from '@/components/ui/PasswordInput';
 import FieldError from '@/components/ui/FieldError';
 import { signupSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
@@ -437,25 +438,17 @@ function SignupContent() {
                   Password *
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
-                  <input
+                  <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400 z-10 pointer-events-none" />
+                  <PasswordInput
                     id="signup-password"
-                    type={showPassword ? 'text' : 'password'}
                     value={form.password}
                     onChange={(e) => handleChange('password', e.target.value)}
-                    className={`w-full pl-8 pr-8 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                    className={`pl-8 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
                       errors.password ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
                     }`}
                     placeholder="Min. 6 chars"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
                 </div>
                 <FieldError message={errors.password} />
               </div>
@@ -465,23 +458,15 @@ function SignupContent() {
                   Confirm Password *
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
-                  <input
+                  <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400 z-10 pointer-events-none" />
+                  <PasswordInput
                     id="signup-confirm"
-                    type={showConfirm ? 'text' : 'password'}
                     value={form.confirmPassword}
                     onChange={(e) => handleChange('confirmPassword', e.target.value)}
-                    className="w-full pl-8 pr-8 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 transition-all"
+                    className="pl-8 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none focus:border-brand-600 transition-all"
                     placeholder="Re-enter"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 transition-colors"
-                  >
-                    {showConfirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
                 </div>
               </div>
             </div>

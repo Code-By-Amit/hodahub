@@ -22,7 +22,7 @@ export async function PUT(request, { params }) {
         title: title.trim(),
         subtitle: subtitle ? subtitle.trim() : null,
         imageUrl: imageUrl ? imageUrl.trim() : null,
-        bgColor: bgColor ? bgColor.trim() : '#18181b',
+        bgColor: bgColor ? bgColor.trim() : null,
         linkUrl: linkUrl ? linkUrl.trim() : null,
         isActive: isActive ?? true,
         sortOrder: Number(sortOrder || 0),

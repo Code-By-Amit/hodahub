@@ -107,8 +107,7 @@ export default function BannerCarousel() {
     <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2">
       {/* Outer fixed-size relative container */}
       <div
-        className="relative w-full h-44 sm:h-56 md:h-64 lg:h-72 rounded-xl overflow-hidden shadow-sm select-none group"
-        style={{ backgroundColor: currentBanner.bgColor || 'transparent' }}
+        className="relative w-full h-44 sm:h-56 md:h-64 lg:h-72 rounded-xl overflow-hidden shadow-sm select-none group bg-transparent"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onTouchStart={handleTouchStart}
@@ -161,13 +160,10 @@ function SlideContent({ currentBanner, hasText }) {
             src={currentBanner.imageUrl}
             alt={currentBanner.title || 'Promotional Banner'}
             fill
-            className={`object-cover ${hasText ? 'opacity-40' : 'opacity-100'}`}
+            className="object-cover opacity-100"
             sizes="(max-width: 768px) 100vw, 896px"
             priority
           />
-          {hasText && (
-            <div className="absolute inset-0" />
-          )}
         </div>
       )}
 
@@ -175,12 +171,12 @@ function SlideContent({ currentBanner, hasText }) {
       {hasText && (
         <div className="relative z-10 p-5 sm:p-8 md:p-10 max-w-xl text-white space-y-2">
           {currentBanner.title && (
-            <h2 className="text-lg sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight line-clamp-2">
+            <h2 className="text-lg sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight line-clamp-2 [text-shadow:_0_2px_4px_rgba(0,0,0,0.7)]">
               {currentBanner.title}
             </h2>
           )}
           {currentBanner.subtitle && (
-            <p className="text-xs sm:text-sm text-warm-200 line-clamp-2 leading-relaxed">
+            <p className="text-xs sm:text-sm text-white/90 line-clamp-2 leading-relaxed [text-shadow:_0_1px_3px_rgba(0,0,0,0.7)]">
               {currentBanner.subtitle}
             </p>
           )}

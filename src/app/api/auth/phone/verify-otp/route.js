@@ -64,6 +64,23 @@ export async function POST(request) {
         .returning();
     }
 
+    // Automatically associate past guest orders matching phone with this account
+    try {
+      const { orders } = await import('@/lib/db/schema');
+      const { isNull, sql, and: andOrm } = await import('drizzle-orm');
+      await db
+        .update(orders)
+        .set({ userId: matchedUser.id })
+        .where(
+          andOrm(
+            isNull(orders.userId),
+            sql`RIGHT(REGEXP_REPLACE(COALESCE(${orders.guestPhone}, ''), '\\D', 'g'), 10) = ${clean10}`
+          )
+        );
+    } catch (e) {
+      console.warn('Failed to link guest orders on phone verify OTP:', e);
+    }
+
     const userPayload = {
       id: matchedUser.id,
       name: matchedUser.name || 'Customer',
@@ -84,7 +101,7 @@ export async function POST(request) {
     setAuthCookies(response, tokens);
     return response;
   } catch (error) {
-    console.error('Verify MSG91 phone OTP error:', error);
-    return NextResponse.json({ error: 'Failed to verify OTP. Please try again.' }, { status: 500 });
+    console.error('Verify MSG91 phone OTP server error:', error.stack || error);
+    return NextResponse.json({ error: error.message || 'Failed to verify OTP. Please try again.' }, { status: 500 });
   }
 }

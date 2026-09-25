@@ -66,6 +66,16 @@ function createPool() {
     }
   });
 
+  // Ensure database schema synchronization for newly added columns
+  if (connectionString) {
+    poolInstance
+      .query(`ALTER TABLE order_item_addons ADD COLUMN IF NOT EXISTS quantity integer NOT NULL DEFAULT 1;`)
+      .catch(() => {});
+    poolInstance
+      .query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand text;`)
+      .catch(() => {});
+  }
+
   return poolInstance;
 }
 

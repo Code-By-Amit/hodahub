@@ -170,17 +170,18 @@ export default function AdminSettingsPage() {
 
             <div>
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-                Customer Support Email
+                Contact Form Recipient / Support Email
               </label>
               <input
                 type="email"
                 value={form.contactEmail}
                 onChange={(e) => handleChange('contactEmail', e.target.value)}
-                placeholder="e.g. support@yourdomain.com"
+                placeholder="e.g. support@hodahub.in"
                 className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
                   errors.contactEmail ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
                 }`}
               />
+              <p className="text-[9px] text-warm-500 mt-0.5">Receives all customer inquiries submitted via the Contact Us page.</p>
               <FieldError message={errors.contactEmail} />
             </div>
 

@@ -33,6 +33,7 @@ export function ProductForm({ initialData, productId }) {
   const isEditing = !!productId;
 
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [libraryAddons, setLibraryAddons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -57,17 +58,21 @@ export function ProductForm({ initialData, productId }) {
   const [form, setForm] = useState({
     name: '',
     slug: '',
+    brand: '',
     description: '',
     price: '',
     discountPrice: '',
     categoryId: '',
+    brandId: '',
     stock: '0',
     images: [],
     specifications: [],
     addonLinks: [],
     productLink: '',
     isActive: true,
+    showOnHome: true,
     codAvailable: true,
+    isBestSeller: false,
     ...initialData,
   });
 
@@ -89,6 +94,11 @@ export function ProductForm({ initialData, productId }) {
     fetch('/api/admin/categories')
       .then((r) => r.json())
       .then((d) => setCategories(d.categories || []))
+      .catch(() => {});
+
+    fetch('/api/admin/brands')
+      .then((r) => r.json())
+      .then((d) => setBrands(d.brands || []))
       .catch(() => {});
 
     // Fetch ONLY ACTIVE library add-ons for the selection dropdown
@@ -272,10 +282,12 @@ export function ProductForm({ initialData, productId }) {
 
     const payload = {
       ...form,
+      brand: form.brand ? form.brand.trim() : null,
       price: form.price ? parseFloat(form.price) : 0,
       discountPrice: form.discountPrice ? parseFloat(form.discountPrice) : null,
       stock: form.stock !== '' ? parseInt(form.stock, 10) : 0,
       categoryId: form.categoryId,
+      brandId: form.brandId || null,
       specifications: cleanSpecs,
       addonLinks: cleanAddonLinks,
       addonIds: cleanAddonLinks.map((l) => l.addonId),
@@ -318,6 +330,11 @@ export function ProductForm({ initialData, productId }) {
   const categoryOptions = [
     { value: '', label: 'Select category (Required)...' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
+  ];
+
+  const brandOptions = [
+    { value: '', label: 'Select brand (Optional)...' },
+    ...brands.map((b) => ({ value: b.id, label: b.name })),
   ];
 
   const filteredLibraryAddons = libraryAddons.filter((a) =>
@@ -407,6 +424,22 @@ export function ProductForm({ initialData, productId }) {
               />
               <FieldError message={errors.slug} />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+              Brand (e.g. Nike, Rado, Casio)
+            </label>
+            <input
+              type="text"
+              value={form.brand || ''}
+              onChange={(e) => setForm({ ...form, brand: e.target.value })}
+              className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                errors.brand ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+              }`}
+              placeholder="e.g. Nike, Rado, Seiko"
+            />
+            <FieldError message={errors.brand} />
           </div>
 
           <div>
@@ -501,6 +534,19 @@ export function ProductForm({ initialData, productId }) {
               />
               <FieldError message={errors.categoryId} />
             </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                Brand
+              </label>
+              <CustomSelect
+                options={brandOptions}
+                value={form.brandId || ''}
+                onChange={(val) => setForm({ ...form, brandId: val })}
+                placeholder="Select brand..."
+              />
+              <FieldError message={errors.brandId} />
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-4 pt-1.5">
@@ -512,7 +558,19 @@ export function ProductForm({ initialData, productId }) {
                 className="accent-warm-900 w-3.5 h-3.5 rounded"
               />
               <span className="text-[11px] font-medium text-warm-800">
-                Active (visible on storefront)
+                Active (System Enabled)
+              </span>
+            </label>
+
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.showOnHome !== false}
+                onChange={(e) => setForm({ ...form, showOnHome: e.target.checked })}
+                className="accent-blue-600 w-3.5 h-3.5 rounded"
+              />
+              <span className="text-[11px] font-semibold text-blue-900">
+                Show on Home Page
               </span>
             </label>
 
@@ -525,6 +583,18 @@ export function ProductForm({ initialData, productId }) {
               />
               <span className="text-[11px] font-medium text-warm-800">
                 Cash on Delivery Available
+              </span>
+            </label>
+
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!form.isBestSeller}
+                onChange={(e) => setForm({ ...form, isBestSeller: e.target.checked })}
+                className="accent-amber-600 w-3.5 h-3.5 rounded"
+              />
+              <span className="text-[11px] font-semibold text-amber-900 flex items-center gap-1">
+                ⭐ Mark as Best Seller
               </span>
             </label>
           </div>

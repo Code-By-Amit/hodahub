@@ -38,14 +38,27 @@ export async function GET(request, { params }) {
 
     // Get products in this category
     const categoryProducts = await db
-      .select()
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+        description: products.description,
+        price: products.price,
+        discountPrice: products.discountPrice,
+        categoryId: products.categoryId,
+        brand: products.brand,
+        brandId: products.brandId,
+        stock: products.stock,
+        isOutOfStock: products.isOutOfStock,
+        images: products.images,
+        ratingAvg: products.ratingAvg,
+        reviewCount: products.reviewCount,
+        isActive: products.isActive,
+        codAvailable: products.codAvailable,
+        createdAt: products.createdAt,
+      })
       .from(products)
-      .where(
-        and(
-          eq(products.categoryId, category.id),
-          eq(products.isActive, true)
-        )
-      )
+      .where(eq(products.categoryId, category.id))
       .orderBy(desc(products.createdAt))
       .limit(50);
 

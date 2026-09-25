@@ -9,9 +9,10 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
 import PhoneInput from '@/components/ui/PhoneInput';
 import FieldError from '@/components/ui/FieldError';
+import PasswordInput from '@/components/ui/PasswordInput';
 import { updateProfileSchema, addressSchema } from '@/lib/validations';
 import { lookupPincode } from '@/lib/pincode';
-import { FiUser, FiMapPin, FiMail, FiSave, FiPlus, FiLoader } from 'react-icons/fi';
+import { FiUser, FiMapPin, FiMail, FiSave, FiPlus, FiLoader, FiLock } from 'react-icons/fi';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -38,6 +39,11 @@ export default function ProfilePage() {
   const [addrForm, setAddrForm] = useState({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
   const [addrErrors, setAddrErrors] = useState({});
   const [addrSaving, setAddrSaving] = useState(false);
+
+  // Password states
+  const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '' });
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   // Pincode auto-fill states
   const [pincodeLoading, setPincodeLoading] = useState(false);
@@ -199,6 +205,40 @@ export default function ProfilePage() {
     setSaving(false);
   }
 
+  async function handlePasswordChange(e) {
+    e.preventDefault();
+    setPasswordErrors({});
+
+    if (!passwordData.currentPassword) {
+      setPasswordErrors({ currentPassword: 'Current password is required' });
+      return;
+    }
+    if (!passwordData.newPassword || passwordData.newPassword.length < 6) {
+      setPasswordErrors({ newPassword: 'New password must be at least 6 characters' });
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const res = await fetch('/api/profile/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordData),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || 'Password updated successfully!');
+        setPasswordData({ currentPassword: '', newPassword: '' });
+      } else {
+        if (data.errors) setPasswordErrors(data.errors);
+        toast.error(data.error || 'Failed to update password');
+      }
+    } catch {
+      toast.error('Network error');
+    }
+    setPasswordSaving(false);
+  }
+
   async function handleAddAddress(e) {
     e.preventDefault();
     setAddrErrors({});
@@ -274,6 +314,16 @@ export default function ProfilePage() {
           }`}
         >
           <FiMapPin className="w-3.5 h-3.5" /> Saved Addresses ({addresses.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors ${
+            activeTab === 'security'
+              ? 'border-warm-900 text-warm-900'
+              : 'border-transparent text-warm-500 hover:text-warm-700'
+          }`}
+        >
+          <FiLock className="w-3.5 h-3.5" /> Security & Password
         </button>
       </div>
 
@@ -436,6 +486,57 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab: Security & Password Change */}
+      {activeTab === 'security' && (
+        <div className="bg-white p-4 sm:p-5 rounded-md border border-warm-200 shadow-xs max-w-lg">
+          <h2 className="text-[13px] font-bold text-warm-900 border-b border-warm-100 pb-2 mb-3.5">
+            Change Account Password
+          </h2>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
+                Current Password *
+              </label>
+              <PasswordInput
+                value={passwordData.currentPassword}
+                onChange={(e) => {
+                  setPasswordData({ ...passwordData, currentPassword: e.target.value });
+                  if (passwordErrors.currentPassword) setPasswordErrors((prev) => ({ ...prev, currentPassword: null }));
+                }}
+                placeholder="Enter current password"
+                required
+              />
+              <FieldError message={passwordErrors.currentPassword} />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
+                New Password *
+              </label>
+              <PasswordInput
+                value={passwordData.newPassword}
+                onChange={(e) => {
+                  setPasswordData({ ...passwordData, newPassword: e.target.value });
+                  if (passwordErrors.newPassword) setPasswordErrors((prev) => ({ ...prev, newPassword: null }));
+                }}
+                placeholder="Enter new password (min. 6 characters)"
+                required
+              />
+              <FieldError message={passwordErrors.newPassword} />
+            </div>
+
+            <button
+              type="submit"
+              disabled={passwordSaving}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <FiSave className="w-3.5 h-3.5" />
+              {passwordSaving ? 'Updating...' : 'Update Password'}
+            </button>
+          </form>
         </div>
       )}
 

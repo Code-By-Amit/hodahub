@@ -69,19 +69,24 @@ export const productSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(500),
   slug: z.string().min(1, 'Slug is required').max(500),
   description: z.string().optional().nullable(),
+  brand: z.string().max(255).optional().nullable(),
   price: z.coerce.number().positive('Price must be greater than 0'),
   discountPrice: z.coerce.number().positive('Discount price must be greater than 0').optional().nullable(),
   categoryId: z.string().uuid('Category selection is required'),
+  brandId: z.string().uuid('Invalid brand ID').optional().nullable(),
   stock: z.coerce.number().int('Stock must be an integer').min(0, 'Stock cannot be negative'),
   isOutOfStock: z.boolean().default(false),
   images: z.array(z.string().url()).default([]),
   isActive: z.boolean().default(true),
+  showOnHome: z.boolean().default(true),
   codAvailable: z.boolean().default(true),
+  isBestSeller: z.boolean().default(false),
   addonIds: z.array(z.string().uuid()).optional().default([]),
 });
 
 export const productStatusToggleSchema = z.object({
   isActive: z.boolean().optional(),
+  showOnHome: z.boolean().optional(),
   isOutOfStock: z.boolean().optional(),
 });
 
@@ -98,6 +103,12 @@ export const categorySchema = z.object({
   slug: z.string().min(1, 'Slug is required').max(255),
   imageUrl: z.string().url().optional().nullable(),
   parentIds: z.array(z.string().uuid()).optional().default([]),
+});
+
+export const brandSchema = z.object({
+  name: z.string().min(1, 'Brand name is required').max(255),
+  slug: z.string().min(1, 'Slug is required').max(255),
+  logoUrl: z.string().url().optional().nullable().or(z.literal('')),
 });
 
 export const couponSchema = z.object({
@@ -139,6 +150,14 @@ export const adminReviewSchema = z
 export const orderItemInputSchema = z.object({
   productId: z.string().uuid('Invalid product ID'),
   quantity: z.number().int().positive('Quantity must be at least 1'),
+  selectedAddonId: z.string().uuid('Invalid add-on ID').optional().nullable(),
+  selectedAddon: z
+    .object({
+      addonId: z.string().uuid('Invalid add-on ID'),
+      quantity: z.number().int().positive().default(1),
+    })
+    .optional()
+    .nullable(),
   selectedAddonIds: z.array(z.string().uuid()).optional(),
   selectedAddons: z
     .array(

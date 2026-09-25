@@ -16,10 +16,13 @@ export const metadata = {
 export const revalidate = 60;
 
 
+import { getBestSellerProducts } from '@/lib/best-sellers';
+
 async function getHomepageData() {
   try {
     const availableCondition = and(
       eq(products.isActive, true),
+      eq(products.showOnHome, true),
       eq(products.isOutOfStock, false),
       gt(products.stock, 0)
     );
@@ -28,12 +31,9 @@ async function getHomepageData() {
       db.select().from(categories).orderBy(asc(categories.name)).limit(12),
       db.select().from(products)
         .where(availableCondition)
-        .orderBy(desc(products.createdAt))
+        .orderBy(desc(products.createdAt), desc(products.id))
         .limit(12),
-      db.select().from(products)
-        .where(availableCondition)
-        .orderBy(desc(products.reviewCount))
-        .limit(8),
+      getBestSellerProducts(8),
     ]);
 
     return { categories: allCategories, newArrivals, bestSellers };
