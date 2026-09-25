@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { storeSettings } from '@/lib/db/schema';
 import { requireAdmin } from '@/lib/auth';
@@ -97,6 +98,13 @@ export async function PUT(request) {
         .insert(storeSettings)
         .values(setPayload)
         .returning();
+    }
+
+    try {
+      revalidateTag('store-settings');
+      revalidatePath('/contact');
+    } catch (cacheErr) {
+      console.warn('Failed to revalidate store settings cache:', cacheErr);
     }
 
     return NextResponse.json({ settings: updated, message: 'Store settings updated successfully!' });

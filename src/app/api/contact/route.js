@@ -27,7 +27,7 @@ export async function POST(request) {
     }
 
     const [settings] = await db.select().from(storeSettings).limit(1);
-    const storeContactEmail = settings?.contactEmail?.trim();
+    const storeContactEmail = settings?.contactEmail?.trim() || process.env.FROM_EMAIL || 'support@hodahub.in';
 
     if (!storeContactEmail) {
       console.warn('[Contact Form] Store contact email is not configured in store_settings. Cannot route customer inquiry.');
