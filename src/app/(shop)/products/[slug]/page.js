@@ -695,13 +695,6 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-          {/* Short Description */}
-          {product.description && (
-            <p className="text-[11px] sm:text-[12px] text-warm-600 leading-relaxed border-t border-b border-warm-100 py-3 line-clamp-3">
-              {product.description}
-            </p>
-          )}
-
           {/* Quantity & Cart Action */}
           <div className="flex flex-col sm:flex-row gap-2 pt-1.5">
             {!isOutOfStock && (
