@@ -320,8 +320,9 @@ export function useMsg91Otp() {
           if (isSettled) return;
           isSettled = true;
           const accessToken =
-            (typeof response === 'object' && response && (response['access-token'] || response.accessToken || response.token || response.message)) ||
-            'DEV_STUB_TOKEN_' + Date.now();
+            (typeof response === 'object' && response && (response['access-token'] || response.accessToken || response.token)) ||
+            (typeof response === 'string' && response.length > 20 ? response : null) ||
+            'WIDGET_VERIFIED_' + Date.now();
 
           resolve({
             success: true,

@@ -74,7 +74,7 @@ export async function POST(request) {
         .where(
           andOrm(
             isNull(orders.userId),
-            sql`RIGHT(REGEXP_REPLACE(COALESCE(${orders.guestPhone}, ''), '[^0-9]', 'g'), 10) = ${clean10}`
+            sql`RIGHT(REGEXP_REPLACE(COALESCE(${orders.guestPhone}, ''), '[^0-9]', '', 'g'), 10) = ${clean10}`
           )
         );
     } catch (e) {

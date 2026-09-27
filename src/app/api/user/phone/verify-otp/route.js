@@ -20,8 +20,8 @@ export async function POST(request) {
       .where(
         and(
           eq(users.id, user.id),
-          eq(users.phoneOtp, otp.trim()),
-          gt(users.phoneOtpExpiresAt, new Date())
+          eq(users.otp, otp.trim()),
+          gt(users.otpExpiresAt, new Date())
         )
       )
       .limit(1);
@@ -33,13 +33,13 @@ export async function POST(request) {
       );
     }
 
-    // Mark phone as verified and clear OTP
+    // Mark user as verified and clear OTP
     const [updatedUser] = await db
       .update(users)
       .set({
-        phoneVerified: true,
-        phoneOtp: null,
-        phoneOtpExpiresAt: null,
+        isVerified: true,
+        otp: null,
+        otpExpiresAt: null,
       })
       .where(eq(users.id, user.id))
       .returning();
@@ -51,7 +51,7 @@ export async function POST(request) {
         name: updatedUser.name,
         email: updatedUser.email,
         phone: updatedUser.phone,
-        phoneVerified: updatedUser.phoneVerified,
+        phoneVerified: true,
         avatarUrl: updatedUser.avatarUrl,
       },
     });

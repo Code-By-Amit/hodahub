@@ -27,14 +27,13 @@ export async function POST(request) {
     const otp = generateOTP();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
-    // Save phone and OTP details
+    // Save phone and OTP details using valid schema columns
     await db
       .update(users)
       .set({
         phone: cleanPhone,
-        phoneVerified: false,
-        phoneOtp: otp,
-        phoneOtpExpiresAt: otpExpiresAt,
+        otp: otp,
+        otpExpiresAt: otpExpiresAt,
       })
       .where(eq(users.id, user.id));
 
