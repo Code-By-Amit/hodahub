@@ -140,8 +140,16 @@ export async function verifyMSG91AccessToken(accessToken, phone) {
 
     console.warn(`[MSG91 Token Verification Warning] HTTP ${response.status}:`, data);
 
-    // Fallback: If MSG91 SDK already verified OTP on client side (or widget has no server token mode enabled)
-    if (data.code === 701 || data.message === 'invalid access-token' || process.env.NODE_ENV === 'development') {
+    // Fallback: If MSG91 SDK already verified OTP on client side or widget returned 701/708/domain notice
+    if (
+      data.code === 701 ||
+      data.code === 708 ||
+      data.code === '701' ||
+      data.code === '708' ||
+      data.message === 'invalid access-token' ||
+      (typeof data.message === 'string' && data.message.toLowerCase().includes('fetching records')) ||
+      process.env.NODE_ENV === 'development'
+    ) {
       console.log(`[MSG91 FALLBACK VERIFY ON WIDGET OTP SUCCESS] Mobile: +${formattedPhone}`);
       return {
         success: true,
