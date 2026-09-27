@@ -57,7 +57,7 @@ export async function POST(request) {
         .values({
           phone: clean10,
           email: null,
-          name: null,
+          name: 'User',
           isVerified: true,
           role: 'customer',
         })
@@ -81,9 +81,11 @@ export async function POST(request) {
       console.warn('[Phone OTP Verify Route] Note on linking guest orders:', e.message || e);
     }
 
+    const defaultName = matchedUser.name && matchedUser.name !== 'Customer' ? matchedUser.name : 'User';
+
     const userPayload = {
       id: matchedUser.id,
-      name: matchedUser.name || 'Customer',
+      name: defaultName,
       email: matchedUser.email || null,
       phone: matchedUser.phone || clean10,
       role: matchedUser.role,

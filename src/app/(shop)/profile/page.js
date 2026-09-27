@@ -90,7 +90,7 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok && data.user) {
         setProfileData({
-          name: data.user.name || '',
+          name: data.user.name || 'User',
           email: data.user.email || '',
           phone: data.user.phone || '',
           avatarUrl: data.user.avatarUrl || '',
@@ -395,10 +395,10 @@ export default function ProfilePage() {
               <div className="relative">
                 <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
                 <input
-                  type="email"
-                  value={profileData.email}
+                  type="text"
+                  value={profileData.email || 'Not set (Phone authenticated user)'}
                   readOnly
-                  className="w-full pl-8 pr-3 py-1.5 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-500 cursor-not-allowed"
+                  className="w-full pl-8 pr-3 py-1.5 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-500 cursor-not-allowed font-medium"
                 />
               </div>
             </div>

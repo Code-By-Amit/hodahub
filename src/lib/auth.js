@@ -13,7 +13,7 @@ export function generateTokens(user) {
     email: user.email || null,
     phone: user.phone || null,
     role: user.role,
-    name: user.name || 'Customer',
+    name: user.name || 'User',
   };
 
   const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -99,7 +99,7 @@ export async function getAuthUser(request) {
         email: decoded.email || null,
         phone: decoded.phone || null,
         role: decoded.role,
-        name: decoded.name || 'Customer',
+        name: decoded.name || 'User',
       };
     }
   }
@@ -115,7 +115,7 @@ export async function getAuthUser(request) {
           email: refreshDecoded.email || null,
           phone: refreshDecoded.phone || null,
           role: refreshDecoded.role,
-          name: refreshDecoded.name || 'Customer',
+          name: refreshDecoded.name || 'User',
         };
       }
     }
@@ -137,7 +137,7 @@ export async function getAuthUser(request) {
         email: dbUser.email || null,
         phone: dbUser.phone || null,
         role: dbUser.role,
-        name: dbUser.name || 'Customer',
+        name: dbUser.name || 'User',
       };
     } else {
       return null;

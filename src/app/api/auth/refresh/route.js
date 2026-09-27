@@ -41,16 +41,18 @@ export async function POST() {
 
     const tokens = generateTokens({
       id: user.id,
-      email: user.email,
+      email: user.email || null,
+      phone: user.phone || null,
       role: user.role,
-      name: user.name,
+      name: user.name || 'User',
     });
 
     const response = NextResponse.json({
       user: {
         id: user.id,
-        name: user.name,
-        email: user.email,
+        name: user.name || 'User',
+        email: user.email || null,
+        phone: user.phone || null,
         role: user.role,
       },
     });

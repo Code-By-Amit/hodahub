@@ -35,7 +35,12 @@ export async function GET(request) {
       .where(eq(addresses.userId, user.id))
       .orderBy(desc(addresses.createdAt));
 
-    return NextResponse.json({ user, addresses: userAddresses });
+    const userWithDefaults = {
+      ...user,
+      name: user.name || 'User',
+    };
+
+    return NextResponse.json({ user: userWithDefaults, addresses: userAddresses });
   } catch (error) {
     if (error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -80,7 +85,12 @@ export async function PUT(request) {
         avatarUrl: users.avatarUrl,
       });
 
-    return NextResponse.json({ user: updatedUser, message: 'Profile updated successfully!' });
+    const userWithDefaults = {
+      ...updatedUser,
+      name: updatedUser.name || 'User',
+    };
+
+    return NextResponse.json({ user: userWithDefaults, message: 'Profile updated successfully!' });
   } catch (error) {
     if (error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

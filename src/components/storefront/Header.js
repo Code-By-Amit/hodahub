@@ -246,7 +246,7 @@ export default function Header() {
                     />
                   ) : user ? (
                     <div className="w-6 h-6 rounded-full bg-warm-900 text-white text-[11px] font-bold flex items-center justify-center">
-                      {user.name?.[0]?.toUpperCase() || 'U'}
+                      {(user.name || user.email || user.phone || 'User')[0].toUpperCase()}
                     </div>
                   ) : (
                     <FiUser className="w-5 h-5" />
@@ -254,7 +254,7 @@ export default function Header() {
                 </button>
 
                 {accountOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-md shadow-lg border border-warm-200 py-1.5 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-md shadow-lg border border-warm-200 py-1.5 z-50">
                     {user ? (
                       <>
                         <div className="px-3 py-2 border-b border-warm-100 flex items-center gap-2.5">
@@ -262,12 +262,16 @@ export default function Header() {
                             <img src={user.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 border border-warm-200" />
                           ) : (
                             <div className="w-7 h-7 rounded-full bg-warm-900 text-white text-[12px] font-bold flex items-center justify-center shrink-0">
-                              {user.name?.[0]?.toUpperCase() || 'U'}
+                              {(user.name || user.email || user.phone || 'User')[0].toUpperCase()}
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold text-warm-900 truncate">{user.name}</p>
-                            <p className="text-[10px] text-warm-500 truncate">{user.email}</p>
+                            <p className="text-[11px] font-bold text-warm-900 truncate">
+                              {user.name && user.name !== 'Customer' ? user.name : 'User'}
+                            </p>
+                            <p className="text-[10px] text-warm-500 truncate">
+                              {user.email || (user.phone ? `+91 ${user.phone.replace(/\D/g, '').slice(-10)}` : 'Mobile User')}
+                            </p>
                           </div>
                         </div>
                         {user.role === 'admin' && (

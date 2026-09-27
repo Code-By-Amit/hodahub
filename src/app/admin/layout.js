@@ -161,11 +161,11 @@ export default function AdminLayout({ children }) {
           </div>
           <div className="flex items-center gap-2 ml-auto">
             <div className="text-right">
-              <p className="text-[11px] font-semibold text-warm-900">{user.name}</p>
-              <p className="text-[9px] text-warm-500">{user.email}</p>
+              <p className="text-[11px] font-semibold text-warm-900">{user.name || 'User'}</p>
+              <p className="text-[9px] text-warm-500">{user.email || (user.phone ? `+91 ${user.phone.slice(-10)}` : 'Admin')}</p>
             </div>
             <div className="w-7 h-7 bg-warm-900 text-white rounded-md flex items-center justify-center font-bold text-[11px] shadow-xs">
-              {user.name?.[0]?.toUpperCase() || 'A'}
+              {(user.name || user.email || user.phone || 'A')[0]?.toUpperCase()}
             </div>
           </div>
         </header>

@@ -29,7 +29,13 @@ export async function GET(request) {
       .where(eq(users.id, authUser.id))
       .limit(1);
 
-    return NextResponse.json({ user: dbUser || authUser });
+    const finalUser = dbUser || authUser;
+    return NextResponse.json({
+      user: {
+        ...finalUser,
+        name: finalUser.name || 'User',
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { error: 'Not authenticated' },
