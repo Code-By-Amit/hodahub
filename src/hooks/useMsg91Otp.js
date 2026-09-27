@@ -9,7 +9,7 @@ const DEFAULT_WIDGET_ID = '366977645959313131313239';
 
 export function useMsg91Otp() {
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
-  const [widgetId, setWidgetId] = useState(DEFAULT_WIDGET_ID);
+  const [widgetId, setWidgetId] = useState('');
   const [tokenAuth, setTokenAuth] = useState('');
   const [isConfigured, setIsConfigured] = useState(false);
   const [lastReqId, setLastReqId] = useState(null);
@@ -51,7 +51,7 @@ export function useMsg91Otp() {
     };
   }, []);
 
-  // Idempotently load MSG91 SDK script on client
+  // Idempotently load MSG91 SDK script on client only if widget is configured
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -101,7 +101,7 @@ export function useMsg91Otp() {
   // Auto-initialize MSG91 Widget as soon as script and config are ready
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!isScriptLoaded || !widgetId || !tokenAuth) return;
+    if (!isScriptLoaded || !widgetId || !tokenAuth || !isConfigured) return;
     if (isWidgetInitializedRef.current) return;
 
     if (window.initSendOTP) {
@@ -129,7 +129,7 @@ export function useMsg91Otp() {
         console.warn('[MSG91 initSendOTP Pre-init Warning]:', err);
       }
     }
-  }, [isScriptLoaded, widgetId, tokenAuth]);
+  }, [isScriptLoaded, widgetId, tokenAuth, isConfigured]);
 
   /**
    * Send OTP via MSG91 ExposeMethods

@@ -7,8 +7,8 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      widgetId: config.widgetId,
-      tokenAuth: config.tokenAuth || 'DEV_STUB_WIDGET_TOKEN',
+      widgetId: config.isConfigured ? config.widgetId : '',
+      tokenAuth: config.isConfigured ? config.tokenAuth : '',
       isConfigured: config.isConfigured,
     });
   } catch (error) {
