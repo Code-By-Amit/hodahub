@@ -157,13 +157,8 @@ function LoginContent() {
 
       setVerifyingOtp(false);
 
-      if (data.user?.role === 'admin') {
-        router.push('/admin');
-      } else if (redirect) {
-        router.push(redirect);
-      } else {
-        router.push('/');
-      }
+      const targetUrl = data.user?.role === 'admin' ? '/admin' : (redirect || '/');
+      window.location.href = targetUrl;
     } catch (error) {
       console.error('[Login OTP Verification Exception]:', error);
       setOtpError(error.message || 'Network error verifying OTP. Please try again.');

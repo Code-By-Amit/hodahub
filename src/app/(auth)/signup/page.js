@@ -153,15 +153,16 @@ function SignupContent() {
       }
 
       dispatch(setUser(data.user));
-      await syncWishlistOnAuth(dispatch, guestWishlistItems);
-
-      if (data.user?.role === 'admin') {
-        router.push('/admin');
-      } else if (redirect) {
-        router.push(redirect);
-      } else {
-        router.push('/');
+      try {
+        await syncWishlistOnAuth(dispatch, guestWishlistItems);
+      } catch (syncErr) {
+        console.warn('[Signup OTP] Wishlist sync warning:', syncErr);
       }
+
+      setVerifyingOtp(false);
+
+      const targetUrl = data.user?.role === 'admin' ? '/admin' : (redirect || '/');
+      window.location.href = targetUrl;
     } catch (error) {
       setOtpError(error.message || 'Network error verifying OTP. Please try again.');
     } finally {
