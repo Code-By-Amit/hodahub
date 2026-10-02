@@ -105,7 +105,7 @@ export default function ProductsPage() {
   }
 
   const selectedCategoryObj = categories.find((c) => c.slug === currentCategory);
-  const selectedBrandObj = brands.find((b) => b.slug === currentBrand);
+  const selectedBrandObj = brands.find((b) => (b.slug || b.name) === currentBrand);
   const hasFilters = Boolean(currentCategory || currentBrand || currentMinPrice || currentMaxPrice);
 
   const pageTitle = selectedCategoryObj
@@ -187,24 +187,29 @@ export default function ProductsPage() {
           )}
 
           {currentBrand && (() => {
-            const brandList = currentBrand.split(',').map((b) => b.trim()).filter(Boolean);
-            return brandList.map((bName) => (
-              <span
-                key={bName}
-                className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800 shadow-2xs"
-              >
-                Brand: {bName}
-                <button
-                  onClick={() => {
-                    const nextList = brandList.filter((b) => b !== bName);
-                    updateFilters({ brand: nextList.join(',') || null });
-                  }}
-                  className="text-warm-400 hover:text-warm-900"
+            const brandSlugs = currentBrand.split(',').map((b) => b.trim()).filter(Boolean);
+            return brandSlugs.map((bSlug) => {
+              // Look up the display name from the brands array by slug
+              const brandObj = brands.find((b) => (b.slug || b.name) === bSlug);
+              const displayName = brandObj?.name || bSlug;
+              return (
+                <span
+                  key={bSlug}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-warm-200 rounded-md text-[10px] font-semibold text-warm-800 shadow-2xs"
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ));
+                  Brand: {displayName}
+                  <button
+                    onClick={() => {
+                      const nextList = brandSlugs.filter((b) => b !== bSlug);
+                      updateFilters({ brand: nextList.join(',') || null });
+                    }}
+                    className="text-warm-400 hover:text-warm-900"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            });
           })()}
 
           {(currentMinPrice || currentMaxPrice) && (

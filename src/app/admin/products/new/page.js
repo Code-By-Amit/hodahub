@@ -280,9 +280,13 @@ export function ProductForm({ initialData, productId }) {
       isFreeOverride: link.isFreeOverride === true ? true : (link.isFreeOverride === false ? false : null),
     }));
 
+    // Auto-populate brand text field from selected brandId (for backward compat with products.brand)
+    const selectedBrandObj = form.brandId ? brands.find((b) => b.id === form.brandId) : null;
+    const brandText = selectedBrandObj ? selectedBrandObj.name : (form.brand ? form.brand.trim() : null);
+
     const payload = {
       ...form,
-      brand: form.brand ? form.brand.trim() : null,
+      brand: brandText,
       price: form.price ? parseFloat(form.price) : 0,
       discountPrice: form.discountPrice ? parseFloat(form.discountPrice) : null,
       stock: form.stock !== '' ? parseInt(form.stock, 10) : 0,
@@ -426,21 +430,7 @@ export function ProductForm({ initialData, productId }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-[10px] font-semibold text-warm-700 mb-1">
-              Brand (e.g. Nike, Rado, Casio)
-            </label>
-            <input
-              type="text"
-              value={form.brand || ''}
-              onChange={(e) => setForm({ ...form, brand: e.target.value })}
-              className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
-                errors.brand ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
-              }`}
-              placeholder="e.g. Nike, Rado, Seiko"
-            />
-            <FieldError message={errors.brand} />
-          </div>
+          {/* Brand moved below Category — dropdown only, managed via Brand Section */}
 
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 mb-1">

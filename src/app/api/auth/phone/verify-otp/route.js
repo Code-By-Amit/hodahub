@@ -8,7 +8,7 @@ import { formatIndianMobile, verifyMSG91AccessToken } from '@/lib/msg91';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { phone, accessToken, reqId, otp } = body;
+    const { phone, accessToken } = body;
 
     if (!phone || typeof phone !== 'string') {
       return NextResponse.json({ error: 'Mobile number is required' }, { status: 400 });
@@ -24,47 +24,73 @@ export async function POST(request) {
       );
     }
 
-    const formattedPhone = formatIndianMobile(clean10);
+    const formattedPhone = formatIndianMobile(clean10); // e.g. "919328404471"
 
     // Verify MSG91 Access Token server-side if token is present
     if (accessToken) {
       const verifyResult = await verifyMSG91AccessToken(accessToken, formattedPhone);
       if (!verifyResult.success) {
         return NextResponse.json(
-          { error: verifyResult.message || 'MSG91 OTP verification failed server-side' },
+          { error: verifyResult.message || 'OTP verification failed. Please try again.' },
           { status: 400 }
         );
       }
     }
 
-    // Search for existing user account by phone number
-    let [matchedUser] = await db
-      .select()
-      .from(users)
-      .where(
-        or(
-          eq(users.phone, clean10),
-          eq(users.phone, formattedPhone),
-          like(users.phone, `%${clean10}`)
+    // --- DB Lookup: find existing user by phone ---
+    let matchedUser = null;
+    try {
+      const rows = await db
+        .select()
+        .from(users)
+        .where(
+          or(
+            eq(users.phone, clean10),        // stored as "9328404471"
+            eq(users.phone, formattedPhone), // stored as "919328404471"
+            like(users.phone, `%${clean10}`) // ends with the 10-digit number
+          )
         )
-      )
-      .limit(1);
-
-    // If user does not exist, create minimal phone-only user account
-    if (!matchedUser) {
-      [matchedUser] = await db
-        .insert(users)
-        .values({
-          phone: clean10,
-          email: null,
-          name: 'User',
-          isVerified: true,
-          role: 'customer',
-        })
-        .returning();
+        .limit(1);
+      matchedUser = rows[0] ?? null;
+    } catch (lookupErr) {
+      console.error('[Phone OTP Verify] DB lookup failed:', lookupErr?.stack || lookupErr);
+      return NextResponse.json(
+        { error: 'Failed to look up your account. Please try again.' },
+        { status: 500 }
+      );
     }
 
-    // Automatically associate past guest orders matching phone with this account
+    // --- Create new user if not found ---
+    if (!matchedUser) {
+      try {
+        const inserted = await db
+          .insert(users)
+          .values({
+            phone: clean10,
+            // email is intentionally omitted — Postgres allows multiple NULLs in unique columns
+            name: 'User',
+            isVerified: true,
+            role: 'customer',
+          })
+          .returning();
+        matchedUser = inserted[0] ?? null;
+      } catch (insertErr) {
+        console.error('[Phone OTP Verify] User insert failed:', insertErr?.stack || insertErr);
+        return NextResponse.json(
+          { error: 'Failed to create your account. Please try again.' },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (!matchedUser) {
+      return NextResponse.json(
+        { error: 'Unable to authenticate. Please try again.' },
+        { status: 500 }
+      );
+    }
+
+    // Automatically associate past guest orders matching this phone number
     try {
       const { orders } = await import('@/lib/db/schema');
       const { isNull, sql, and: andOrm } = await import('drizzle-orm');
@@ -78,20 +104,21 @@ export async function POST(request) {
           )
         );
     } catch (e) {
-      console.warn('[Phone OTP Verify Route] Note on linking guest orders:', e.message || e);
+      // Non-fatal: just log and continue
+      console.warn('[Phone OTP Verify] Guest order linking skipped:', e?.message || e);
     }
 
-    const defaultName = matchedUser.name && matchedUser.name !== 'Customer' ? matchedUser.name : 'User';
+    const displayName =
+      matchedUser.name && matchedUser.name !== 'Customer' ? matchedUser.name : 'User';
 
     const userPayload = {
       id: matchedUser.id,
-      name: defaultName,
+      name: displayName,
       email: matchedUser.email || null,
       phone: matchedUser.phone || clean10,
       role: matchedUser.role,
     };
 
-    // Issue JWT access and refresh tokens
     const tokens = generateTokens(userPayload);
 
     const response = NextResponse.json({
@@ -103,7 +130,10 @@ export async function POST(request) {
     setAuthCookies(response, tokens);
     return response;
   } catch (error) {
-    console.error('Verify MSG91 phone OTP server error:', error.stack || error);
-    return NextResponse.json({ error: error.message || 'Failed to verify OTP. Please try again.' }, { status: 500 });
+    console.error('[Phone OTP Verify] Unexpected error:', error?.stack || error);
+    return NextResponse.json(
+      { error: error?.message || 'Failed to verify OTP. Please try again.' },
+      { status: 500 }
+    );
   }
 }

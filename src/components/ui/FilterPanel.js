@@ -133,11 +133,13 @@ export default function FilterPanel({
             {openSections.brands && (
               <div className="mt-2 space-y-1 max-h-48 overflow-y-auto pr-1">
                 {brands.map((b) => {
+                  // slug is the URL/filter identifier (unique); name is the display label
+                  const brandSlug = typeof b === 'string' ? b : (b.slug || b.name);
                   const brandName = typeof b === 'string' ? b : (b.name || b.slug);
-                  const isChecked = selectedBrandList.includes(brandName);
+                  const isChecked = selectedBrandList.includes(brandSlug);
                   return (
                     <label
-                      key={brandName}
+                      key={brandSlug}
                       className="flex items-center gap-2 px-2 py-1 rounded-md text-[11px] text-warm-700 hover:bg-warm-50 cursor-pointer select-none"
                     >
                       <input
@@ -146,9 +148,9 @@ export default function FilterPanel({
                         onChange={() => {
                           let updatedList;
                           if (isChecked) {
-                            updatedList = selectedBrandList.filter((item) => item !== brandName);
+                            updatedList = selectedBrandList.filter((item) => item !== brandSlug);
                           } else {
-                            updatedList = [...selectedBrandList, brandName];
+                            updatedList = [...selectedBrandList, brandSlug];
                           }
                           onBrandChange && onBrandChange(updatedList.join(','));
                         }}

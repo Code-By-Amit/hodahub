@@ -126,8 +126,15 @@ function LoginContent() {
     setVerifyingOtp(true);
 
     try {
-      // 1. Verify via MSG91 OTP Widget ExposeMethods
-      const msg91Result = await msg91VerifyOtp(mobileOtp.trim());
+      // 1. Verify via MSG91 OTP Widget with 12-second timeout safeguard
+      //    (prevents infinite spinner if MSG91 SDK hangs without calling callbacks)
+      const verifyTimeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OTP verification timed out. Please try again.')), 12000)
+      );
+      const msg91Result = await Promise.race([
+        msg91VerifyOtp(mobileOtp.trim()),
+        verifyTimeoutPromise,
+      ]);
 
       // 2. Send token to backend to verify server-side & issue session cookies
       const res = await fetch('/api/auth/phone/verify-otp', {
@@ -143,8 +150,8 @@ function LoginContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        setOtpError(data.error || 'Failed to verify OTP with server');
-        setVerifyingOtp(false);
+        // setVerifyingOtp(false) is handled by the finally block below
+        setOtpError(data.error || 'Failed to verify OTP. Please try again.');
         return;
       }
 
@@ -155,14 +162,15 @@ function LoginContent() {
         console.warn('[Login OTP] Wishlist sync warning:', syncErr);
       }
 
-      setVerifyingOtp(false);
-
+      // finally block will call setVerifyingOtp(false) before navigation
       const targetUrl = data.user?.role === 'admin' ? '/admin' : (redirect || '/');
       window.location.href = targetUrl;
     } catch (error) {
       console.error('[Login OTP Verification Exception]:', error);
-      setOtpError(error.message || 'Network error verifying OTP. Please try again.');
+      setOtpError(error.message || 'Network error. Please try again.');
     } finally {
+      // This is the single authoritative place to stop the spinner.
+      // Runs whether try succeeds, throws, or an early return happens.
       setVerifyingOtp(false);
     }
   }

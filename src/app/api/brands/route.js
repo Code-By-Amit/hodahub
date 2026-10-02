@@ -55,30 +55,43 @@ export async function GET(request) {
       );
     }
 
+    // Fetch both relational brand (name + slug) AND free-text brand field
     const brandRows = await db
       .select({
         brandText: products.brand,
         brandRelName: brands.name,
+        brandRelSlug: brands.slug, // use actual DB slug, not the name
       })
       .from(products)
       .leftJoin(brands, eq(products.brandId, brands.id))
       .where(and(...conditions));
 
-    const distinctBrandsSet = new Set();
+    // Build a slug→{name,slug} map.
+    // Relational brands: use the real slug (unique). Free-text brands: use text as slug fallback.
+    const brandMap = new Map(); // slug -> { name, slug }
+
     for (const r of brandRows) {
-      const bName = (r.brandText || r.brandRelName || '').trim();
-      if (bName) {
-        distinctBrandsSet.add(bName);
+      if (r.brandRelName && r.brandRelSlug) {
+        // Relational brand from brands table — use its actual unique slug
+        if (!brandMap.has(r.brandRelSlug)) {
+          brandMap.set(r.brandRelSlug, { name: r.brandRelName, slug: r.brandRelSlug });
+        }
+      } else if (r.brandText) {
+        const text = r.brandText.trim();
+        if (text && !brandMap.has(text)) {
+          // Free-text brand has no slug — use the text itself as the identifier
+          brandMap.set(text, { name: text, slug: text });
+        }
       }
     }
 
-    const sortedBrandsList = Array.from(distinctBrandsSet)
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({ name, slug: name }));
+    const sortedBrandsList = Array.from(brandMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
 
     return NextResponse.json({ brands: sortedBrandsList });
   } catch (error) {
     console.error('Brands API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch dynamic brands' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch brands' }, { status: 500 });
   }
 }
