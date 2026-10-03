@@ -11,19 +11,22 @@ export async function POST(request) {
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Invalid JSON request body' },
+        { status: 400 }
+      );
     }
 
     const { accessToken } = body || {};
 
     if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
       return NextResponse.json(
-        { error: 'MSG91 access token is required' },
+        { error: 'MSG91 access token is required for OTP verification' },
         { status: 400 }
       );
     }
 
-    // Verify MSG91 Access Token server-side strictly
+    // 1. Verify access token strictly with MSG91 server-side API
     const verifyResult = await verifyMSG91AccessToken(accessToken.trim());
 
     if (!verifyResult.success || !verifyResult.mobile) {
@@ -33,10 +36,11 @@ export async function POST(request) {
       );
     }
 
-    const clean10 = verifyResult.mobile;
+    // 2. Extract trusted 10-digit mobile number from MSG91 server response ONLY
+    const clean10 = verifyResult.mobile; // e.g. "9876543210"
     const formatted12 = verifyResult.formattedMobile || `91${clean10}`;
 
-    // --- DB Lookup: find existing user by phone ---
+    // 3. Database lookup for existing user by phone
     let matchedUser = null;
     try {
       const rows = await db
@@ -53,14 +57,14 @@ export async function POST(request) {
 
       matchedUser = rows[0] || null;
     } catch (lookupErr) {
-      console.error('[Phone OTP Verify API] DB lookup error:', lookupErr instanceof Error ? lookupErr.message : lookupErr);
+      console.error('[MSG91 Verify API] DB lookup error:', lookupErr instanceof Error ? lookupErr.message : lookupErr);
       return NextResponse.json(
-        { error: 'Failed to look up your account. Please try again.' },
+        { error: 'Database error looking up account. Please try again.' },
         { status: 500 }
       );
     }
 
-    // --- Create new user if not found ---
+    // 4. Register new user if not found
     if (!matchedUser) {
       try {
         const inserted = await db
@@ -75,9 +79,9 @@ export async function POST(request) {
 
         matchedUser = inserted[0] || null;
       } catch (insertErr) {
-        console.error('[Phone OTP Verify API] User insert failed:', insertErr instanceof Error ? insertErr.message : insertErr);
+        console.error('[MSG91 Verify API] User creation error:', insertErr instanceof Error ? insertErr.message : insertErr);
         return NextResponse.json(
-          { error: 'Failed to create your account. Please try again.' },
+          { error: 'Failed to create user account. Please try again.' },
           { status: 500 }
         );
       }
@@ -85,12 +89,12 @@ export async function POST(request) {
 
     if (!matchedUser) {
       return NextResponse.json(
-        { error: 'Unable to authenticate. Please try again.' },
+        { error: 'Unable to authenticate user.' },
         { status: 500 }
       );
     }
 
-    // Automatically associate past guest orders matching this phone number
+    // 5. Link guest orders with matching phone number
     try {
       await db
         .update(orders)
@@ -102,7 +106,7 @@ export async function POST(request) {
           )
         );
     } catch (e) {
-      console.warn('[Phone OTP Verify API] Guest order linking skipped:', e instanceof Error ? e.message : e);
+      console.warn('[MSG91 Verify API] Guest order linking skipped:', e instanceof Error ? e.message : e);
     }
 
     const displayName =
@@ -116,11 +120,12 @@ export async function POST(request) {
       role: matchedUser.role,
     };
 
+    // 6. Generate session JWT tokens & set HTTP-only cookies
     const tokens = generateTokens(userPayload);
 
     const response = NextResponse.json({
       success: true,
-      message: 'Logged in successfully!',
+      message: 'Authenticated successfully!',
       user: userPayload,
     });
 
@@ -128,9 +133,9 @@ export async function POST(request) {
     return response;
   } catch (error) {
     const errMessage = error instanceof Error ? error.message : 'Internal server error';
-    console.error('[Phone OTP Verify API Unexpected error]:', errMessage);
+    console.error('[MSG91 Verify API Unexpected Error]:', errMessage);
     return NextResponse.json(
-      { error: 'Failed to verify OTP. Please try again.' },
+      { error: 'Authentication failed. Please try again.' },
       { status: 500 }
     );
   }

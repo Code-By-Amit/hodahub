@@ -1,18 +1,42 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { formatIndianMobile } from '@/lib/msg91';
+import { formatIndianMobile, extract10DigitMobile } from '@/lib/msg91';
 
-const MSG91_SCRIPT_PRIMARY = 'https://verify.msg91.com/otp-provider.js';
-const MSG91_SCRIPT_FALLBACK = 'https://verify.phone91.com/otp-provider.js';
-const DEFAULT_WIDGET_ID = '366977645959313131313239';
+const MSG91_SCRIPT_URL = 'https://verify.msg91.com/otp-provider.js';
 
-export function useMsg91Otp() {
-  const [isScriptLoaded, setIsScriptLoaded] = useState(false);
-  const [widgetId, setWidgetId] = useState('');
-  const [tokenAuth, setTokenAuth] = useState('');
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [lastReqId, setLastReqId] = useState(null);
+/**
+ * OTP State Machine:
+ * 'idle' | 'sending' | 'otpSent' | 'verifying' | 'verified' | 'retrying' | 'error'
+ */
+
+export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
+  const [otpState, setOtpState] = useState('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [infoMessage, setInfoMessage] = useState('');
+
+  // Synchronously initialize configuration from NEXT_PUBLIC environment variables
+  const [widgetId, setWidgetId] = useState(() => {
+    return (process.env.NEXT_PUBLIC_MSG91_WIDGET_ID || '').trim();
+  });
+
+  const [tokenAuth, setTokenAuth] = useState(() => {
+    return (process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH || '').trim();
+  });
+
+  const [isConfigured, setIsConfigured] = useState(() => {
+    const wId = (process.env.NEXT_PUBLIC_MSG91_WIDGET_ID || '').trim();
+    const tAuth = (process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH || '').trim();
+    return Boolean(wId && tAuth);
+  });
+
+  const [isScriptLoaded, setIsScriptLoaded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(window.initSendOTP || window.sendOtp);
+    }
+    return false;
+  });
+
   const lastReqIdRef = useRef(null);
   const scriptLoadingRef = useRef(false);
   const isWidgetInitializedRef = useRef(false);
@@ -20,85 +44,60 @@ export function useMsg91Otp() {
   const activeSuccessRef = useRef(null);
   const activeFailureRef = useRef(null);
 
-  const updateReqId = (id) => {
-    if (id) {
-      lastReqIdRef.current = id;
-      setLastReqId(id);
-    }
-  };
-
-  // Fetch widget config from backend
+  // Fallback async fetch for configuration if build-time env vars were omitted
   useEffect(() => {
+    if (isConfigured) return;
     let isMounted = true;
-    async function fetchConfig() {
-      try {
-        const res = await fetch('/api/auth/phone/widget-token');
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted) {
-            if (data.widgetId) setWidgetId(data.widgetId);
-            if (data.tokenAuth) setTokenAuth(data.tokenAuth);
-            setIsConfigured(Boolean(data.isConfigured));
-          }
-        }
-      } catch (err) {
-        console.warn('[MSG91 Hook] Error fetching widget config:', err);
-      }
-    }
-    fetchConfig();
+
+    fetch('/api/auth/phone/widget-token')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted || !data) return;
+        if (data.widgetId) setWidgetId(data.widgetId);
+        if (data.tokenAuth) setTokenAuth(data.tokenAuth);
+        if (data.isConfigured) setIsConfigured(true);
+      })
+      .catch((err) => {
+        console.warn('[MSG91 Hook] Config fetch error:', err);
+      });
+
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isConfigured]);
 
-  // Idempotently load MSG91 SDK script on client only if widget is configured
+  // Load MSG91 Web SDK Script Idempotently
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
-    if (window.initSendOTP || window.sendOtp) {
-      setIsScriptLoaded(true);
-      return;
-    }
-
+    if (window.initSendOTP || window.sendOtp) return;
     if (scriptLoadingRef.current) return;
     scriptLoadingRef.current = true;
 
-    function loadScript(src, fallbackSrc) {
-      const existingScript = document.querySelector(`script[src="${src}"]`);
-      if (existingScript) {
-        existingScript.addEventListener('load', () => setIsScriptLoaded(true));
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = src;
-      script.async = true;
-      script.type = 'text/javascript';
-
-      script.onload = () => {
-        setIsScriptLoaded(true);
-      };
-
-      script.onerror = () => {
-        console.warn(`[MSG91 Hook] Failed to load ${src}, trying fallback...`);
-        if (fallbackSrc) {
-          const fallbackScript = document.createElement('script');
-          fallbackScript.src = fallbackSrc;
-          fallbackScript.async = true;
-          fallbackScript.type = 'text/javascript';
-          fallbackScript.onload = () => setIsScriptLoaded(true);
-          fallbackScript.onerror = (e) => console.error('[MSG91 Hook] Fallback script failed to load', e);
-          document.head.appendChild(fallbackScript);
-        }
-      };
-
-      document.head.appendChild(script);
+    const existingScript = document.querySelector(`script[src="${MSG91_SCRIPT_URL}"]`);
+    if (existingScript) {
+      const handleLoad = () => setIsScriptLoaded(true);
+      existingScript.addEventListener('load', handleLoad);
+      return () => existingScript.removeEventListener('load', handleLoad);
     }
 
-    loadScript(MSG91_SCRIPT_PRIMARY, MSG91_SCRIPT_FALLBACK);
+    const script = document.createElement('script');
+    script.src = MSG91_SCRIPT_URL;
+    script.async = true;
+    script.type = 'text/javascript';
+
+    script.onload = () => {
+      setIsScriptLoaded(true);
+    };
+
+    script.onerror = () => {
+      console.error('[MSG91 Hook] Failed to load MSG91 SDK script');
+      scriptLoadingRef.current = false;
+    };
+
+    document.head.appendChild(script);
   }, []);
 
-  // Auto-initialize MSG91 Widget as soon as script and config are ready
+  // Initialize MSG91 Widget Configuration
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!isScriptLoaded || !widgetId || !tokenAuth || !isConfigured) return;
@@ -106,41 +105,76 @@ export function useMsg91Otp() {
 
     if (window.initSendOTP) {
       try {
-        window.initSendOTP({
-          widgetId: widgetId || DEFAULT_WIDGET_ID,
-          tokenAuth: tokenAuth,
+        const config = {
+          widgetId,
+          tokenAuth,
           exposeMethods: true,
+          captchaRenderId,
           success: (data) => {
-            console.log('[MSG91 OTP Verification Success]:', data);
+            console.log('[MSG91 Widget Success Callback]:', data);
             if (activeSuccessRef.current) {
               activeSuccessRef.current(data);
             }
           },
           failure: (error) => {
-            console.warn('[MSG91 OTP Failure]:', error);
+            console.warn('[MSG91 Widget Failure Callback]:', error);
             if (activeFailureRef.current) {
               activeFailureRef.current(error);
             }
           },
-        });
+        };
+
+        window.initSendOTP(config);
         isWidgetInitializedRef.current = true;
-        console.log('[MSG91 Hook] Widget pre-initialized successfully.');
+        console.log('[MSG91 Hook] Widget initialized successfully.');
       } catch (err) {
-        console.warn('[MSG91 initSendOTP Pre-init Warning]:', err);
+        console.error('[MSG91 initSendOTP Exception]:', err);
       }
     }
-  }, [isScriptLoaded, widgetId, tokenAuth, isConfigured]);
+  }, [isScriptLoaded, widgetId, tokenAuth, isConfigured, captchaRenderId]);
+
+  // Reset state helper
+  const resetState = useCallback(() => {
+    setOtpState('idle');
+    setErrorMessage('');
+    setInfoMessage('');
+  }, []);
 
   /**
-   * Send OTP via MSG91 ExposeMethods
+   * Send OTP to phone number using MSG91 window.sendOtp
    */
   const sendOtp = useCallback(
     async (phone) => {
-      const formattedPhone = formatIndianMobile(phone);
+      const clean10 = extract10DigitMobile(phone);
+      if (!clean10 || clean10.length !== 10 || !/^[6-9]\d{9}$/.test(clean10)) {
+        const err = 'Please enter a valid 10-digit Indian mobile number (e.g. 9876543210)';
+        setErrorMessage(err);
+        setOtpState('error');
+        return { success: false, error: err };
+      }
 
-      return new Promise((resolve, reject) => {
+      if (otpState === 'sending' || otpState === 'verifying') {
+        return { success: false, error: 'Operation already in progress' };
+      }
+
+      const formatted12 = formatIndianMobile(clean10);
+
+      setOtpState('sending');
+      setErrorMessage('');
+      setInfoMessage('');
+
+      return new Promise((resolve) => {
         if (typeof window === 'undefined') {
-          return reject(new Error('Window not available'));
+          setOtpState('error');
+          setErrorMessage('Browser window is not available');
+          return resolve({ success: false, error: 'Window not available' });
+        }
+
+        if (!isConfigured) {
+          const err = 'MSG91 OTP service is not configured on the server. Please add MSG91 environment variables.';
+          setOtpState('error');
+          setErrorMessage(err);
+          return resolve({ success: false, error: err });
         }
 
         let isSettled = false;
@@ -148,105 +182,109 @@ export function useMsg91Otp() {
         const handleSuccess = (response) => {
           if (isSettled) return;
           isSettled = true;
-          const reqId = typeof response === 'object' && response ? response.reqId : null;
-          if (reqId) updateReqId(reqId);
-          resolve({
-            success: true,
-            reqId,
-            message: 'OTP code sent successfully',
-            raw: response,
-          });
+
+          const reqId =
+            typeof response === 'object' && response ? response.reqId || response.requestId : null;
+          if (reqId) lastReqIdRef.current = reqId;
+
+          setOtpState('otpSent');
+          setInfoMessage('OTP code sent successfully to your mobile number');
+          resolve({ success: true, reqId, raw: response });
         };
 
         const handleFailure = (error) => {
           if (isSettled) return;
-          const msg =
-            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
-            (typeof error === 'string' ? error : 'MSG91 Widget SDK Notice');
-
-          console.warn('[MSG91 Hook] Intercepted MSG91 SDK send error, activating seamless fallback:', error || msg);
           isSettled = true;
-          handleSuccess({ message: 'OTP sent (Fallback Mode)', reqId: 'REQ_' + Date.now() });
+
+          const rawMsg =
+            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
+            (typeof error === 'string' ? error : null);
+
+          const userFriendlyMsg = rawMsg
+            ? `Unable to send OTP: ${rawMsg}`
+            : 'Unable to send OTP. Please check the mobile number and try again.';
+
+          console.warn('[MSG91 Send OTP Failed]:', error);
+          setOtpState('error');
+          setErrorMessage(userFriendlyMsg);
+          resolve({ success: false, error: userFriendlyMsg });
         };
 
         activeSuccessRef.current = handleSuccess;
         activeFailureRef.current = handleFailure;
 
-        // If real MSG91 credentials are configured
-        if (isConfigured) {
-          // If window.sendOtp is available directly
-          if (window.sendOtp) {
-            try {
-              console.log(`[MSG91 Hook] Calling window.sendOtp for +${formattedPhone}`);
-              window.sendOtp(formattedPhone, handleSuccess, handleFailure);
-
-              // Timeout safety in case window.sendOtp sends SMS but doesn't fire callback immediately
-              setTimeout(() => {
-                if (!isSettled) {
-                  console.log(`[MSG91 Hook] sendOtp timeout safety trigger - resolving OTP sent for +${formattedPhone}`);
-                  handleSuccess({ message: 'OTP sent', reqId: lastReqIdRef.current || 'REQ_' + Date.now() });
-                }
-              }, 2000);
-              return;
-            } catch (e) {
-              console.warn('[MSG91 window.sendOtp exception]:', e);
-            }
-          }
-
-          // Fallback to window.initSendOTP if sendOtp method not attached yet
-          if (window.initSendOTP) {
-            try {
-              console.log(`[MSG91 Hook] Initializing MSG91 widget for +${formattedPhone}`);
-              window.initSendOTP({
-                widgetId: widgetId || DEFAULT_WIDGET_ID,
-                tokenAuth: tokenAuth,
-                identifier: formattedPhone,
-                exposeMethods: true,
-                success: (data) => {
-                  if (activeSuccessRef.current) activeSuccessRef.current(data);
-                },
-                failure: (error) => {
-                  if (activeFailureRef.current) activeFailureRef.current(error);
-                },
-              });
-
-              // When initSendOTP is invoked with identifier, SMS is dispatched immediately by MSG91.
-              // We resolve handleSuccess after a brief delay so the UI transitions to OTP input step!
-              setTimeout(() => {
-                if (!isSettled) {
-                  console.log(`[MSG91 Hook] initSendOTP auto-resolve for +${formattedPhone}`);
-                  handleSuccess({ message: 'OTP sent via MSG91 widget', reqId: 'REQ_' + Date.now() });
-                }
-              }, 1200);
-              return;
-            } catch (e) {
-              console.warn('[MSG91 window.initSendOTP exception]:', e);
-            }
+        if (window.sendOtp) {
+          try {
+            console.log(`[MSG91 Hook] Invoking window.sendOtp for ${formatted12}`);
+            window.sendOtp(formatted12, handleSuccess, handleFailure);
+            return;
+          } catch (e) {
+            console.error('[MSG91 window.sendOtp error]:', e);
+            handleFailure(e);
+            return;
           }
         }
 
-        // Development Fallback if MSG91 is unconfigured or in dev stub mode
-        console.log(`[MSG91 DEV STUB] Sending OTP to +${formattedPhone}`);
-        setTimeout(() => {
-          const mockReqId = 'DEV_REQ_ID_' + Date.now();
-          updateReqId(mockReqId);
-          handleSuccess({ message: 'OTP sent (Dev Stub Mode)', reqId: mockReqId });
-        }, 600);
+        if (window.initSendOTP) {
+          try {
+            console.log(`[MSG91 Hook] Initializing SendOTP for ${formatted12}`);
+            window.initSendOTP({
+              widgetId,
+              tokenAuth,
+              identifier: formatted12,
+              exposeMethods: true,
+              captchaRenderId,
+              success: (data) => {
+                if (activeSuccessRef.current) activeSuccessRef.current(data);
+              },
+              failure: (error) => {
+                if (activeFailureRef.current) activeFailureRef.current(error);
+              },
+            });
+            return;
+          } catch (e) {
+            console.error('[MSG91 window.initSendOTP with identifier error]:', e);
+            handleFailure(e);
+            return;
+          }
+        }
+
+        const notLoadedMsg = 'OTP Widget script is not ready yet. Please try again in a moment.';
+        setOtpState('error');
+        setErrorMessage(notLoadedMsg);
+        resolve({ success: false, error: notLoadedMsg });
       });
     },
-    [isConfigured, widgetId, tokenAuth]
+    [isConfigured, widgetId, tokenAuth, captchaRenderId, otpState]
   );
 
   /**
-   * Retry / Resend OTP
+   * Resend / Retry OTP
    */
   const retryOtp = useCallback(
     async (phone) => {
-      const formattedPhone = formatIndianMobile(phone);
+      const clean10 = extract10DigitMobile(phone);
+      if (!clean10 || clean10.length !== 10) {
+        const err = 'Please enter a valid 10-digit mobile number';
+        setErrorMessage(err);
+        return { success: false, error: err };
+      }
 
-      return new Promise((resolve, reject) => {
-        if (typeof window === 'undefined') {
-          return reject(new Error('Window not available'));
+      if (otpState === 'retrying' || otpState === 'sending' || otpState === 'verifying') {
+        return { success: false, error: 'Operation already in progress' };
+      }
+
+      const formatted12 = formatIndianMobile(clean10);
+
+      setOtpState('retrying');
+      setErrorMessage('');
+      setInfoMessage('');
+
+      return new Promise((resolve) => {
+        if (typeof window === 'undefined' || !isConfigured) {
+          setOtpState('error');
+          setErrorMessage('OTP service not configured');
+          return resolve({ success: false, error: 'Not configured' });
         }
 
         let isSettled = false;
@@ -254,172 +292,183 @@ export function useMsg91Otp() {
         const handleSuccess = (response) => {
           if (isSettled) return;
           isSettled = true;
-          resolve({ success: true, message: 'OTP resent successfully', raw: response });
+          setOtpState('otpSent');
+          setInfoMessage('OTP code resent successfully!');
+          resolve({ success: true, raw: response });
         };
 
         const handleFailure = (error) => {
           if (isSettled) return;
-          const msg =
-            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
-            (typeof error === 'string' ? error : 'MSG91 SDK Notice');
-
-          console.warn('[MSG91 Hook] Intercepted MSG91 SDK retry error, activating seamless fallback:', error || msg);
           isSettled = true;
-          handleSuccess({ message: 'OTP resent (Fallback Mode)' });
+
+          const rawMsg =
+            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
+            (typeof error === 'string' ? error : null);
+
+          const userFriendlyMsg = rawMsg
+            ? `Resend OTP failed: ${rawMsg}`
+            : 'Unable to resend OTP. Please try again.';
+
+          setOtpState('error');
+          setErrorMessage(userFriendlyMsg);
+          resolve({ success: false, error: userFriendlyMsg });
         };
 
         activeSuccessRef.current = handleSuccess;
         activeFailureRef.current = handleFailure;
 
-        if (isConfigured) {
-          if (window.retryOtp) {
-            try {
-              window.retryOtp(null, handleSuccess, handleFailure, lastReqIdRef.current);
-              setTimeout(() => {
-                if (!isSettled) handleSuccess({ message: 'OTP resent' });
-              }, 2000);
-              return;
-            } catch (e) {
-              console.warn('[MSG91 window.retryOtp error]:', e);
-            }
-          }
-
-          if (window.sendOtp) {
-            try {
-              window.sendOtp(formattedPhone, handleSuccess, handleFailure);
-              setTimeout(() => {
-                if (!isSettled) handleSuccess({ message: 'OTP resent' });
-              }, 2000);
-              return;
-            } catch (e) {
-              console.warn('[MSG91 sendOtp resend fallback error]:', e);
-            }
+        if (window.retryOtp) {
+          try {
+            console.log('[MSG91 Hook] Invoking window.retryOtp');
+            window.retryOtp(null, handleSuccess, handleFailure, lastReqIdRef.current);
+            return;
+          } catch (e) {
+            console.warn('[MSG91 window.retryOtp error, fallback to sendOtp]:', e);
           }
         }
 
-        // Development fallback
-        setTimeout(() => {
-          handleSuccess({ message: 'OTP resent (Dev Stub Mode)' });
-        }, 600);
+        if (window.sendOtp) {
+          try {
+            window.sendOtp(formatted12, handleSuccess, handleFailure);
+            return;
+          } catch (e) {
+            handleFailure(e);
+            return;
+          }
+        }
+
+        handleFailure('SDK retry method not available');
       });
     },
-    [isConfigured]
+    [isConfigured, otpState]
   );
 
   /**
-   * Verify OTP via MSG91 ExposeMethods
+   * Verify OTP code via MSG91 widget & send accessToken to Next.js backend
    */
   const verifyOtp = useCallback(
     async (otp) => {
       const cleanOtp = String(otp || '').trim();
+      if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+        const err = 'Please enter a valid 6-digit OTP code';
+        setErrorMessage(err);
+        setOtpState('error');
+        return { success: false, error: err };
+      }
 
-      return new Promise((resolve, reject) => {
-        if (typeof window === 'undefined') {
-          return reject(new Error('Window not available'));
+      if (otpState === 'verifying') {
+        return { success: false, error: 'Verification already in progress' };
+      }
+
+      setOtpState('verifying');
+      setErrorMessage('');
+      setInfoMessage('');
+
+      return new Promise((resolve) => {
+        if (typeof window === 'undefined' || !isConfigured) {
+          setOtpState('error');
+          setErrorMessage('Authentication service unavailable');
+          return resolve({ success: false, error: 'Service unavailable' });
         }
 
         let isSettled = false;
 
-        const handleSuccess = (response) => {
+        const handleSuccess = async (response) => {
           if (isSettled) return;
           isSettled = true;
+
           const accessToken =
             (typeof response === 'object' && response && (response['access-token'] || response.accessToken || response.token)) ||
-            (typeof response === 'string' && response.length > 20 ? response : null) ||
-            'WIDGET_VERIFIED_' + Date.now();
+            (typeof response === 'string' && response.length > 20 ? response : null);
 
-          resolve({
-            success: true,
-            accessToken,
-            raw: response,
-          });
+          if (!accessToken) {
+            console.error('[MSG91 Verify OTP Callback] No access token received from MSG91 widget:', response);
+            setOtpState('error');
+            setErrorMessage('OTP verification failed: Provider did not return an access token');
+            return resolve({ success: false, error: 'No access token returned' });
+          }
+
+          // Send MSG91 Access Token to Next.js Backend for Server Verification
+          try {
+            console.log('[MSG91 Hook] Sending access token to server /api/auth/msg91/verify');
+            const backendRes = await fetch('/api/auth/msg91/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ accessToken }),
+            });
+
+            const backendData = await backendRes.json();
+
+            if (!backendRes.ok || !backendData.success) {
+              const serverErr = backendData.error || 'Server token verification failed';
+              setOtpState('error');
+              setErrorMessage(serverErr);
+              return resolve({ success: false, error: serverErr });
+            }
+
+            setOtpState('verified');
+            setInfoMessage('Mobile number verified successfully!');
+            return resolve({ success: true, user: backendData.user });
+          } catch (serverException) {
+            console.error('[MSG91 Backend Request Error]:', serverException);
+            const err = 'Network error verifying token with backend server';
+            setOtpState('error');
+            setErrorMessage(err);
+            return resolve({ success: false, error: err });
+          }
         };
 
         const handleFailure = (error) => {
           if (isSettled) return;
-          const msg =
-            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
-            (typeof error === 'string' ? error : 'MSG91 SDK Notice');
-
-          console.warn('[MSG91 Hook] verifyOtp failure callback — using fallback token. Reason:', msg || error);
-          // Always resolve (not reject) — the backend will do its own session creation
           isSettled = true;
-          resolve({
-            success: true,
-            accessToken: 'WIDGET_VERIFIED_' + Date.now(),
-            raw: { message: 'Verified via fallback', reason: msg },
-          });
+
+          const rawMsg =
+            (typeof error === 'object' && error && (error.message || error.description || error.err || error.error)) ||
+            (typeof error === 'string' ? error : null);
+
+          const userFriendlyMsg = rawMsg
+            ? `OTP Verification Failed: ${rawMsg}`
+            : 'OTP verification failed. Please check the code and try again.';
+
+          console.warn('[MSG91 Verify OTP Widget Failure]:', error);
+          setOtpState('error');
+          setErrorMessage(userFriendlyMsg);
+          resolve({ success: false, error: userFriendlyMsg });
         };
 
         activeSuccessRef.current = handleSuccess;
         activeFailureRef.current = handleFailure;
 
-        if (isConfigured && (window.verifyOtp || window.initSendOTP)) {
-          // 500ms timeout: if MSG91 callbacks don't fire (hCaptcha/domain block), resolve via fallback
-          const timeoutId = setTimeout(() => {
-            if (!isSettled) {
-              console.log('[MSG91 Hook] verifyOtp timeout — resolving via fallback token');
-              handleSuccess({
-                'access-token': 'WIDGET_VERIFIED_' + Date.now(),
-                message: 'Verified via fast fallback',
-              });
-            }
-          }, 500);
-
-          if (window.verifyOtp) {
-            try {
-              console.log('[MSG91 Hook] Invoking window.verifyOtp for OTP code:', cleanOtp);
-              window.verifyOtp(
-                cleanOtp,
-                (res) => {
-                  clearTimeout(timeoutId);
-                  handleSuccess(res);
-                },
-                (err) => {
-                  clearTimeout(timeoutId);
-                  handleFailure(err);
-                },
-                lastReqIdRef.current
-              );
-              return;
-            } catch (e) {
-              console.warn('[MSG91 window.verifyOtp exception — falling back immediately]:', e);
-              clearTimeout(timeoutId);
-              // Resolve immediately instead of waiting for any delayed callback
-              if (!isSettled) {
-                isSettled = true;
-                resolve({
-                  success: true,
-                  accessToken: 'WIDGET_VERIFIED_' + Date.now(),
-                  raw: { message: 'Verified via exception fallback' },
-                });
-              }
-              return;
-            }
+        if (window.verifyOtp) {
+          try {
+            console.log('[MSG91 Hook] Invoking window.verifyOtp');
+            window.verifyOtp(cleanOtp, handleSuccess, handleFailure, lastReqIdRef.current);
+            return;
+          } catch (e) {
+            console.error('[MSG91 window.verifyOtp exception]:', e);
+            handleFailure(e);
+            return;
           }
-          // window.initSendOTP exists but verifyOtp doesn't — 500ms timeout covers this
-          return;
         }
 
-        // Dev stub: not configured, resolve immediately
-        console.log(`[MSG91 DEV STUB] Verifying OTP code: ${cleanOtp}`);
-        setTimeout(() => {
-          handleSuccess({
-            'access-token': 'WIDGET_VERIFIED_' + Date.now(),
-            message: 'OTP verified (Dev Stub Mode)',
-          });
-        }, 300);
+        const noMethodErr = 'MSG91 OTP verification method not attached yet. Please wait for SDK to load.';
+        setOtpState('error');
+        setErrorMessage(noMethodErr);
+        resolve({ success: false, error: noMethodErr });
       });
     },
-    [isConfigured]
+    [isConfigured, otpState]
   );
 
   return {
+    otpState,
+    errorMessage,
+    infoMessage,
     isScriptLoaded,
     isConfigured,
+    resetState,
     sendOtp,
     retryOtp,
     verifyOtp,
   };
 }
-

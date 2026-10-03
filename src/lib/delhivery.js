@@ -6,10 +6,7 @@ const PICKUP_LOCATION = (process.env.DELHIVERY_PICKUP_LOCATION_NAME || 'Primary 
   .replace(/^"|"$/g, '')
   .trim();
 
-/**
- * Resolve active Delhivery environment config (staging vs production)
- * @param {boolean} forceStaging - If true, forces staging URL and staging token regardless of process.env.DELHIVERY_ENV
- */
+
 export function getDelhiveryConfig(forceStaging = false) {
   const envConfigured = (process.env.DELHIVERY_ENV || 'staging').toLowerCase();
   const isProduction = !forceStaging && envConfigured === 'production';

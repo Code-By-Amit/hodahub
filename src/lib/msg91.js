@@ -1,13 +1,13 @@
 /**
- * MSG91 OTP Widget Integration Helper
+ * MSG91 OTP Widget Integration Helper (Production Ready)
  * Integration Type: Web SDK → Custom UI → ExposeMethods
- * Widget ID: 366977645959313131313239
+ * Official API: https://control.msg91.com/api/v5/widget/verifyAccessToken
  */
 
 /**
  * Format Indian mobile number to 12-digit string starting with 91 (e.g. 919876543210)
- * @param {string} phone
- * @returns {string} Cleaned 12-digit mobile number
+ * @param {string|number} phone
+ * @returns {string} 12-digit mobile number with 91 prefix
  */
 export function formatIndianMobile(phone) {
   if (!phone) return '';
@@ -18,6 +18,9 @@ export function formatIndianMobile(phone) {
   if (digits.length === 12 && digits.startsWith('91')) {
     return digits;
   }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `91${digits.slice(1)}`;
+  }
   if (digits.length > 10) {
     return `91${digits.slice(-10)}`;
   }
@@ -25,18 +28,31 @@ export function formatIndianMobile(phone) {
 }
 
 /**
- * Get MSG91 Widget configuration for backend API route
- * Returns widgetId and tokenAuth securely to server endpoints
+ * Extract clean 10-digit Indian mobile number
+ * @param {string|number} phone
+ * @returns {string} 10-digit mobile number string (e.g. "9876543210")
+ */
+export function extract10DigitMobile(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.slice(-10);
+}
+
+/**
+ * Get MSG91 Widget client-safe configuration.
+ * Exposes ONLY Widget ID and Widget Token Auth (Client-safe tokens).
+ * NEVER returns MSG91_AUTH_KEY.
+ * @returns {{ widgetId: string, tokenAuth: string, isConfigured: boolean }}
  */
 export function getMSG91WidgetConfig() {
-  const widgetId = (process.env.MSG91_WIDGET_ID || '366977645959313131313239').trim();
-  const tokenAuth = (process.env.MSG91_WIDGET_TOKEN_AUTH || process.env.MSG91_AUTH_KEY || '').trim();
+  const widgetId = (process.env.NEXT_PUBLIC_MSG91_WIDGET_ID || '').trim();
+  const tokenAuth = (process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH || '').trim();
 
   const isConfigured = Boolean(
     widgetId &&
     tokenAuth &&
-    tokenAuth !== 'your_msg91_auth_key_here' &&
-    tokenAuth !== 'your_msg91_widget_token_auth_here'
+    tokenAuth !== 'your_msg91_widget_token_auth_here' &&
+    tokenAuth !== 'your_msg91_auth_key_here'
   );
 
   return {
@@ -47,114 +63,121 @@ export function getMSG91WidgetConfig() {
 }
 
 /**
- * Verify MSG91 Widget access token server-side
- * @param {string} accessToken - Access token received from MSG91 verifyOtp callback
- * @param {string} phone - Normalized 12-digit phone number (91XXXXXXXXXX)
- * @returns {Promise<{ success: boolean, mobile?: string, message?: string, isDevStub?: boolean }>}
+ * Verify MSG91 Widget access token server-side via MSG91 official endpoint.
+ *
+ * CRITICAL SECURITY REQUIREMENT:
+ * This function accepts ONLY the MSG91 access token obtained from the widget.
+ * It DOES NOT accept a client-asserted phone number or return mock success stubs.
+ * The verified identity is extracted EXCLUSIVELY from MSG91's trusted HTTP response.
+ *
+ * @param {string} accessToken - JWT access token returned by MSG91 verifyOtp callback
+ * @returns {Promise<{ success: boolean, mobile?: string, error?: string, raw?: unknown }>}
  */
-export async function verifyMSG91AccessToken(accessToken, phone) {
-  const formattedPhone = formatIndianMobile(phone);
-  const authKey = (process.env.MSG91_AUTH_KEY || process.env.MSG91_WIDGET_TOKEN_AUTH || '').trim();
-
-  const isConfigured = Boolean(
-    authKey &&
-    authKey !== 'your_msg91_auth_key_here' &&
-    authKey !== 'your_msg91_widget_token_auth_here'
-  );
-
-  // Development Fallback / Stub Mode / Client Widget verified tokens
-  if (
-    !isConfigured ||
-    !accessToken ||
-    accessToken.startsWith('DEV_STUB_TOKEN_') ||
-    accessToken.startsWith('WIDGET_VERIFIED_') ||
-    accessToken === 'DEMO_MSG91_TOKEN' ||
-    accessToken === 'CLIENT_VERIFIED'
-  ) {
-    console.log(
-      `[MSG91 WIDGET VERIFIED] Mobile: +${formattedPhone} | Token: ${accessToken}`
-    );
+export async function verifyMSG91AccessToken(accessToken) {
+  if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
     return {
-      success: true,
-      mobile: formattedPhone,
-      isDevStub: true,
-      message: 'Verified via MSG91 OTP Widget',
+      success: false,
+      error: 'Access token is required for verification',
     };
   }
 
-  // Check if accessToken is a real token format (length > 20, no spaces)
-  const isRealTokenFormat = typeof accessToken === 'string' && accessToken.length > 20 && !accessToken.includes(' ');
-  if (!isRealTokenFormat) {
-    console.log(`[MSG91 Token Verification] Client verified OTP via Widget SDK (token: "${accessToken}").`);
+  const cleanToken = accessToken.trim();
+  const authKey = (process.env.MSG91_AUTH_KEY || '').trim();
+
+  if (!authKey || authKey === 'your_msg91_auth_key_here') {
+    console.error('[MSG91 Server Verification] MSG91_AUTH_KEY is not configured on server');
     return {
-      success: true,
-      mobile: formattedPhone,
-      isDevStub: false,
-      message: 'Verified client-side via MSG91 widget SDK',
+      success: false,
+      error: 'Server authentication configuration missing',
     };
   }
 
   try {
-    const primaryUrl = 'https://control.msg91.com/api/v5/widget/verifyAccessToken';
-    const fallbackUrl = 'https://api.msg91.com/api/v5/widget/verifyAccessToken';
+    const verifyUrl = 'https://control.msg91.com/api/v5/widget/verifyAccessToken';
 
-    const payload = {
-      authkey: authKey,
-      'access-token': accessToken,
-    };
-
-    let response = await fetch(primaryUrl, {
+    const response = await fetch(verifyUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8000),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        authkey: authKey,
+        'access-token': cleanToken,
+      }),
+      signal: AbortSignal.timeout(10000),
     });
 
-    if (!response.ok && response.status === 404) {
-      response = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(8000),
-      });
-    }
-
-    const text = await response.text();
+    const responseText = await response.text();
     let data = {};
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(responseText);
     } catch {
-      data = { rawText: text };
+      data = { rawText: responseText };
     }
 
-    if (response.ok && (data.type === 'success' || data.status === 'success' || data.message === 'Token verified successfully' || data.mobile)) {
-      const verifiedMobile = formatIndianMobile(data.mobile || data.identifier || formattedPhone);
-      console.log(`[MSG91 Token Verified] Mobile: +${verifiedMobile}`);
+    if (!response.ok) {
+      const statusMsg = data?.message || data?.error || `MSG91 API error (HTTP ${response.status})`;
+      console.warn(`[MSG91 Server Verification Failure] HTTP ${response.status}:`, statusMsg);
       return {
-        success: true,
-        mobile: verifiedMobile,
-        isDevStub: false,
-        data,
+        success: false,
+        error: typeof statusMsg === 'string' ? statusMsg : 'MSG91 verification failed',
+        raw: data,
       };
     }
 
-    console.warn(`[MSG91 Token Verification Warning] HTTP ${response.status}:`, data);
+    // MSG91 success criteria check
+    const isSuccess =
+      data.type === 'success' ||
+      data.status === 'success' ||
+      data.message === 'Token verified successfully' ||
+      Boolean(data.mobile) ||
+      Boolean(data.identifier);
 
-    // Universal Fallback: If MSG91 SDK already verified OTP or server returned token error / notice (e.g. 708, 701, domain restriction)
-    console.log(`[MSG91 FALLBACK VERIFY ON WIDGET OTP SUCCESS] Mobile: +${formattedPhone}`);
+    if (!isSuccess) {
+      console.warn('[MSG91 Server Verification] Invalid or rejected access token:', data);
+      return {
+        success: false,
+        error: data.message || data.error || 'Invalid or expired OTP access token',
+        raw: data,
+      };
+    }
+
+    // Extract verified mobile or identifier strictly from trusted MSG91 response
+    const rawIdentifier = String(data.mobile || data.identifier || '').trim();
+    if (!rawIdentifier) {
+      console.error('[MSG91 Server Verification] Response confirmed success but contained no identity field:', data);
+      return {
+        success: false,
+        error: 'Unable to extract verified identity from MSG91 response',
+        raw: data,
+      };
+    }
+
+    const verified10Digit = extract10DigitMobile(rawIdentifier);
+    if (!verified10Digit || verified10Digit.length !== 10) {
+      console.error('[MSG91 Server Verification] Extracted mobile number format invalid:', rawIdentifier);
+      return {
+        success: false,
+        error: 'Invalid mobile number format received from provider',
+        raw: data,
+      };
+    }
+
+    console.log(`[MSG91 Server Verification Success] Verified mobile ending in ...${verified10Digit.slice(-4)}`);
+
     return {
       success: true,
-      mobile: formattedPhone,
-      isDevStub: true,
-      message: 'Verified via MSG91 Widget OTP fallback',
+      mobile: verified10Digit, // clean 10-digit string e.g. "9876543210"
+      formattedMobile: formatIndianMobile(verified10Digit), // 12-digit string e.g. "919876543210"
+      raw: data,
     };
-  } catch (error) {
-    console.error('[MSG91 Verify Error]:', error);
+  } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error('[MSG91 Server Verification Exception]:', errMessage);
     return {
-      success: true,
-      mobile: formattedPhone,
-      isDevStub: true,
-      message: 'Verified via development fallback on error',
+      success: false,
+      error: 'Failed to connect to authentication verification provider',
     };
   }
 }

@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setUser } from '@/lib/store/authSlice';
 import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
-import { AlertCircle, ArrowRight, Lock, Mail, Eye, EyeOff, Smartphone, ShieldCheck, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowRight, Lock, Mail, Smartphone, ShieldCheck, RefreshCw } from 'lucide-react';
 import FieldError from '@/components/ui/FieldError';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PasswordInput from '@/components/ui/PasswordInput';
@@ -23,7 +23,15 @@ function LoginContent() {
   const redirect = searchParams.get('redirect') || '';
 
   // MSG91 OTP Widget Hook
-  const { sendOtp: msg91SendOtp, retryOtp: msg91RetryOtp, verifyOtp: msg91VerifyOtp } = useMsg91Otp();
+  const {
+    otpState,
+    errorMessage: msg91ErrorMessage,
+    infoMessage: msg91InfoMessage,
+    sendOtp: msg91SendOtp,
+    retryOtp: msg91RetryOtp,
+    verifyOtp: msg91VerifyOtp,
+    resetState: resetMsg91State,
+  } = useMsg91Otp({ captchaRenderId: 'msg91-captcha-login' });
 
   // Auth Tab: 'mobile' | 'email'
   const [authTab, setAuthTab] = useState('mobile');
@@ -31,12 +39,7 @@ function LoginContent() {
   // Mobile + OTP States
   const [mobilePhone, setMobilePhone] = useState('');
   const [mobileOtp, setMobileOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [resendingOtp, setResendingOtp] = useState(false);
-  const [otpError, setOtpError] = useState('');
-  const [otpMessage, setOtpMessage] = useState('');
+  const [localError, setLocalError] = useState('');
 
   // Resend Cooldown Countdown
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -51,127 +54,72 @@ function LoginContent() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  // Email + Password States
+  // Email + Password Form
   const { values: emailForm, errors: emailErrors, handleChange: handleEmailChange, validate: validateEmail, setServerErrors: setEmailServerErrors } = useZodForm(
     { email: '', password: '' },
     loginSchema
   );
-  const [showPassword, setShowPassword] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
 
-  // Handle Mobile Send OTP (MSG91 OTP Widget)
+  const isSendingOtp = otpState === 'sending';
+  const isVerifyingOtp = otpState === 'verifying';
+  const isResendingOtp = otpState === 'retrying';
+  const isOtpSent = otpState === 'otpSent' || isVerifyingOtp || otpState === 'verified';
+  const displayError = localError || msg91ErrorMessage;
+  const displaySuccess = msg91InfoMessage;
+
+  // Handle Mobile Send OTP
   async function handleSendOtp(e) {
     if (e) e.preventDefault();
-    setOtpError('');
-    setOtpMessage('');
+    setLocalError('');
 
     const clean10 = mobilePhone.replace(/\D/g, '').slice(-10);
     if (clean10.length !== 10 || !/^[6-9]\d{9}$/.test(clean10)) {
-      setOtpError('Please enter a valid 10-digit Indian mobile number');
+      setLocalError('Please enter a valid 10-digit Indian mobile number');
       return;
     }
 
-    setSendingOtp(true);
-    try {
-      const result = await msg91SendOtp(clean10);
-      if (result.success) {
-        setOtpSent(true);
-        setResendCooldown(45);
-        setOtpMessage('OTP code sent successfully to your mobile number');
-      } else {
-        setOtpError(result.message || 'Failed to send OTP');
-      }
-    } catch (error) {
-      setOtpError(error.message || 'Failed to send OTP. Please try again.');
-    } finally {
-      setSendingOtp(false);
+    const result = await msg91SendOtp(clean10);
+    if (result.success) {
+      setResendCooldown(45);
     }
   }
 
-  // Handle Resend OTP (MSG91 OTP Widget)
+  // Handle Resend OTP
   async function handleResendOtp() {
-    if (resendCooldown > 0 || resendingOtp) return;
-    setOtpError('');
-    setOtpMessage('');
+    if (resendCooldown > 0 || isResendingOtp) return;
+    setLocalError('');
 
     const clean10 = mobilePhone.replace(/\D/g, '').slice(-10);
-    setResendingOtp(true);
-    try {
-      const result = await msg91RetryOtp(clean10);
-      if (result.success) {
-        setResendCooldown(45);
-        setOtpMessage('OTP resent successfully!');
-      } else {
-        setOtpError(result.message || 'Failed to resend OTP');
-      }
-    } catch (error) {
-      setOtpError(error.message || 'Failed to resend OTP. Please try again.');
-    } finally {
-      setResendingOtp(false);
+    const result = await msg91RetryOtp(clean10);
+    if (result.success) {
+      setResendCooldown(45);
     }
   }
 
-  // Handle Mobile Verify OTP (MSG91 OTP Widget + Backend verification)
+  // Handle Mobile Verify OTP
   async function handleVerifyOtp(e) {
     if (e) e.preventDefault();
-    setOtpError('');
+    setLocalError('');
 
     if (!mobileOtp || mobileOtp.trim().length !== 6) {
-      setOtpError('Please enter a valid 6-digit OTP code');
+      setLocalError('Please enter a valid 6-digit OTP code');
       return;
     }
 
-    const clean10 = mobilePhone.replace(/\D/g, '').slice(-10);
-    setVerifyingOtp(true);
+    const result = await msg91VerifyOtp(mobileOtp.trim());
 
-    try {
-      // 1. Verify via MSG91 OTP Widget with 12-second timeout safeguard
-      //    (prevents infinite spinner if MSG91 SDK hangs without calling callbacks)
-      const verifyTimeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('OTP verification timed out. Please try again.')), 12000)
-      );
-      const msg91Result = await Promise.race([
-        msg91VerifyOtp(mobileOtp.trim()),
-        verifyTimeoutPromise,
-      ]);
-
-      // 2. Send token to backend to verify server-side & issue session cookies
-      const res = await fetch('/api/auth/phone/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: clean10,
-          accessToken: msg91Result.accessToken,
-          otp: mobileOtp.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        // setVerifyingOtp(false) is handled by the finally block below
-        setOtpError(data.error || 'Failed to verify OTP. Please try again.');
-        return;
-      }
-
-      dispatch(setUser(data.user));
+    if (result.success && result.user) {
+      dispatch(setUser(result.user));
       try {
         await syncWishlistOnAuth(dispatch, guestWishlistItems);
       } catch (syncErr) {
         console.warn('[Login OTP] Wishlist sync warning:', syncErr);
       }
 
-      // finally block will call setVerifyingOtp(false) before navigation
-      const targetUrl = data.user?.role === 'admin' ? '/admin' : (redirect || '/');
+      const targetUrl = result.user.role === 'admin' ? '/admin' : (redirect || '/');
       window.location.href = targetUrl;
-    } catch (error) {
-      console.error('[Login OTP Verification Exception]:', error);
-      setOtpError(error.message || 'Network error. Please try again.');
-    } finally {
-      // This is the single authoritative place to stop the spinner.
-      // Runs whether try succeeds, throws, or an early return happens.
-      setVerifyingOtp(false);
     }
   }
 
@@ -239,6 +187,9 @@ function LoginContent() {
 
   return (
     <div className="w-full max-w-sm mx-auto">
+      {/* MSG91 Captcha Container element */}
+      <div id="msg91-captcha-login" className="hidden" />
+
       <div className="bg-white border border-warm-200 border-t-2 border-t-brand-500 rounded-md shadow-sm p-5 sm:p-6">
         {/* Header */}
         <h1 className="text-lg font-bold text-warm-900 tracking-tight">Welcome back</h1>
@@ -275,34 +226,34 @@ function LoginContent() {
         {/* TAB 1: MOBILE + OTP */}
         {authTab === 'mobile' && (
           <div className="space-y-3">
-            {otpError && (
+            {displayError && (
               <div className="p-2.5 bg-red-50 border border-red-200 rounded-md text-red-700 text-[11px] flex items-start gap-2">
                 <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-                <span>{otpError}</span>
+                <span>{displayError}</span>
               </div>
             )}
 
-            {otpMessage && (
+            {displaySuccess && !displayError && (
               <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-emerald-800 text-[11px] flex items-start gap-2">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>{otpMessage}</span>
+                <span>{displaySuccess}</span>
               </div>
             )}
 
-            {!otpSent ? (
+            {!isOtpSent ? (
               <form onSubmit={handleSendOtp} className="space-y-3">
                 <PhoneInput
                   label="Mobile Phone Number"
                   value={mobilePhone}
                   onChange={(val) => setMobilePhone(val)}
-                  error={otpError}
+                  error={displayError}
                 />
                 <button
                   type="submit"
-                  disabled={sendingOtp}
+                  disabled={isSendingOtp}
                   className="w-full py-2 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                 >
-                  {sendingOtp ? (
+                  {isSendingOtp ? (
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
@@ -322,9 +273,9 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={() => {
-                        setOtpSent(false);
-                        setOtpError('');
-                        setOtpMessage('');
+                        resetMsg91State();
+                        setLocalError('');
+                        setMobileOtp('');
                       }}
                       className="text-[10px] text-brand-600 hover:underline"
                     >
@@ -350,10 +301,10 @@ function LoginContent() {
                     <button
                       type="button"
                       onClick={handleResendOtp}
-                      disabled={resendingOtp}
+                      disabled={isResendingOtp}
                       className="text-brand-600 hover:underline font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     >
-                      {resendingOtp ? (
+                      {isResendingOtp ? (
                         <div className="w-3 h-3 border-2 border-brand-600/30 border-t-brand-600 rounded-full animate-spin" />
                       ) : (
                         <RefreshCw className="w-3 h-3" />
@@ -365,10 +316,10 @@ function LoginContent() {
 
                 <button
                   type="submit"
-                  disabled={verifyingOtp}
+                  disabled={isVerifyingOtp}
                   className="w-full py-2 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                 >
-                  {verifyingOtp ? (
+                  {isVerifyingOtp ? (
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
