@@ -33,7 +33,6 @@ export const metadata = {
     title: "HodaHub — Official Online Store",
     description: "Shop quality products delivered directly to your doorstep.",
   },
-  f
 };
 
 export default function RootLayout({ children }) {
