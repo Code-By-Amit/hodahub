@@ -19,8 +19,8 @@ export const metadata = {
     "Discover trending products curated for modern lifestyles. Free shipping on orders over $50. Shop fashion, electronics, beauty, fitness & more.",
   keywords: ["ecommerce", "online shopping", "trending products", "HodaHub"],
   icons: {
-    icon: "/logof.png",
-    apple: "/logof.png",
+    icon: "/favicon.ico",
+    apple: "/favicon.ico",
   },
   openGraph: {
     title: "HodaHub — Official Online Store",
@@ -33,6 +33,7 @@ export const metadata = {
     title: "HodaHub — Official Online Store",
     description: "Shop quality products delivered directly to your doorstep.",
   },
+  f
 };
 
 export default function RootLayout({ children }) {
