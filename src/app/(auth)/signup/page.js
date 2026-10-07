@@ -32,7 +32,7 @@ function SignupContent() {
     retryOtp: msg91RetryOtp,
     verifyOtp: msg91VerifyOtp,
     resetState: resetMsg91State,
-  } = useMsg91Otp({ captchaRenderId: 'msg91-captcha-signup' });
+  } = useMsg91Otp();
 
   // Auth Tab: 'mobile' | 'email'
   const [authTab, setAuthTab] = useState('mobile');
@@ -189,9 +189,6 @@ function SignupContent() {
 
   return (
     <div className="w-full max-w-sm mx-auto">
-      {/* MSG91 hCaptcha renders internally — this div is the required anchor */}
-      <div id="msg91-captcha-signup" style={{ display: 'none' }} />
-
       <div className="bg-white border border-warm-200 border-t-2 border-t-brand-500 rounded-md shadow-sm p-5 sm:p-6">
         {/* Header */}
         <h1 className="text-lg font-bold text-warm-900 tracking-tight">Create account</h1>

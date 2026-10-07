@@ -8,15 +8,16 @@ const MSG91_SCRIPT_URL = 'https://verify.msg91.com/otp-provider.js';
 /**
  * MSG91 OTP Widget Hook
  *
- * Architecture (per official MSG91 docs):
+ * Architecture (per official MSG91 SDK internals & docs):
  *  1. Load otp-provider.js script ONCE.
- *  2. Call initSendOTP() ONCE (in script onload). This renders hCaptcha internally.
- *     Re-calling initSendOTP causes "hCaptcha already rendered" and breaks window.sendOtp.
+ *  2. Call initSendOTP() ONCE. When exposeMethods: true is set, captchaRenderId
+ *     MUST NOT be passed so MSG91 SDK can perform headless captcha verification
+ *     automatically inside requestOTP.
  *  3. After initSendOTP resolves, window.sendOtp / window.verifyOtp / window.retryOtp
  *     are available on window.
  *  4. Use window.sendOtp(identifier, successCb, failureCb) to trigger OTP.
  *  5. Use window.retryOtp(channelValue, successCb, failureCb) to resend:
- *       - '11' = SMS, '12' = WhatsApp, '4' = Voice
+ *       - '12' = WhatsApp, '11' = SMS, '4' = Voice
  *  6. Use window.verifyOtp(otp, successCb, failureCb, reqId) to verify.
  *
  * OTP State Machine:
@@ -27,7 +28,7 @@ const MSG91_SCRIPT_URL = 'https://verify.msg91.com/otp-provider.js';
 let _scriptAppended = false;
 let _widgetInitialized = false;
 
-export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
+export function useMsg91Otp() {
   const [otpState, setOtpState] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
@@ -48,9 +49,10 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
   /**
    * STEP 1 & 2: Load script and call initSendOTP exactly once.
    *
-   * The key insight from MSG91 docs: initSendOTP should be called ONCE via
-   * the script's onload. Never call it again — it will attempt to re-render
-   * hCaptcha and throw "hCaptcha already rendered", breaking window.sendOtp.
+   * CRITICAL: When exposeMethods: true is enabled, captchaRenderId MUST NOT be passed.
+   * Passing captchaRenderId causes MSG91's requestOTP internal method to check for
+   * an explicit captcha token that is never generated in custom UI mode, causing
+   * window.sendOtp to hang silently with no network call.
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -80,7 +82,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
           widgetId,
           tokenAuth,
           exposeMethods: true,        // Exposes window.sendOtp, window.verifyOtp, window.retryOtp
-          captchaRenderId,            // DOM element id for hCaptcha container
+          // Note: captchaRenderId intentionally omitted so headless captcha runs inside MSG91 SDK
           success: (data) => {
             console.log('[MSG91 widget success callback]', data);
             if (successCallbackRef.current) successCallbackRef.current(data);
@@ -101,7 +103,6 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
             console.log('[MSG91] window.sendOtp is now available. SDK ready.');
             setSdkReady(true);
           } else if (attempts >= 30) {
-            // 3 seconds max wait — if still not there, something is wrong
             clearInterval(poll);
             console.error('[MSG91] window.sendOtp not exposed after 3s. Check widgetId and tokenAuth in MSG91 dashboard.');
           }
@@ -113,14 +114,12 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
     };
 
     if (_scriptAppended) {
-      // Script tag already in DOM — check if already loaded
       if (window.initSendOTP) {
         doInit();
       }
       return;
     }
 
-    // Check if script already exists in DOM (e.g. added by another instance)
     const existing = document.querySelector(`script[src="${MSG91_SCRIPT_URL}"]`);
     if (existing) {
       _scriptAppended = true;
@@ -132,7 +131,6 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
       return;
     }
 
-    // Inject the script tag once
     _scriptAppended = true;
     const script = document.createElement('script');
     script.src = MSG91_SCRIPT_URL;
@@ -145,8 +143,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
     }, { once: true });
     document.head.appendChild(script);
     console.log('[MSG91] otp-provider.js script tag appended to <head>.');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfigured, widgetId, tokenAuth, captchaRenderId]);
+  }, [isConfigured, widgetId, tokenAuth]);
 
   const resetState = useCallback(() => {
     setOtpState('idle');
@@ -188,7 +185,6 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
     console.log(`[MSG91] sendOtp → window.sendOtp('${formatted12}')`);
 
     return new Promise((resolve) => {
-      // Guard: SDK must be ready
       if (!window.sendOtp) {
         const errMsg = sdkReady
           ? 'MSG91 widget method lost. Please refresh and try again.'
@@ -201,15 +197,28 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
 
       let settled = false;
 
+      // 15-second safety timeout so UI never hangs indefinitely in infinite spinner
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        successCallbackRef.current = null;
+        failureCallbackRef.current = null;
+        const errMsg = 'OTP request timed out. Please check your network connection and try again.';
+        console.error('[MSG91] sendOtp timed out after 15s.');
+        setOtpState('error');
+        setErrorMessage(errMsg);
+        resolve({ success: false, error: errMsg });
+      }, 15000);
+
       const onSuccess = (response) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
 
         console.log('[MSG91] sendOtp success response:', JSON.stringify(response));
 
-        // Extract reqId — MSG91 returns it in the success response for use in verifyOtp
         const reqId = response?.reqId || response?.requestId || null;
         if (reqId) {
           lastReqIdRef.current = reqId;
@@ -224,6 +233,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
       const onFailure = (error) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
 
@@ -242,7 +252,6 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
       failureCallbackRef.current = onFailure;
 
       try {
-        // Per MSG91 docs: window.sendOtp(identifier, successCallback, failureCallback)
         window.sendOtp(formatted12, onSuccess, onFailure);
       } catch (e) {
         onFailure(e);
@@ -253,7 +262,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
   /**
    * Resend OTP via WhatsApp (channel '12') or SMS ('11')
    * Per MSG91 docs: window.retryOtp(channelValue, successCb, failureCb)
-   * Channel codes: '11'=SMS, '12'=WhatsApp, '4'=Voice, '3'=Email
+   * Channel codes: '12'=WhatsApp, '11'=SMS, '4'=Voice, '3'=Email
    */
   const retryOtp = useCallback(async (phone, channel = '12') => {
     const clean10 = extract10DigitMobile(phone);
@@ -290,9 +299,22 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
 
       let settled = false;
 
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        successCallbackRef.current = null;
+        failureCallbackRef.current = null;
+        const errMsg = 'OTP resend timed out. Please check your internet connection and try again.';
+        console.error('[MSG91] retryOtp timed out after 15s.');
+        setOtpState('error');
+        setErrorMessage(errMsg);
+        resolve({ success: false, error: errMsg });
+      }, 15000);
+
       const onSuccess = (response) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
         console.log('[MSG91] retryOtp success:', JSON.stringify(response));
@@ -304,6 +326,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
       const onFailure = (error) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
         const msg =
@@ -320,10 +343,8 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
 
       try {
         if (window.retryOtp) {
-          // window.retryOtp(channelValue, successCb, failureCb)
           window.retryOtp(channel, onSuccess, onFailure);
         } else {
-          // Fallback to sendOtp if retryOtp not available
           const formatted12 = formatIndianMobile(clean10);
           window.sendOtp(formatted12, onSuccess, onFailure);
         }
@@ -375,15 +396,27 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
 
       let settled = false;
 
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        successCallbackRef.current = null;
+        failureCallbackRef.current = null;
+        const errMsg = 'OTP verification timed out. Please check your internet connection and try again.';
+        console.error('[MSG91] verifyOtp timed out after 15s.');
+        setOtpState('error');
+        setErrorMessage(errMsg);
+        resolve({ success: false, error: errMsg });
+      }, 15000);
+
       const onSuccess = async (response) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
 
         console.log('[MSG91] verifyOtp widget success:', JSON.stringify(response));
 
-        // MSG91 returns access-token on successful OTP verification
         const accessToken =
           response?.['access-token'] || response?.accessToken ||
           response?.token || response?.jwt ||
@@ -431,6 +464,7 @@ export function useMsg91Otp({ captchaRenderId = 'msg91-captcha' } = {}) {
       const onFailure = (error) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeoutId);
         successCallbackRef.current = null;
         failureCallbackRef.current = null;
 
