@@ -111,7 +111,8 @@ function LoginContent() {
       return;
     }
 
-    const result = await msg91VerifyOtp(mobileOtp.trim());
+    const clean10 = mobilePhone.replace(/\D/g, '').slice(-10);
+    const result = await msg91VerifyOtp(mobileOtp.trim(), clean10);
 
     if (result.success && result.user) {
       dispatch(setUser(result.user));

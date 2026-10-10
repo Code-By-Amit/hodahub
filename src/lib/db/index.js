@@ -74,6 +74,16 @@ function createPool() {
     poolInstance
       .query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand text;`)
       .catch(() => {});
+    poolInstance
+      .query(`
+        CREATE TABLE IF NOT EXISTS msg91_used_tokens (
+          token_hash VARCHAR(64) PRIMARY KEY,
+          created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+          expires_at TIMESTAMP NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS msg91_used_tokens_expires_at_idx ON msg91_used_tokens (expires_at);
+      `)
+      .catch(() => {});
   }
 
   return poolInstance;

@@ -6,6 +6,22 @@ import { formatIndianMobile, extract10DigitMobile } from '@/lib/msg91';
 const MSG91_SCRIPT_URL = 'https://verify.msg91.com/otp-provider.js';
 
 /**
+ * Sanitize MSG91 callback data for logging: keeps all object keys visible while redacting secret tokens.
+ */
+function sanitizeWidgetData(data) {
+  if (!data || typeof data !== 'object') return data;
+  const out = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (k === 'message' || k === 'token' || k === 'access-token' || k === 'accessToken' || k === 'jwt') {
+      out[k] = typeof v === 'string' ? `[REDACTED token string len=${v.length}]` : '[REDACTED]';
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
  * MSG91 OTP Widget Hook
  *
  * Architecture (per official MSG91 SDK internals & docs):
@@ -41,18 +57,16 @@ export function useMsg91Otp() {
   // Track whether the SDK methods are ready to use
   const [sdkReady, setSdkReady] = useState(false);
   const lastReqIdRef = useRef(null);
-
-  // Shared callback refs so they can be replaced per-operation without re-initializing the widget
-  const successCallbackRef = useRef(null);
-  const failureCallbackRef = useRef(null);
+  const lastPhoneRef = useRef(null);
 
   /**
    * STEP 1 & 2: Load script and call initSendOTP exactly once.
    *
-   * CRITICAL: When exposeMethods: true is enabled, captchaRenderId MUST NOT be passed.
-   * Passing captchaRenderId causes MSG91's requestOTP internal method to check for
-   * an explicit captcha token that is never generated in custom UI mode, causing
-   * window.sendOtp to hang silently with no network call.
+   * Note on Callbacks:
+   * When exposeMethods: true is used, window.sendOtp, window.retryOtp, and window.verifyOtp
+   * take their own explicit success and failure callbacks. To avoid DUPLICATE events,
+   * the callbacks passed to initSendOTP are used solely for diagnostic logging and do not
+   * re-trigger the operation promises.
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -82,14 +96,12 @@ export function useMsg91Otp() {
           widgetId,
           tokenAuth,
           exposeMethods: true,        // Exposes window.sendOtp, window.verifyOtp, window.retryOtp
-          // Note: captchaRenderId intentionally omitted so headless captcha runs inside MSG91 SDK
+          // captchaRenderId intentionally omitted so headless captcha runs inside MSG91 SDK
           success: (data) => {
-            console.log('[MSG91 widget success callback]', data);
-            if (successCallbackRef.current) successCallbackRef.current(data);
+            console.log('[MSG91 widget global success callback]', sanitizeWidgetData(data));
           },
           failure: (err) => {
-            console.warn('[MSG91 widget failure callback]', err);
-            if (failureCallbackRef.current) failureCallbackRef.current(err);
+            console.warn('[MSG91 widget global failure callback]', err);
           },
         });
         console.log('[MSG91] initSendOTP called. Waiting for window.sendOtp to be exposed...');
@@ -150,6 +162,7 @@ export function useMsg91Otp() {
     setErrorMessage('');
     setInfoMessage('');
     lastReqIdRef.current = null;
+    lastPhoneRef.current = null;
   }, []);
 
   /**
@@ -177,6 +190,7 @@ export function useMsg91Otp() {
     }
 
     const formatted12 = formatIndianMobile(clean10); // e.g. '919876543210'
+    lastPhoneRef.current = formatted12;
 
     setOtpState('sending');
     setErrorMessage('');
@@ -201,8 +215,6 @@ export function useMsg91Otp() {
       const timeoutId = setTimeout(() => {
         if (settled) return;
         settled = true;
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
         const errMsg = 'OTP request timed out. Please check your network connection and try again.';
         console.error('[MSG91] sendOtp timed out after 15s.');
         setOtpState('error');
@@ -214,8 +226,6 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
 
         console.log('[MSG91] sendOtp success response:', JSON.stringify(response));
 
@@ -234,8 +244,6 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
 
         const msg =
           error?.message || error?.description || error?.err ||
@@ -246,10 +254,6 @@ export function useMsg91Otp() {
         setErrorMessage(`Unable to send OTP: ${msg}`);
         resolve({ success: false, error: msg });
       };
-
-      // Wire up refs so the global widget callbacks relay here
-      successCallbackRef.current = onSuccess;
-      failureCallbackRef.current = onFailure;
 
       try {
         window.sendOtp(formatted12, onSuccess, onFailure);
@@ -302,8 +306,6 @@ export function useMsg91Otp() {
       const timeoutId = setTimeout(() => {
         if (settled) return;
         settled = true;
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
         const errMsg = 'OTP resend timed out. Please check your internet connection and try again.';
         console.error('[MSG91] retryOtp timed out after 15s.');
         setOtpState('error');
@@ -315,8 +317,6 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
         console.log('[MSG91] retryOtp success:', JSON.stringify(response));
         setOtpState('otpSent');
         setInfoMessage(`OTP resent via ${channelLabel}!`);
@@ -327,8 +327,6 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
         const msg =
           error?.message || error?.description ||
           (typeof error === 'string' ? error : 'Unable to resend OTP. Please try again.');
@@ -337,9 +335,6 @@ export function useMsg91Otp() {
         setErrorMessage(`Resend failed: ${msg}`);
         resolve({ success: false, error: msg });
       };
-
-      successCallbackRef.current = onSuccess;
-      failureCallbackRef.current = onFailure;
 
       try {
         if (window.retryOtp) {
@@ -357,9 +352,15 @@ export function useMsg91Otp() {
   /**
    * STEP 4: Verify OTP via window.verifyOtp
    * Per MSG91 docs: window.verifyOtp(otp, successCb, failureCb, reqId)
-   * On success, the callback receives an access-token to verify server-side.
+   *
+   * On success:
+   * - MSG91 returns: { type: "success", message: "<JWT access token>" }
+   * - The access token is read from data.message when data.type === 'success'.
+   * - The access token and claimed phone are submitted to /api/auth/msg91/verify
+   *   for strict server-side verification and identity binding.
+   * - Loading state is guaranteed to be reset in every path (success, failure, error, timeout).
    */
-  const verifyOtp = useCallback(async (otp) => {
+  const verifyOtp = useCallback(async (otp, phone = null) => {
     const cleanOtp = String(otp || '').trim();
     if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
       const err = 'Please enter a valid 6-digit OTP code';
@@ -396,11 +397,10 @@ export function useMsg91Otp() {
 
       let settled = false;
 
+      // 15-second safety timeout so UI never hangs on a spinner
       const timeoutId = setTimeout(() => {
         if (settled) return;
         settled = true;
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
         const errMsg = 'OTP verification timed out. Please check your internet connection and try again.';
         console.error('[MSG91] verifyOtp timed out after 15s.');
         setOtpState('error');
@@ -412,35 +412,47 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
 
-        console.log('[MSG91] verifyOtp widget success:', JSON.stringify(response));
+        // Log raw data object with token value redacted, keeping keys visible
+        console.log('[MSG91] verifyOtp callback received data:', JSON.stringify(sanitizeWidgetData(response)));
 
-        const accessToken =
-          response?.['access-token'] || response?.accessToken ||
-          response?.token || response?.jwt ||
-          (typeof response === 'string' && response.length > 15 ? response : null);
+        // MSG91 returns the access token in data.message when data.type === 'success'
+        let accessToken = null;
+        if (response && response.type === 'success') {
+          if (typeof response.message === 'string' && response.message.trim()) {
+            accessToken = response.message.trim();
+          } else if (typeof response['access-token'] === 'string' && response['access-token'].trim()) {
+            accessToken = response['access-token'].trim();
+          } else if (typeof response.accessToken === 'string' && response.accessToken.trim()) {
+            accessToken = response.accessToken.trim();
+          }
+        }
 
         if (!accessToken) {
-          console.error('[MSG91] No access token in verify response:', response);
-          const err = 'Verification failed: No access token received from OTP provider';
+          console.error('[MSG91] No valid access token in verify response. Keys received:', Object.keys(response || {}));
+          const err = (response?.type !== 'success' && typeof response?.message === 'string' && response.message.trim())
+            ? response.message.trim()
+            : 'Verification failed: No access token received from OTP provider.';
           setOtpState('error');
           setErrorMessage(err);
           return resolve({ success: false, error: err });
         }
 
-        // Server-side token verification
+        // Server-side verification & phone identity binding
         try {
-          console.log('[MSG91] Verifying access token server-side...');
+          console.log('[MSG91] Verifying access token server-side with phone binding...');
+          const claimedPhone = phone || lastPhoneRef.current;
           const res = await fetch('/api/auth/msg91/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessToken }),
+            body: JSON.stringify({
+              accessToken,
+              phone: claimedPhone,
+            }),
           });
 
           const data = await res.json();
-          console.log('[MSG91] Server verify response:', res.status, JSON.stringify(data));
+          console.log('[MSG91] Server verify response:', res.status, data?.success ? 'success' : 'failed');
 
           if (!res.ok || !data.success) {
             const err = data.error || 'Server-side token verification failed';
@@ -465,8 +477,6 @@ export function useMsg91Otp() {
         if (settled) return;
         settled = true;
         clearTimeout(timeoutId);
-        successCallbackRef.current = null;
-        failureCallbackRef.current = null;
 
         const msg =
           error?.message || error?.description || error?.err ||
@@ -477,9 +487,6 @@ export function useMsg91Otp() {
         setErrorMessage(`OTP verification failed: ${msg}`);
         resolve({ success: false, error: msg });
       };
-
-      successCallbackRef.current = onSuccess;
-      failureCallbackRef.current = onFailure;
 
       try {
         window.verifyOtp(cleanOtp, onSuccess, onFailure, lastReqIdRef.current);

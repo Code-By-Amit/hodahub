@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { users, orders } from '@/lib/db/schema';
 import { eq, or, like, isNull, sql, and } from 'drizzle-orm';
 import { generateTokens, setAuthCookies } from '@/lib/auth';
-import { verifyMSG91AccessToken } from '@/lib/msg91';
+import { verifyMSG91AccessToken } from '@/lib/msg91-server';
 
 export async function POST(request) {
   try {
@@ -14,7 +14,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { accessToken } = body || {};
+    const { accessToken, phone } = body || {};
 
     if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
       return NextResponse.json(
@@ -23,8 +23,8 @@ export async function POST(request) {
       );
     }
 
-    // Verify MSG91 Access Token server-side strictly
-    const verifyResult = await verifyMSG91AccessToken(accessToken.trim());
+    // Verify MSG91 Access Token server-side strictly & enforce phone binding
+    const verifyResult = await verifyMSG91AccessToken(accessToken.trim(), phone);
 
     if (!verifyResult.success || !verifyResult.mobile) {
       return NextResponse.json(

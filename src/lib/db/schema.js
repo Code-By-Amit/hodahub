@@ -414,5 +414,19 @@ export const wishlistItems = pgTable(
   ]
 );
 
+// --- MSG91 Used Access Tokens (Single-Use Replay Protection) ---
+export const msg91UsedTokens = pgTable(
+  'msg91_used_tokens',
+  {
+    tokenHash: varchar('token_hash', { length: 64 }).primaryKey(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+  },
+  (table) => [
+    index('msg91_used_tokens_expires_at_idx').on(table.expiresAt),
+  ]
+);
+
+
 
 

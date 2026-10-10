@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { users, orders } from '@/lib/db/schema';
 import { eq, or, like, isNull, sql, and } from 'drizzle-orm';
 import { generateTokens, setAuthCookies } from '@/lib/auth';
-import { verifyMSG91AccessToken } from '@/lib/msg91';
+import { verifyMSG91AccessToken } from '@/lib/msg91-server';
 
 export async function POST(request) {
   try {
@@ -17,7 +17,7 @@ export async function POST(request) {
       );
     }
 
-    const { accessToken } = body || {};
+    const { accessToken, phone } = body || {};
 
     if (!accessToken || typeof accessToken !== 'string' || !accessToken.trim()) {
       return NextResponse.json(
@@ -26,8 +26,8 @@ export async function POST(request) {
       );
     }
 
-    // 1. Verify access token strictly with MSG91 server-side API
-    const verifyResult = await verifyMSG91AccessToken(accessToken.trim());
+    // 1. Verify access token strictly with MSG91 server-side API & enforce phone binding
+    const verifyResult = await verifyMSG91AccessToken(accessToken.trim(), phone);
 
     if (!verifyResult.success || !verifyResult.mobile) {
       return NextResponse.json(
