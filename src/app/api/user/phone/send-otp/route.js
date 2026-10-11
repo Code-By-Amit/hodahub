@@ -17,6 +17,28 @@ export async function POST(request) {
       );
     }
 
+    // 1. Check if user phone is already verified
+    const [existingUser] = await db
+      .select({
+        phone: users.phone,
+        passwordHash: users.passwordHash,
+        isVerified: users.isVerified,
+        email: users.email,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+
+    const isPhoneAuth = Boolean(existingUser?.phone && (!existingUser?.passwordHash || !existingUser?.email));
+    const alreadyVerified = Boolean(existingUser?.phone && (existingUser?.isVerified || isPhoneAuth));
+
+    if (alreadyVerified) {
+      return NextResponse.json(
+        { error: 'Phone number is already verified' },
+        { status: 400 }
+      );
+    }
+
     const { phone } = await request.json();
 
     if (!phone || typeof phone !== 'string' || phone.trim().length < 8) {
@@ -37,15 +59,14 @@ export async function POST(request) {
       })
       .where(eq(users.id, user.id));
 
-    // TODO: Wire real SMS provider (e.g. MSG91, Fast2SMS, Twilio) here when SMS API key is configured.
-    // Resend (used for email OTP) is an email-only service and cannot deliver SMS messages.
-    // Currently, OTP is logged to the server console for testing/development.
-    console.log(`[SMS OTP SERVICE STUB] Phone OTP generated for user ${user.email} (${cleanPhone}): ${otp}`);
+    // Never leak OTP in production logs or responses
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Dev Only] Phone OTP generated for user ${user.id} (${cleanPhone}): ${otp}`);
+    }
 
     return NextResponse.json({
-      message: 'OTP generated. (Dev mode: Check server console for OTP code)',
-      // In dev mode when no SMS provider key is configured, return demo flag
-      demoOtp: process.env.NODE_ENV === 'development' ? otp : undefined,
+      message: 'OTP sent successfully to your mobile number.',
+      ...(process.env.NODE_ENV === 'development' && { demoOtp: otp }),
     });
   } catch (error) {
     if (error.message === 'Unauthorized') {

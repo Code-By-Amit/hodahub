@@ -38,7 +38,11 @@ export const users = pgTable('users', {
   resetOtpAttempts: integer('reset_otp_attempts').default(0).notNull(),
   avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => [
+  index('users_phone_idx').on(table.phone),
+  index('users_created_at_idx').on(table.createdAt),
+  index('users_email_idx').on(table.email),
+]);
 
 // --- Accounts (OAuth Providers) ---
 export const accounts = pgTable(

@@ -13,7 +13,37 @@ export async function POST(request) {
       return NextResponse.json({ error: 'OTP is required' }, { status: 400 });
     }
 
-    // Verify OTP matching current logged-in user
+    // 1. If user phone is already verified, return immediately
+    const [currentUserRecord] = await db
+      .select({
+        id: users.id,
+        phone: users.phone,
+        passwordHash: users.passwordHash,
+        isVerified: users.isVerified,
+        email: users.email,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+
+    const isPhoneAuth = Boolean(currentUserRecord?.phone && (!currentUserRecord?.passwordHash || !currentUserRecord?.email));
+    if (currentUserRecord?.phone && (currentUserRecord?.isVerified || isPhoneAuth)) {
+      return NextResponse.json({
+        message: 'Phone number is already verified.',
+        user: {
+          id: currentUserRecord.id,
+          name: currentUserRecord.name,
+          email: currentUserRecord.email,
+          phone: currentUserRecord.phone,
+          phoneVerified: true,
+          avatarUrl: currentUserRecord.avatarUrl,
+        },
+      });
+    }
+
+    // 2. Verify OTP matching current logged-in user
     const [matchedUser] = await db
       .select()
       .from(users)
@@ -33,10 +63,14 @@ export async function POST(request) {
       );
     }
 
-    // Mark user as verified and clear OTP
+    // 3. Mark user as verified, normalize phone to E.164, and clear OTP
+    const cleanDigits = matchedUser.phone ? matchedUser.phone.replace(/\D/g, '').slice(-10) : '';
+    const e164Phone = cleanDigits ? `+91${cleanDigits}` : matchedUser.phone;
+
     const [updatedUser] = await db
       .update(users)
       .set({
+        phone: e164Phone,
         isVerified: true,
         otp: null,
         otpExpiresAt: null,

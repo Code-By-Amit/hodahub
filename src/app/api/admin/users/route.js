@@ -1,28 +1,96 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { users } from '@/lib/db/schema';
-import { desc, sql, eq } from 'drizzle-orm';
+import { desc, sql, eq, or, ilike, like } from 'drizzle-orm';
+import { users, accounts } from '@/lib/db/schema';
 import { requireAdmin } from '@/lib/auth';
 
 export async function GET(request) {
   try {
     await requireAdmin(request);
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
+    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '20', 10)));
+    const search = (searchParams.get('search') || '').trim();
     const offset = (page - 1) * limit;
 
-    const list = await db.select({
-      id: users.id, name: users.name, email: users.email,
-      role: users.role, isVerified: users.isVerified, createdAt: users.createdAt,
-    }).from(users).orderBy(desc(users.createdAt)).limit(limit).offset(offset);
+    let whereClause = undefined;
+    if (search) {
+      const digits = search.replace(/\D/g, '');
+      const conditions = [
+        ilike(users.name, `%${search}%`),
+        ilike(users.email, `%${search}%`),
+        ilike(users.phone, `%${search}%`),
+      ];
+      if (digits.length >= 3) {
+        conditions.push(like(users.phone, `%${digits}%`));
+      }
+      whereClause = or(...conditions);
+    }
 
-    const [{ count }] = await db.select({ count: sql`count(*)::int` }).from(users);
-    return NextResponse.json({ users: list, pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) } });
+    const baseQuery = db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+        passwordHash: users.passwordHash,
+        role: users.role,
+        isVerified: users.isVerified,
+        createdAt: users.createdAt,
+        oauthProvider: accounts.provider,
+      })
+      .from(users)
+      .leftJoin(accounts, eq(accounts.userId, users.id));
+
+    const rows = whereClause
+      ? await baseQuery.where(whereClause).orderBy(desc(users.createdAt)).limit(limit).offset(offset)
+      : await baseQuery.orderBy(desc(users.createdAt)).limit(limit).offset(offset);
+
+    const countQuery = db
+      .select({ count: sql`count(distinct ${users.id})::int` })
+      .from(users);
+
+    const [{ count }] = whereClause
+      ? await countQuery.where(whereClause)
+      : await countQuery;
+
+    const list = rows.map((u) => {
+      let authProvider = 'email';
+      if (u.oauthProvider) {
+        authProvider = u.oauthProvider;
+      } else if (u.phone && !u.passwordHash) {
+        authProvider = 'phone';
+      } else if (!u.email && u.phone) {
+        authProvider = 'phone';
+      }
+
+      return {
+        id: u.id,
+        name: u.name || null,
+        email: u.email || null,
+        phone: u.phone || null,
+        role: u.role,
+        isVerified: Boolean(u.isVerified),
+        createdAt: u.createdAt,
+        authProvider,
+      };
+    });
+
+    return NextResponse.json({
+      users: list,
+      pagination: {
+        page,
+        limit,
+        total: count,
+        totalPages: Math.ceil(count / limit) || 1,
+      },
+    });
   } catch (error) {
-    if (error.message === 'Unauthorized' || error.message === 'Forbidden')
+    if (error.message === 'Unauthorized' || error.message === 'Forbidden') {
       return NextResponse.json({ error: error.message }, { status: 403 });
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    }
+    console.error('[Admin Users API Error]:', error);
+    return NextResponse.json({ error: 'Failed to retrieve users' }, { status: 500 });
   }
 }
 

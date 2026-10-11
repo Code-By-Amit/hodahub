@@ -3,17 +3,21 @@
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
-import { FiCheck, FiX, FiShield, FiUser } from 'react-icons/fi';
+import UserAvatar from '@/components/ui/UserAvatar';
+import DataTable from '@/components/ui/DataTable';
+import ActionButton from '@/components/ui/ActionButton';
+import { RoleBadge, VerifiedBadge, AuthProviderBadge } from '@/components/ui/Badges';
+import useAdminUsers from '@/hooks/useAdminUsers';
+import { FiSearch, FiShield, FiUser, FiX, FiPlus } from 'react-icons/fi';
 
 export default function AdminUsersPage() {
   const toast = useToast();
-  const [users, setUsers] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Add Admin modal states
+  // Add Admin modal state
   const [showAddModal, setShowAddModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [addForm, setAddForm] = useState({
     name: '',
     email: '',
@@ -21,17 +25,28 @@ export default function AdminUsersPage() {
     role: 'admin',
   });
 
-  useEffect(() => { fetchUsers(); }, [pagination.page]);
+  // Debounce search input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+      setPage(1); // Reset page when query changes
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
 
-  async function fetchUsers() {
-    try {
-      const res = await fetch(`/api/admin/users?page=${pagination.page}`);
-      const data = await res.json();
-      setUsers(data.users || []);
-      setPagination(data.pagination || pagination);
-    } catch {}
-    setLoading(false);
-  }
+  const {
+    users,
+    pagination,
+    isLoading,
+    isFetching,
+    updateRole,
+    createAdmin,
+    isCreatingAdmin,
+  } = useAdminUsers({
+    page,
+    limit: 20,
+    search: debouncedSearch,
+  });
 
   async function handleCreateAdmin(e) {
     e.preventDefault();
@@ -39,129 +54,222 @@ export default function AdminUsersPage() {
       toast.error('Valid email and password (min 6 chars) are required');
       return;
     }
-    setSubmitting(true);
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addForm),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || 'Admin account created successfully!');
-        setShowAddModal(false);
-        setAddForm({ name: '', email: '', password: '', role: 'admin' });
-        fetchUsers();
-      } else {
-        toast.error(data.error || 'Failed to create admin user');
-      }
-    } catch {
-      toast.error('Network error');
+      const data = await createAdmin(addForm);
+      toast.success(data.message || 'Admin account created successfully!');
+      setShowAddModal(false);
+      setAddForm({ name: '', email: '', password: '', role: 'admin' });
+    } catch (err) {
+      toast.error(err.message || 'Failed to create admin user');
     }
-    setSubmitting(false);
   }
 
-  async function toggleRole(userId, currentRole) {
+  async function handleToggleRole(userId, currentRole) {
     const newRole = currentRole === 'admin' ? 'customer' : 'admin';
-    if (!confirm(`Change user role to ${newRole}?`)) return;
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, role: newRole }),
-      });
-      if (res.ok) {
-        toast.success('Role updated successfully');
-        fetchUsers();
-      }
-    } catch {
-      toast.error('Error updating user role');
+      await updateRole({ userId, role: newRole });
+      toast.success(`Role changed to ${newRole}`);
+    } catch (err) {
+      toast.error(err.message || 'Error updating user role');
     }
   }
+
+  const columns = [
+    {
+      key: 'user',
+      header: 'User',
+      render: (_, row) => {
+        const displayName =
+          row.name && row.name !== 'User'
+            ? row.name
+            : row.phone
+            ? `User (${row.phone.slice(-4)})`
+            : row.email
+            ? row.email.split('@')[0]
+            : 'Customer';
+
+        return (
+          <div className="flex items-center gap-2.5">
+            <UserAvatar name={row.name} phone={row.phone} size="sm" />
+            <div className="flex flex-col min-w-0">
+              <span className="font-semibold text-warm-900 text-[11px] truncate">
+                {displayName}
+              </span>
+              <span className="text-[10px] text-warm-400 font-mono">
+                ID: {row.id.slice(0, 8)}...
+              </span>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'contact',
+      header: 'Contact',
+      render: (_, row) => (
+        <span className="text-warm-600 text-[11px] font-mono select-all">
+          {row.email || row.phone || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'phone',
+      header: 'Phone',
+      render: (phone) => (
+        <span className="text-warm-700 text-[11px] font-mono">
+          {phone || <span className="text-warm-300 font-sans">—</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'authProvider',
+      header: 'Auth Provider',
+      render: (provider) => <AuthProviderBadge provider={provider} />,
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (role) => <RoleBadge role={role} />,
+    },
+    {
+      key: 'isVerified',
+      header: 'Verified',
+      align: 'center',
+      render: (verified) => <VerifiedBadge isVerified={Boolean(verified)} />,
+    },
+    {
+      key: 'createdAt',
+      header: 'Joined',
+      render: (date) => (
+        <span className="text-warm-500 text-[11px] whitespace-nowrap">
+          {new Date(date).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          })}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (_, row) => {
+        const targetRole = row.role === 'admin' ? 'customer' : 'admin';
+        return (
+          <ActionButton
+            size="xs"
+            variant="outline"
+            confirmMessage={`Change ${row.name || row.email || row.phone || 'this user'} to ${targetRole}?`}
+            onClick={() => handleToggleRole(row.id, row.role)}
+            icon={row.role === 'admin' ? <FiUser className="w-3 h-3" /> : <FiShield className="w-3 h-3" />}
+            title={`Toggle role to ${targetRole}`}
+          >
+            {row.role === 'admin' ? 'Make Customer' : 'Make Admin'}
+          </ActionButton>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-base font-bold text-warm-900 tracking-tight">User Management</h1>
-          <p className="text-[11px] text-warm-500">Manage registered customers, permissions, and create admin accounts</p>
+          <h1 className="text-base font-bold text-warm-900 tracking-tight">
+            User Management
+          </h1>
+          <p className="text-[11px] text-warm-500">
+            Manage registered customers, verify identities, and manage admin roles
+          </p>
         </div>
 
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors cursor-pointer shadow-2xs shrink-0"
         >
-          + Add Admin Account
+          <FiPlus className="w-3.5 h-3.5" />
+          <span>Add Admin Account</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-md border border-warm-200 shadow-xs overflow-x-auto">
-        <table className="w-full text-[11px]">
-          <thead>
-            <tr className="bg-warm-50/70 border-b border-warm-200 text-warm-600 text-[10px] uppercase tracking-wider font-semibold">
-              <th className="px-3 py-2.5 text-left">User</th>
-              <th className="px-3 py-2.5 text-left">Email</th>
-              <th className="px-3 py-2.5 text-left">Role</th>
-              <th className="px-3 py-2.5 text-left">Verified</th>
-              <th className="px-3 py-2.5 text-left">Joined</th>
-              <th className="px-3 py-2.5 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-warm-100">
-            {loading ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-warm-400 text-[11px]">Loading users...</td></tr>
-            ) : users.map((u) => (
-              <tr key={u.id} className="hover:bg-warm-50/50 transition-colors">
-                <td className="px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-warm-900 text-white flex items-center justify-center text-[10px] font-bold">
-                      {u.name?.[0]?.toUpperCase() || '?'}
-                    </div>
-                    <span className="font-semibold text-warm-900 text-[11px]">{u.name || '—'}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2.5 text-warm-500 text-[11px]">{u.email}</td>
-                <td className="px-3 py-2.5">
-                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${u.role === 'admin' ? 'bg-warm-900 text-white' : 'bg-warm-100 text-warm-600'}`}>
-                    {u.role}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5">
-                  {u.isVerified ? <FiCheck className="text-emerald-600 w-3.5 h-3.5" /> : <FiX className="text-rose-400 w-3.5 h-3.5" />}
-                </td>
-                <td className="px-3 py-2.5 text-warm-500 text-[11px]">{new Date(u.createdAt).toLocaleDateString()}</td>
-                <td className="px-3 py-2.5 text-right">
-                  <button
-                    onClick={() => toggleRole(u.id, u.role)}
-                    className="px-2.5 py-1 border border-warm-200 rounded-md text-[10px] font-semibold text-warm-700 hover:bg-warm-100 transition-colors"
-                    title="Toggle role"
-                  >
-                    {u.role === 'admin' ? <FiUser className="w-3 h-3 inline mr-1" /> : <FiShield className="w-3 h-3 inline mr-1" />}
-                    {u.role === 'admin' ? 'Make Customer' : 'Make Admin'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Filter & Search Bar */}
+      <div className="flex items-center gap-2 bg-white p-2.5 rounded-md border border-warm-200 shadow-2xs">
+        <div className="relative flex-1 max-w-sm">
+          <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5 pointer-events-none" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by phone, email, or name..."
+            className="w-full pl-8 pr-7 py-1.5 bg-warm-50/50 border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:bg-white focus:border-warm-900 transition-all placeholder:text-warm-400"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => setSearchInput('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-700 p-0.5 rounded cursor-pointer"
+              title="Clear search"
+            >
+              <FiX className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        {isFetching && (
+          <span className="text-[10px] text-warm-400 font-medium animate-pulse ml-auto sm:ml-2">
+            Updating...
+          </span>
+        )}
       </div>
+
+      {/* Data Table */}
+      <DataTable
+        columns={columns}
+        data={users}
+        loading={isLoading}
+        skeletonRows={8}
+        emptyState={
+          debouncedSearch
+            ? `No users matched "${debouncedSearch}". Try a different phone or email.`
+            : 'No users registered yet.'
+        }
+      />
+
+      {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="mt-4">
-          <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={(p) => setPagination({ ...pagination, page: p })} />
+        <div className="pt-1 flex items-center justify-between">
+          <span className="text-[11px] text-warm-500 font-medium">
+            Showing {(pagination.page - 1) * pagination.limit + 1}–
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
+            {pagination.total} users
+          </span>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       )}
 
       {/* Add Admin Account Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border border-warm-200 shadow-xl max-w-md w-full p-5 space-y-4 relative animate-in fade-in zoom-in duration-150">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-2xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-lg border border-warm-200 shadow-xl max-w-md w-full p-5 space-y-4 relative animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-warm-100 pb-3">
-              <h3 className="font-bold text-warm-900 text-sm">Create Admin / User Account</h3>
+              <h3 className="font-bold text-warm-900 text-sm">
+                Create Admin / User Account
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="text-warm-400 hover:text-warm-700 p-1 rounded-md cursor-pointer"
+                className="text-warm-400 hover:text-warm-700 p-1 rounded-md cursor-pointer transition-colors"
               >
                 ✕
               </button>
@@ -227,16 +335,16 @@ export default function AdminUsersPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-3.5 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors"
+                  className="px-3.5 py-1.5 border border-warm-200 text-warm-600 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+                  disabled={isCreatingAdmin}
+                  className="px-4 py-1.5 bg-warm-900 text-white text-[11px] font-bold rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
                 >
-                  {submitting ? 'Creating...' : 'Create Account'}
+                  {isCreatingAdmin ? 'Creating...' : 'Create Account'}
                 </button>
               </div>
             </form>

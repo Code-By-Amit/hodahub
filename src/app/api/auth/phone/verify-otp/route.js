@@ -34,7 +34,8 @@ export async function POST(request) {
     }
 
     const clean10 = verifyResult.mobile;
-    const formatted12 = verifyResult.formattedMobile || `91${clean10}`;
+    const e164Phone = `+91${clean10}`;
+    const formatted12 = `91${clean10}`;
 
     // --- DB Lookup: find existing user by phone ---
     let matchedUser = null;
@@ -44,14 +45,25 @@ export async function POST(request) {
         .from(users)
         .where(
           or(
-            eq(users.phone, clean10),
+            eq(users.phone, e164Phone),
             eq(users.phone, formatted12),
+            eq(users.phone, clean10),
             like(users.phone, `%${clean10}`)
           )
         )
         .limit(1);
 
       matchedUser = rows[0] || null;
+
+      // Ensure existing user has normalized E.164 phone and isVerified marked true
+      if (matchedUser && (matchedUser.phone !== e164Phone || !matchedUser.isVerified)) {
+        await db
+          .update(users)
+          .set({ phone: e164Phone, isVerified: true })
+          .where(eq(users.id, matchedUser.id));
+        matchedUser.phone = e164Phone;
+        matchedUser.isVerified = true;
+      }
     } catch (lookupErr) {
       console.error('[Phone OTP Verify API] DB lookup error:', lookupErr instanceof Error ? lookupErr.message : lookupErr);
       return NextResponse.json(
@@ -60,14 +72,14 @@ export async function POST(request) {
       );
     }
 
-    // --- Create new user if not found ---
+    // --- Create new user if not found (normalized E.164 phone) ---
     if (!matchedUser) {
       try {
         const inserted = await db
           .insert(users)
           .values({
-            phone: clean10,
-            name: 'User',
+            phone: e164Phone,
+            name: null,
             isVerified: true,
             role: 'customer',
           })

@@ -19,6 +19,7 @@ export async function GET(request) {
         role: users.role,
         isVerified: users.isVerified,
         avatarUrl: users.avatarUrl,
+        passwordHash: users.passwordHash,
         createdAt: users.createdAt,
       })
       .from(users)
@@ -35,9 +36,20 @@ export async function GET(request) {
       .where(eq(addresses.userId, user.id))
       .orderBy(desc(addresses.createdAt));
 
+    const isPhoneAuth = Boolean(user.phone && (!user.passwordHash || !user.email));
+    const phoneVerified = Boolean(user.phone && (user.isVerified || isPhoneAuth));
+
     const userWithDefaults = {
-      ...user,
-      name: user.name || 'User',
+      id: user.id,
+      name: user.name || null,
+      email: user.email || null,
+      phone: user.phone || null,
+      role: user.role,
+      isVerified: Boolean(user.isVerified),
+      phoneVerified,
+      isPhoneAuth,
+      avatarUrl: user.avatarUrl || null,
+      createdAt: user.createdAt,
     };
 
     return NextResponse.json({ user: userWithDefaults, addresses: userAddresses });
@@ -64,10 +76,32 @@ export async function PUT(request) {
 
     const { name, phone, avatarUrl } = result.data;
 
+    // Check existing user phone status
+    const [existing] = await db
+      .select({
+        phone: users.phone,
+        passwordHash: users.passwordHash,
+        isVerified: users.isVerified,
+        email: users.email,
+      })
+      .from(users)
+      .where(eq(users.id, authUser.id))
+      .limit(1);
+
+    const isPhoneAuth = Boolean(existing?.phone && (!existing?.passwordHash || !existing?.email));
+    const alreadyPhoneVerified = Boolean(existing?.phone && (existing?.isVerified || isPhoneAuth));
+
     const updateFields = {
       name: name.trim(),
-      phone: phone ? phone.trim() : null,
     };
+
+    // If user is already phone verified or phone-auth, keep their verified phone unchanged
+    if (alreadyPhoneVerified) {
+      updateFields.phone = existing.phone;
+    } else if (phone !== undefined) {
+      updateFields.phone = phone ? phone.trim() : null;
+    }
+
     if (avatarUrl !== undefined) {
       updateFields.avatarUrl = avatarUrl ? avatarUrl.trim() : null;
     }
@@ -82,12 +116,15 @@ export async function PUT(request) {
         email: users.email,
         phone: users.phone,
         role: users.role,
+        isVerified: users.isVerified,
         avatarUrl: users.avatarUrl,
       });
 
     const userWithDefaults = {
       ...updatedUser,
-      name: updatedUser.name || 'User',
+      name: updatedUser.name || null,
+      phoneVerified: alreadyPhoneVerified,
+      isPhoneAuth,
     };
 
     return NextResponse.json({ user: userWithDefaults, message: 'Profile updated successfully!' });

@@ -82,6 +82,9 @@ function createPool() {
           expires_at TIMESTAMP NOT NULL
         );
         CREATE INDEX IF NOT EXISTS msg91_used_tokens_expires_at_idx ON msg91_used_tokens (expires_at);
+        CREATE INDEX IF NOT EXISTS users_phone_idx ON users (phone);
+        CREATE INDEX IF NOT EXISTS users_created_at_idx ON users (created_at);
+        CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);
       `)
       .catch(() => {});
   }

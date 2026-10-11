@@ -10,9 +10,22 @@ import ImageUpload from '@/components/ui/ImageUpload';
 import PhoneInput from '@/components/ui/PhoneInput';
 import FieldError from '@/components/ui/FieldError';
 import PasswordInput from '@/components/ui/PasswordInput';
+import UserAvatar from '@/components/ui/UserAvatar';
+import FormField, { ReadOnlyField } from '@/components/ui/FormField';
+import { VerifiedBadge } from '@/components/ui/Badges';
+import OtpModal from '@/components/ui/OtpModal';
 import { updateProfileSchema, addressSchema } from '@/lib/validations';
 import { lookupPincode } from '@/lib/pincode';
-import { FiUser, FiMapPin, FiMail, FiSave, FiPlus, FiLoader, FiLock } from 'react-icons/fi';
+import {
+  FiUser,
+  FiMapPin,
+  FiMail,
+  FiSave,
+  FiPlus,
+  FiLoader,
+  FiLock,
+  FiSmartphone,
+} from 'react-icons/fi';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -22,21 +35,36 @@ export default function ProfilePage() {
   const authLoading = useSelector(selectAuthLoading);
 
   const [activeTab, setActiveTab] = useState('profile');
-  const [profileData, setProfileData] = useState({ name: '', email: '', phone: '', avatarUrl: '', phoneVerified: false });
+  const [profileData, setProfileData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    avatarUrl: '',
+    phoneVerified: false,
+    isPhoneAuth: false,
+  });
   const [profileErrors, setProfileErrors] = useState({});
 
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Phone OTP States
+  // Phone OTP States (strictly for unverified email accounts)
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [phoneOtpInput, setPhoneOtpInput] = useState('');
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   const [showAddAddr, setShowAddAddr] = useState(false);
-  const [addrForm, setAddrForm] = useState({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
+  const [addrForm, setAddrForm] = useState({
+    label: '',
+    line1: '',
+    line2: '',
+    city: '',
+    state: '',
+    pincode: '',
+    phone: '',
+  });
   const [addrErrors, setAddrErrors] = useState({});
   const [addrSaving, setAddrSaving] = useState(false);
 
@@ -90,19 +118,28 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok && data.user) {
         setProfileData({
-          name: data.user.name || 'User',
+          name: data.user.name || '',
           email: data.user.email || '',
           phone: data.user.phone || '',
           avatarUrl: data.user.avatarUrl || '',
           phoneVerified: Boolean(data.user.phoneVerified),
+          isPhoneAuth: Boolean(data.user.isPhoneAuth),
         });
         setAddresses(data.addresses || []);
       }
-    } catch {}
+    } catch {
+      toast.error('Failed to load profile data');
+    }
     setLoading(false);
   }
 
+  const isPhoneVerified = Boolean(profileData.phoneVerified || profileData.isPhoneAuth);
+
   async function handleSendPhoneOtp() {
+    if (isPhoneVerified) {
+      toast.info('Your phone number is already verified.');
+      return;
+    }
     if (!profileData.phone || profileData.phone.trim().length < 8) {
       toast.error('Please enter a valid phone number first');
       return;
@@ -117,7 +154,7 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok) {
         toast.success(data.message || 'OTP sent to mobile number');
-        if (data.demoOtp) {
+        if (data.demoOtp && process.env.NODE_ENV === 'development') {
           toast.info(`Dev Mode OTP: ${data.demoOtp}`);
         }
         setShowPhoneModal(true);
@@ -131,7 +168,7 @@ export default function ProfilePage() {
   }
 
   async function handleVerifyPhoneOtp(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!phoneOtpInput || phoneOtpInput.trim().length < 4) {
       toast.error('Please enter the OTP');
       return;
@@ -146,7 +183,11 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok) {
         toast.success('Mobile number verified successfully!');
-        setProfileData((prev) => ({ ...prev, phoneVerified: true }));
+        setProfileData((prev) => ({
+          ...prev,
+          phone: data.user?.phone || prev.phone,
+          phoneVerified: true,
+        }));
         setShowPhoneModal(false);
         setPhoneOtpInput('');
         if (data.user) dispatch(setUser(data.user));
@@ -194,7 +235,16 @@ export default function ProfilePage() {
       const data = await res.json();
       if (res.ok) {
         toast.success('Profile updated!');
-        dispatch(setUser(data.user));
+        if (data.user) {
+          dispatch(setUser(data.user));
+          setProfileData((prev) => ({
+            ...prev,
+            name: data.user.name || '',
+            phone: data.user.phone || '',
+            phoneVerified: Boolean(data.user.phoneVerified),
+            isPhoneAuth: Boolean(data.user.isPhoneAuth),
+          }));
+        }
       } else {
         if (data.errors) setProfileErrors(data.errors);
         toast.error(data.error || 'Failed to update profile');
@@ -293,11 +343,11 @@ export default function ProfilePage() {
 
       <h1 className="text-lg font-bold text-warm-900 tracking-tight mb-5">My Account</h1>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <div className="flex border-b border-warm-200 mb-5">
         <button
           onClick={() => setActiveTab('profile')}
-          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors ${
+          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors cursor-pointer ${
             activeTab === 'profile'
               ? 'border-warm-900 text-warm-900'
               : 'border-transparent text-warm-500 hover:text-warm-700'
@@ -307,7 +357,7 @@ export default function ProfilePage() {
         </button>
         <button
           onClick={() => setActiveTab('addresses')}
-          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors ${
+          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors cursor-pointer ${
             activeTab === 'addresses'
               ? 'border-warm-900 text-warm-900'
               : 'border-transparent text-warm-500 hover:text-warm-700'
@@ -317,7 +367,7 @@ export default function ProfilePage() {
         </button>
         <button
           onClick={() => setActiveTab('security')}
-          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors ${
+          className={`flex items-center gap-1.5 pb-2 px-3 font-semibold text-[12px] border-b-2 transition-colors cursor-pointer ${
             activeTab === 'security'
               ? 'border-warm-900 text-warm-900'
               : 'border-transparent text-warm-500 hover:text-warm-700'
@@ -330,24 +380,20 @@ export default function ProfilePage() {
       {/* Tab 1: Profile Form */}
       {activeTab === 'profile' && (
         <div className="bg-white p-4 sm:p-5 rounded-md border border-warm-200 shadow-xs max-w-lg">
-          <form onSubmit={handleSaveProfile} className="space-y-3.5">
-            {/* Avatar Uploader */}
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            {/* Avatar Uploader with UserAvatar Fallback */}
             <div className="border-b border-warm-100 pb-3.5">
               <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1.5">
                 Profile Picture
               </label>
               <div className="flex items-center gap-3 mb-2.5">
-                {profileData.avatarUrl ? (
-                  <img
-                    src={profileData.avatarUrl}
-                    alt="Profile Avatar"
-                    className="w-12 h-12 rounded-full object-cover border-2 border-warm-200 shadow-xs shrink-0"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-warm-900 text-white font-bold text-[15px] flex items-center justify-center border-2 border-warm-200 shrink-0">
-                    {profileData.name?.[0]?.toUpperCase() || 'U'}
-                  </div>
-                )}
+                <UserAvatar
+                  src={profileData.avatarUrl}
+                  name={profileData.name}
+                  phone={profileData.phone}
+                  size="xl"
+                  className="border-2 border-warm-200"
+                />
                 <div>
                   <p className="text-[11px] font-semibold text-warm-900">Upload new avatar</p>
                   <p className="text-[10px] text-warm-500">Supports JPG, PNG or WEBP up to 10MB</p>
@@ -357,7 +403,7 @@ export default function ProfilePage() {
                 uploadType="avatar"
                 value={profileData.avatarUrl ? [profileData.avatarUrl] : []}
                 onChange={(urls) => {
-                  const url = Array.isArray(urls) ? (urls[0] || '') : (urls || '');
+                  const url = Array.isArray(urls) ? urls[0] || '' : urls || '';
                   setProfileData((prev) => ({ ...prev, avatarUrl: url }));
                 }}
                 multiple={false}
@@ -366,13 +412,17 @@ export default function ProfilePage() {
               />
             </div>
 
-            <div>
-              <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
-                Full Name *
-              </label>
+            {/* Name Input */}
+            <FormField
+              id="profile-name-input"
+              label="Full Name"
+              required
+              error={profileErrors.name}
+            >
               <div className="relative">
-                <FiUser className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
+                <FiUser className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5 pointer-events-none" />
                 <input
+                  id="profile-name-input"
                   type="text"
                   value={profileData.name}
                   onChange={(e) => {
@@ -382,109 +432,83 @@ export default function ProfilePage() {
                   className={`w-full pl-8 pr-3 py-1.5 border rounded-md text-[11px] bg-white outline-none transition-all ${
                     profileErrors.name ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-warm-900'
                   }`}
+                  placeholder="Your full name"
                   required
                 />
               </div>
-              <FieldError message={profileErrors.name} />
-            </div>
+            </FormField>
 
-            <div>
-              <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider mb-1">
-                Email Address (ReadOnly)
-              </label>
-              <div className="relative">
-                <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400 w-3.5 h-3.5" />
-                <input
-                  type="text"
-                  value={profileData.email || 'Not set (Phone authenticated user)'}
-                  readOnly
-                  className="w-full pl-8 pr-3 py-1.5 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-500 cursor-not-allowed font-medium"
-                />
-              </div>
-            </div>
+            {/* Email (Read-Only) */}
+            <ReadOnlyField
+              label="Email Address"
+              value={profileData.email || 'Not set (Phone authenticated user)'}
+              icon={<FiMail className="w-3.5 h-3.5" />}
+              helperText={!profileData.email ? 'Signed in via mobile number' : undefined}
+            />
 
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[10px] font-semibold text-warm-700 uppercase tracking-wider">
-                  Mobile Number (Optional)
-                </label>
-                {profileData.phone && (
-                  profileData.phoneVerified ? (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      ✓ Verified
-                    </span>
-                  ) : (
+            {/* Phone Number Field */}
+            {isPhoneVerified ? (
+              /* Verified Phone: Locked read-only with Verified badge */
+              <ReadOnlyField
+                label="Mobile Number"
+                value={profileData.phone}
+                icon={<FiSmartphone className="w-3.5 h-3.5" />}
+                badge={<VerifiedBadge isVerified={true} showLabel={true} />}
+                helperText="Verified mobile number linked to your account."
+              />
+            ) : (
+              /* Unverified Phone: Editable with Verify Phone Number CTA */
+              <FormField
+                id="profile-phone-input"
+                label="Mobile Number (Optional)"
+                error={profileErrors.phone}
+                badge={
+                  profileData.phone && (
                     <button
                       type="button"
                       onClick={handleSendPhoneOtp}
                       disabled={sendingOtp}
-                      className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline"
+                      className="text-[10px] font-bold text-brand-600 hover:text-brand-700 hover:underline cursor-pointer disabled:opacity-50"
                     >
                       {sendingOtp ? 'Sending OTP...' : 'Verify Phone Number →'}
                     </button>
                   )
-                )}
-              </div>
-              <PhoneInput
-                value={profileData.phone}
-                onChange={(val) => {
-                  setProfileData({ ...profileData, phone: val, phoneVerified: false });
-                  if (profileErrors.phone) setProfileErrors((prev) => ({ ...prev, phone: null }));
-                }}
-                error={profileErrors.phone}
-              />
-            </div>
+                }
+              >
+                <PhoneInput
+                  value={profileData.phone}
+                  onChange={(val) => {
+                    setProfileData({ ...profileData, phone: val, phoneVerified: false });
+                    if (profileErrors.phone) setProfileErrors((prev) => ({ ...prev, phone: null }));
+                  }}
+                  error={profileErrors.phone}
+                />
+              </FormField>
+            )}
 
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
             >
               <FiSave className="w-3.5 h-3.5" />
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </form>
 
-          {/* Modal for Mobile OTP Verification */}
-          {showPhoneModal && (
-            <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-              <div className="bg-white rounded-lg p-5 max-w-sm w-full space-y-3 border border-warm-200 shadow-xl">
-                <h3 className="text-sm font-bold text-warm-900">Verify Mobile OTP</h3>
-                <p className="text-[11px] text-warm-500">
-                  Enter the 6-digit verification code sent to <strong className="text-warm-900">{profileData.phone}</strong>.
-                </p>
-                <div className="p-2 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-900">
-                  ⚠️ <strong>SMS Provider Pending:</strong> Check the server console or toast notification for the OTP code.
-                </div>
-                <form onSubmit={handleVerifyPhoneOtp} className="space-y-3">
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={phoneOtpInput}
-                    onChange={(e) => setPhoneOtpInput(e.target.value)}
-                    placeholder="Enter 6-digit OTP"
-                    className="w-full px-3 py-2 border border-warm-200 rounded-md text-center text-sm font-mono tracking-widest bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900"
-                    required
-                  />
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowPhoneModal(false)}
-                      className="px-3 py-1.5 border border-warm-200 text-[11px] font-semibold rounded-md text-warm-600 hover:bg-warm-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={verifyingOtp}
-                      className="px-3.5 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50"
-                    >
-                      {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
+          {/* Modal for Unverified Mobile OTP Verification */}
+          {!isPhoneVerified && showPhoneModal && (
+            <OtpModal
+              isOpen={showPhoneModal}
+              onClose={() => setShowPhoneModal(false)}
+              title="Verify Mobile Number"
+              subtitle={`Enter the 6-digit verification code sent to ${profileData.phone}.`}
+              otp={phoneOtpInput}
+              onChange={setPhoneOtpInput}
+              onSubmit={handleVerifyPhoneOtp}
+              loading={verifyingOtp}
+              showDevWarning={process.env.NODE_ENV === 'development'}
+            />
           )}
         </div>
       )}
@@ -531,7 +555,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={passwordSaving}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-warm-900 text-white font-semibold text-[11px] rounded-md hover:bg-warm-800 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
             >
               <FiSave className="w-3.5 h-3.5" />
               {passwordSaving ? 'Updating...' : 'Update Password'}
@@ -547,7 +571,7 @@ export default function ProfilePage() {
             <h2 className="text-[13px] font-bold text-warm-900">Delivery Addresses</h2>
             <button
               onClick={() => setShowAddAddr(!showAddAddr)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-colors cursor-pointer shadow-2xs"
             >
               <FiPlus className="w-3.5 h-3.5" /> Add New Address
             </button>
@@ -671,7 +695,7 @@ export default function ProfilePage() {
                 <button
                   type="submit"
                   disabled={addrSaving}
-                  className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 disabled:opacity-50 transition-colors cursor-pointer shadow-2xs"
                 >
                   {addrSaving ? 'Saving...' : 'Save Address'}
                 </button>
