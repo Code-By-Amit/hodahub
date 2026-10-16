@@ -14,6 +14,7 @@ export default function ImageUpload({
   maxFiles = 10,
   maxSizeMB = 50,
   label = 'Upload Media',
+  accept = 'image/*,video/*',
 }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -33,6 +34,17 @@ export default function ImageUpload({
       throw new Error(`File size exceeds maximum allowed size of ${maxSizeMB}MB.`);
     }
 
+    // Check file type if restricted accept list provided (e.g. image/jpeg,image/png,image/webp)
+    if (accept && accept !== 'image/*,video/*' && !accept.includes('*')) {
+      const allowedTypes = accept.split(',').map((t) => t.trim().toLowerCase());
+      const fileType = (file.type || '').toLowerCase();
+      const ext = '.' + (file.name || '').split('.').pop().toLowerCase();
+      const isAllowed = allowedTypes.some((t) => t === fileType || t === ext || (t.startsWith('.') && ext === t));
+      if (!isAllowed) {
+        throw new Error('Only valid image files (JPEG, PNG, or WebP) are supported.');
+      }
+    }
+
     // Fetch signed params from server
     const sigRes = await fetch('/api/upload/signature', {
       method: 'POST',
@@ -45,7 +57,7 @@ export default function ImageUpload({
       throw new Error(errData.error || 'Failed to authorize upload.');
     }
 
-    const { signature, timestamp, folder, apiKey, cloudName } = await sigRes.json();
+    const { signature, timestamp, folder, apiKey, cloudName, params } = await sigRes.json();
 
     const formData = new FormData();
     formData.append('file', file);
@@ -53,6 +65,10 @@ export default function ImageUpload({
     formData.append('timestamp', timestamp);
     formData.append('folder', folder);
     formData.append('signature', signature);
+    // Server-signed restrictions (mime types, max size) must accompany the signature to take effect.
+    for (const [key, value] of Object.entries(params || {})) {
+      formData.append(key, value);
+    }
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -163,7 +179,7 @@ export default function ImageUpload({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,video/*"
+            accept={accept}
             multiple={multiple}
             className="hidden"
             onChange={(e) => handleFilesSelect(e.target.files)}

@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     q: 'What is your return policy?',
-    a: 'We offer a hassle-free 30-day return policy on eligible delivered products directly through your order management page.',
+    a: 'We do not offer cash refunds. You may request an exchange within 48 hours of delivery. See our Returns & Exchanges page for full conditions.',
   },
 ];
 

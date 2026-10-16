@@ -12,6 +12,7 @@ export async function POST(request) {
     const { uploadType } = await request.json();
 
     let folder = 'reviews';
+    let uploadConstraints = null;
     if (uploadType === 'product-image') {
       if (user.role !== 'admin') {
         return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
@@ -32,6 +33,11 @@ export async function POST(request) {
         return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
       }
       folder = 'banners';
+    } else if (uploadType === 'testimonial-image') {
+      if (user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+      }
+      folder = 'happy-customers';
     } else if (uploadType === 'review-media') {
       folder = 'reviews';
     } else if (uploadType === 'avatar' || uploadType === 'profile-image') {
@@ -50,7 +56,10 @@ export async function POST(request) {
 
     const timestamp = Math.floor(Date.now() / 1000);
     // Cloudinary signature requires parameters sorted alphabetically: folder=...&timestamp=...
-    const paramsToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+    const paramsToSign = Object.entries({ folder, timestamp, ...uploadConstraints })
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&') + apiSecret;
     const signature = crypto.createHash('sha1').update(paramsToSign).digest('hex');
 
     return NextResponse.json({
@@ -59,6 +68,7 @@ export async function POST(request) {
       folder,
       apiKey,
       cloudName,
+      params: uploadConstraints || undefined,
     });
   } catch (error) {
     console.error('Signature generation error:', error);

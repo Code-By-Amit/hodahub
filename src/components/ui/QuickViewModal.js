@@ -14,6 +14,8 @@ import { selectUser } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
 import StarRating from '@/components/ui/StarRating';
 import { formatCurrency, isVideoUrl } from '@/lib/utils';
+import { trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
+import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { X, ShoppingBag, Heart, Package, ArrowRight, Minus, Plus } from 'lucide-react';
 
 export default function QuickViewModal({ product, isOpen, onClose }) {
@@ -78,6 +80,8 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
         quantity,
       })
     );
+    trackPixelAddToCart(product, quantity);
+    trackGAAddToCart(product, quantity);
     toast.success(`${quantity} x ${name} added to cart!`);
     onClose();
   };

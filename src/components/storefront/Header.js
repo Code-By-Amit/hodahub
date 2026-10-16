@@ -86,7 +86,7 @@ export default function Header() {
             : 'bg-white border-b border-warm-100'
         }`}
       >
-        <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-12 lg:h-14">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0">

@@ -189,6 +189,11 @@ export const createOrderSchema = z.object({
     })
     .optional()
     .nullable(),
+  tracking: z.object({
+    fbp: z.string().max(200).optional(),
+    fbc: z.string().max(300).optional(),
+    sourceUrl: z.string().url().max(500).optional(),
+  }).optional().nullable(),
 });
 
 export const cancelOrderSchema = z.object({
@@ -239,5 +244,36 @@ export const contactSchema = z.object({
   email: z.string().email('Invalid email address'),
   subject: z.string().min(2, 'Subject is required').max(255),
   message: z.string().min(5, 'Message must be at least 5 characters').max(5000),
+});
+
+// --- Happy Customers (Customer Screenshot Gallery) ---
+const customerImageExtension = /^https?:\/\/[^\s]+\.(jpe?g|png|webp)([?#][^\s]*)?$/i;
+
+const customerImageUrl = z
+  .string()
+  .trim()
+  .min(1, 'Screenshot image is required')
+  .max(2048, 'Image URL is too long')
+  .refine((val) => customerImageExtension.test(val), {
+    message: 'Only JPEG, PNG, or WebP images are supported',
+  });
+
+const customerCaption = z.string().trim().max(500, 'Caption cannot exceed 500 characters').optional().nullable().or(z.literal(''));
+
+const customerSortOrder = z.coerce.number().int('Display order must be a whole number').min(0).max(9999);
+
+export const happyCustomerSchema = z.object({
+  imageUrl: customerImageUrl,
+  caption: customerCaption,
+  isActive: z.boolean().default(true),
+  sortOrder: customerSortOrder.default(0),
+});
+
+// Partial updates (publish toggle, reorder) must never fall back to the create defaults.
+export const happyCustomerUpdateSchema = z.object({
+  imageUrl: customerImageUrl.optional(),
+  caption: customerCaption,
+  isActive: z.boolean().optional(),
+  sortOrder: customerSortOrder.optional(),
 });
 

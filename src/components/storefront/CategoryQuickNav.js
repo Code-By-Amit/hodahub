@@ -9,7 +9,7 @@ export default function CategoryQuickNav({ categories = [] }) {
 
   return (
     <div className="bg-white border-b border-warm-200/80 shadow-2xs py-3">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide py-1">
           <Link
             href="/products"

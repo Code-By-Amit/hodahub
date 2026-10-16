@@ -38,6 +38,51 @@ function VerifyOTPContent() {
     inputRefs.current[0]?.focus();
   }, []);
 
+  const performVerification = useCallback(async (otpString) => {
+    if (loading) return;
+    if (!otpString || otpString.length !== 6) {
+      setError('Please enter the complete 6-digit code');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp: otpString }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Verification failed');
+        return;
+      }
+
+      const redirect = searchParams.get('redirect') || '';
+      setSuccess('Email verified successfully! Redirecting...');
+      dispatch(setUser(data.user));
+      await syncWishlistOnAuth(dispatch, guestWishlistItems);
+
+      setTimeout(() => {
+        router.push(redirect || '/');
+      }, 800);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, email, dispatch, router, searchParams, guestWishlistItems]);
+
+  const handleSubmit = useCallback((e) => {
+    if (e) e.preventDefault();
+    performVerification(otp.join(''));
+  }, [otp, performVerification]);
+
   const handleChange = (index, value) => {
     if (!/^\d*$/.test(value)) return;
 
@@ -66,53 +111,11 @@ function VerifyOTPContent() {
     inputRefs.current[5]?.focus();
   };
 
-  const handleSubmit = useCallback(async (e) => {
-    if (e) e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    const otpString = otp.join('');
-    if (otpString.length !== 6) {
-      setError('Please enter the complete 6-digit code');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp: otpString }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Verification failed');
-        return;
-      }
-
-      const redirect = searchParams.get('redirect') || '';
-      setSuccess('Email verified successfully! Redirecting...');
-      dispatch(setUser(data.user));
-      await syncWishlistOnAuth(dispatch, guestWishlistItems);
-
-      setTimeout(() => {
-        router.push(redirect || '/');
-      }, 1000);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [otp, email, dispatch, router, searchParams]);
-
   useEffect(() => {
-    if (otp.every((d) => d !== '') && otp.join('').length === 6) {
-      handleSubmit();
+    if (!loading && otp.every((d) => d !== '') && otp.join('').length === 6) {
+      performVerification(otp.join(''));
     }
-  }, [otp, handleSubmit]);
+  }, [otp, loading, performVerification]);
 
   const handleResend = async () => {
     if (!canResend) return;

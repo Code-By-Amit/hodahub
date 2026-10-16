@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { users } from '@/lib/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { users, orders } from '@/lib/db/schema';
+import { eq, and, gt, isNull, sql } from 'drizzle-orm';
 import { generateTokens, setAuthCookies } from '@/lib/auth';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
@@ -57,8 +57,6 @@ export async function POST(request) {
 
     // Automatically associate past guest orders with this account
     try {
-      const { orders } = await import('@/lib/db/schema');
-      const { isNull, sql } = await import('drizzle-orm');
       await db
         .update(orders)
         .set({ userId: user.id })

@@ -6,7 +6,7 @@ import { ArrowRight, Tag, Sparkles } from 'lucide-react';
 export default function FlashSale({ hasDiscounts = true }) {
   return (
     <section className="py-6">
-      <div className="max-w-4xl mx-auto px-1">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid md:grid-cols-2 gap-4">
           {/* Promotional Deals Banner */}
           {hasDiscounts && (

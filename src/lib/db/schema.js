@@ -389,6 +389,25 @@ export const banners = pgTable('banners', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// --- Happy Customers (Customer Screenshot Gallery) ---
+export const happyCustomers = pgTable(
+  'happy_customers',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    imageUrl: text('image_url').notNull(),
+    cloudinaryAssetId: varchar('cloudinary_asset_id', { length: 255 }),
+    caption: varchar('caption', { length: 500 }),
+    isActive: boolean('is_active').default(true).notNull(),
+    sortOrder: integer('sort_order').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('happy_customers_is_active_idx').on(table.isActive),
+    index('happy_customers_sort_order_idx').on(table.sortOrder),
+  ]
+);
+
 // --- Page Views Analytics ---
 export const pageViews = pgTable('page_views', {
   id: uuid('id').defaultRandom().primaryKey(),

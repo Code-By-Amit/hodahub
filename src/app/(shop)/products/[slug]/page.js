@@ -6,6 +6,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useDispatch, useSelector } from 'react-redux';
 import { addItem } from '@/lib/store/cartSlice';
+import { trackContact, trackViewContent, trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
+import { trackViewItem, trackAddToCart as trackGAAddToCart, trackContact as trackGAContact } from '@/lib/ga';
 import {
   addToWishlist,
   removeFromWishlist,
@@ -37,10 +39,14 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
   Edit3,
   Trash2,
   AlertCircle,
 } from 'lucide-react';
+import ReturnPolicyContent from '@/components/storefront/ReturnPolicyContent';
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
@@ -55,7 +61,7 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState('description');
+  const [returnPolicyOpen, setReturnPolicyOpen] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState([]);
@@ -139,6 +145,8 @@ export default function ProductDetailPage() {
       if (res.ok && data.product) {
         setProduct(data.product);
         setLoading(false);
+        trackViewContent(data.product);
+        trackViewItem(data.product);
 
         // Fetch "You May Also Like" products from same category or brand
         (async () => {
@@ -361,6 +369,8 @@ export default function ProductDetailPage() {
         selectedAddon,
       })
     );
+    trackPixelAddToCart(product, quantity);
+    trackGAAddToCart(product, quantity);
     toast.success(`${product.name} added to cart!`);
   }
 
@@ -786,6 +796,8 @@ export default function ProductDetailPage() {
               onClick={() => {
                 const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
                 const text = `Hi! I'm interested in *${product.name}*: ${currentUrl}`;
+                trackContact({ product });
+                trackGAContact({ method: 'whatsapp' });
                 const waUrl = toWhatsAppLink(whatsappNumber, text);
                 window.open(waUrl, '_blank');
               }}
@@ -795,85 +807,95 @@ export default function ProductDetailPage() {
               <span>Contact on WhatsApp</span>
             </button>
           )}
+
+          {/* Return & Exchange Policy Accordion */}
+          <div className="border border-warm-200 rounded-md bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setReturnPolicyOpen((open) => !open)}
+              aria-expanded={returnPolicyOpen}
+              aria-controls="return-policy-panel"
+              className="flex items-center justify-between w-full text-left px-3 py-2.5 font-bold text-[11px] sm:text-[12px] text-warm-900 uppercase tracking-wider transition-colors hover:bg-warm-50"
+            >
+              <span className="flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-warm-500" />
+                Return &amp; Exchange Policy
+              </span>
+              {returnPolicyOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-warm-500" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-warm-500" />
+              )}
+            </button>
+            <div
+              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                returnPolicyOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+              }`}
+              aria-hidden={!returnPolicyOpen}
+            >
+              <div id="return-policy-panel" className="overflow-hidden">
+                <div className="px-3 pb-3 pt-2.5 border-t border-warm-100">
+                  <ReturnPolicyContent compact />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Tabs: Description / Specifications / Reviews */}
-      <div className="border-t border-warm-200/80 pt-5">
-        <div className="flex gap-4 border-b border-warm-200 pb-px">
-          <button
-            onClick={() => setActiveTab('description')}
-            className={`pb-2 text-[11px] sm:text-[12px] font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'description'
-                ? 'border-warm-900 text-warm-900'
-                : 'border-transparent text-warm-500 hover:text-warm-800'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Overview & Details</span>
-          </button>
+      {/* Sequential Sections: Product Details & Customer Reviews */}
+      <div className="space-y-8 pt-6">
+        {/* Section 1: Overview & Details (Description & Specifications) */}
+        {(product.description || specifications.length > 0) && (
+          <section className="border-t border-warm-200/80 pt-6">
+            <h2 className="text-sm sm:text-base font-bold text-warm-900 tracking-tight mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-warm-700" />
+              <span>Overview &amp; Details</span>
+            </h2>
 
-          <button
-            onClick={() => setActiveTab('specifications')}
-            className={`pb-2 text-[11px] sm:text-[12px] font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'specifications'
-                ? 'border-warm-900 text-warm-900'
-                : 'border-transparent text-warm-500 hover:text-warm-800'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Specifications ({specifications.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('reviews')}
-            className={`pb-2 text-[11px] sm:text-[12px] font-bold border-b-2 transition-colors flex items-center gap-1.5 ${
-              activeTab === 'reviews'
-                ? 'border-warm-900 text-warm-900'
-                : 'border-transparent text-warm-500 hover:text-warm-800'
-            }`}
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Customer Reviews ({product.reviewCount})</span>
-          </button>
-        </div>
-
-        {/* Tab 1: Description */}
-        {activeTab === 'description' && (
-          <div className="py-4 max-w-3xl">
-            <p className="text-[11px] sm:text-[12px] text-warm-700 leading-relaxed whitespace-pre-wrap">
-              {product.description || 'No detailed description available for this item.'}
-            </p>
-          </div>
-        )}
-
-        {/* Tab 2: Specifications */}
-        {activeTab === 'specifications' && (
-          <div className="py-4 max-w-2xl">
-            {specifications.length === 0 ? (
-              <p className="text-[11px] text-warm-500">No specifications listed for this product.</p>
-            ) : (
-              <div className="border border-warm-200 rounded-md overflow-hidden bg-white shadow-xs">
-                <table className="w-full text-[11px] sm:text-[12px]">
-                  <tbody className="divide-y divide-warm-100">
-                    {specifications.map((spec, i) => (
-                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-warm-50/40'}>
-                        <td className="px-3 py-2 font-semibold text-warm-900 w-1/3 border-r border-warm-100">
-                          {spec.label}
-                        </td>
-                        <td className="px-3 py-2 text-warm-700">{spec.value}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {product.description && (
+              <div className="max-w-3xl mb-5">
+                <p className="text-[12px] sm:text-[13px] text-warm-700 leading-relaxed whitespace-pre-wrap">
+                  {product.description}
+                </p>
               </div>
             )}
-          </div>
+
+            {specifications.length > 0 && (
+              <div className="max-w-2xl mt-4">
+                <h3 className="text-xs sm:text-sm font-bold text-warm-900 mb-2 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-warm-600" />
+                  <span>Specifications</span>
+                </h3>
+                <div className="border border-warm-200 rounded-md overflow-hidden bg-white shadow-xs">
+                  <table className="w-full text-[11px] sm:text-[12px]">
+                    <tbody className="divide-y divide-warm-100">
+                      {specifications.map((spec, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-warm-50/40'}>
+                          <td className="px-3 py-2 font-semibold text-warm-900 w-1/3 border-r border-warm-100">
+                            {spec.label}
+                          </td>
+                          <td className="px-3 py-2 text-warm-700">{spec.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
         )}
 
-        {/* Tab 3: Reviews with Media Upload & Gallery */}
-        {activeTab === 'reviews' && (
-          <div className="py-4 max-w-3xl space-y-5">
+        {/* Section 2: Customer Reviews */}
+        <section className="border-t border-warm-200/80 pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm sm:text-base font-bold text-warm-900 tracking-tight flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-warm-700" />
+              <span>Customer Reviews ({product.reviewCount || reviews.length})</span>
+            </h2>
+          </div>
+
+          <div className="max-w-3xl space-y-5">
             {/* Public Review Guidance Banner */}
             <div className="p-3.5 bg-warm-50 border border-warm-200 rounded-md text-[11px] text-warm-700 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -957,7 +979,7 @@ export default function ProductDetailPage() {
               </p>
             )}
           </div>
-        )}
+        </section>
       </div>
 
       {/* Related Products Section ("You May Also Like") */}

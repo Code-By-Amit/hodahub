@@ -7,13 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:units": "node --test \"tests/*.test.mjs\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node src/lib/db/seed.js",
     "db:migrate-categories": "node src/lib/db/migrate-category-relations.js",
-    "db:migrate-addons": "node src/lib/db/migrate-addons.js"
+    "db:migrate-addons": "node src/lib/db/migrate-addons.js",
+    "db:migrate-happy-customers": "node src/lib/db/migrate-happy-customers.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

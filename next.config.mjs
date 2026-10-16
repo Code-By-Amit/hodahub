@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ['nontragical-untaxing-laurette.ngrok-free.dev'],
   reactCompiler: true,
   images: {
     remotePatterns: [

@@ -15,6 +15,8 @@ import { useToast } from '@/components/ui/Toast';
 import StarRating from '@/components/ui/StarRating';
 import QuickViewModal from '@/components/ui/QuickViewModal';
 import { formatCurrency } from '@/lib/utils';
+import { trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
+import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { Heart, ShoppingBag, Eye, Package } from 'lucide-react';
 
 export default function ProductCard({ product, variant = 'default' }) {
@@ -53,6 +55,8 @@ export default function ProductCard({ product, variant = 'default' }) {
       codAvailable: product?.codAvailable !== false,
       quantity: 1,
     }));
+    trackPixelAddToCart(product, 1);
+    trackGAAddToCart(product, 1);
     toast.success(`${name} added to cart!`);
   };
 

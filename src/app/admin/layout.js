@@ -20,12 +20,14 @@ import {
   X,
   Store,
   ChevronRight,
+  Smile,
   Image as ImageIcon,
 } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Banners', href: '/admin/banners', icon: ImageIcon },
+  { label: 'Happy Customers', href: '/admin/happy-customers', icon: Smile },
   { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Categories', href: '/admin/categories', icon: FolderTree },
   { label: 'Brands', href: '/admin/brands', icon: Tag },

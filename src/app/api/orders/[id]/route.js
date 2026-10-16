@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { orders, orderItems, orderStatusHistory, products, addresses, orderItemAddons } from '@/lib/db/schema';
 import { eq, desc, asc, inArray } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
+import { canAccessOrder } from '@/lib/order-access';
 
 export async function GET(request, { params }) {
   try {
@@ -21,20 +22,8 @@ export async function GET(request, { params }) {
     const accessCode = searchParams.get('accessCode');
 
     // Security check: enforce authorization for both registered and guest orders
-    if (order.userId) {
-      if (!user || (user.id !== order.userId && user.role !== 'admin')) {
-        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
-      }
-    } else {
-      // Guest order protection: require matching accessCode token, matching email session, or admin role
-      const isAuthorizedGuest =
-        (accessCode && order.accessCode && accessCode === order.accessCode) ||
-        (user && user.email === order.guestEmail) ||
-        (user && user.role === 'admin');
-
-      if (!isAuthorizedGuest) {
-        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
-      }
+    if (!canAccessOrder(user, order, accessCode)) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
     // Get items with product info (prioritize saved orderItems values with product join fallbacks)

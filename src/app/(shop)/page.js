@@ -7,6 +7,7 @@ import TrustBadges from '@/components/storefront/TrustBadges';
 import NewArrivals from '@/components/storefront/NewArrivals';
 import BestSellers from '@/components/storefront/BestSellers';
 import FlashSale from '@/components/storefront/FlashSale';
+import HappyCustomers from '@/components/storefront/HappyCustomers';
 
 export const metadata = {
   title: "HodaHub — Official Online Store",
@@ -53,6 +54,7 @@ export default async function HomePage() {
       <NewArrivals products={newArrivals} />
       <BestSellers products={bestSellers} />
       <FlashSale />
+      <HappyCustomers />
       <div className="border-t border-warm-200 mt-8">
         <TrustBadges />
       </div>

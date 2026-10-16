@@ -92,7 +92,8 @@ export default function OrderDetailPage() {
 
   async function fetchTracking(orderId) {
     try {
-      const res = await fetch(`/api/orders/${orderId}/tracking`);
+      const search = typeof window !== 'undefined' ? window.location.search : '';
+      const res = await fetch(`/api/orders/${orderId}/tracking${search}`);
       const data = await res.json();
       if (res.ok) {
         setTrackingInfo(data);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useRouter } from 'next/navigation';
 import {
@@ -28,6 +28,8 @@ import {
   FiMessageSquare,
 } from 'react-icons/fi';
 import { toWhatsAppLink } from '@/lib/zod-utils';
+import { trackContact, trackInitiateCheckout, trackPurchase as trackPixelPurchase } from '@/lib/metaPixel';
+import { trackBeginCheckout, trackPurchase as trackGAPurchase, trackContact as trackGAContact } from '@/lib/ga';
 import PhoneInput from '@/components/ui/PhoneInput';
 import FieldError from '@/components/ui/FieldError';
 import Script from 'next/script';
@@ -103,6 +105,24 @@ export default function CheckoutPage() {
   const shippingFee =
     subtotal >= storeSettings.minFreeShipping ? 0 : storeSettings.shippingFee;
   const total = Math.max(0, subtotal - discount + shippingFee);
+
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (!checkoutTracked.current && items.length > 0 && total > 0) {
+      checkoutTracked.current = true;
+      trackInitiateCheckout(items, total);
+      trackBeginCheckout({ items, value: total });
+    }
+  }, [items, total]);
+
+  const recordPurchase = (orderId, orderItems, orderTotal) => {
+    if (typeof window === 'undefined' || !orderId) return;
+    const dedupeKey = `hoda_purchase_tracked_${orderId}`;
+    if (sessionStorage.getItem(dedupeKey)) return;
+    sessionStorage.setItem(dedupeKey, '1');
+    trackPixelPurchase({ orderId, items: orderItems, total: orderTotal });
+    trackGAPurchase({ orderId, items: orderItems, value: orderTotal });
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.Razorpay) {
@@ -304,6 +324,8 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
         toast.error('WhatsApp checkout is currently unavailable.');
         return;
       }
+      trackContact({ source: 'whatsapp_checkout' });
+      trackGAContact({ method: 'whatsapp' });
       const waUrl = toWhatsAppLink(waNumber, waText);
       window.open(waUrl, '_blank');
       toast.success('WhatsApp opened with your complete order details!');
@@ -364,6 +386,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
 
       // Pure COD without online advance required
       if (createData.isCod && !createData.requiresAdvance) {
+        recordPurchase(createData.orderId, items, total);
         dispatch(clearCart());
         toast.success('Order placed successfully via Cash on Delivery!');
         const redirectUrl = `/orders/${createData.orderId}${createData.accessCode ? `?accessCode=${createData.accessCode}` : ''}`;
@@ -393,10 +416,12 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
             });
             const verifyData = await verifyRes.json();
             if (verifyRes.ok) {
+              const finalOrderId = verifyData.orderId || createData.orderId;
+              recordPurchase(finalOrderId, items, total);
               dispatch(clearCart());
               toast.success(createData.requiresAdvance ? 'COD advance paid! Order confirmed.' : 'Payment successful! Order placed.');
               const accessCode = verifyData.accessCode || createData.accessCode;
-              const redirectUrl = `/orders/${verifyData.orderId}${accessCode ? `?accessCode=${accessCode}` : ''}`;
+              const redirectUrl = `/orders/${finalOrderId}${accessCode ? `?accessCode=${accessCode}` : ''}`;
               router.push(redirectUrl);
             } else {
               toast.error(verifyData.error || 'Payment verification failed');
