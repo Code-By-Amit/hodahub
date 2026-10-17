@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import ProductCard from '@/components/ui/ProductCard';
 import Pagination from '@/components/ui/Pagination';
@@ -8,6 +8,9 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
 import { Search, Filter, X, SlidersHorizontal, Package } from 'lucide-react';
+import useShopProducts from '@/hooks/useShopProducts';
+import useShopCategories from '@/hooks/useShopCategories';
+import useShopBrands from '@/hooks/useShopBrands';
 
 const sortOptions = [
   { label: 'Newest Arrivals', value: 'newest' },
@@ -20,11 +23,6 @@ const sortOptions = [
 export default function ProductsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
-  const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
   const currentSort = searchParams.get('sort') || 'newest';
@@ -37,50 +35,22 @@ export default function ProductsPage() {
   const [minPrice, setMinPrice] = useState(currentMinPrice);
   const [maxPrice, setMaxPrice] = useState(currentMaxPrice);
 
-  useEffect(() => {
-    fetchCategories();
-    fetchBrands();
-  }, []);
+  const { categories } = useShopCategories();
+  const { brands } = useShopBrands();
 
-  useEffect(() => {
-    fetchProducts();
-  }, [currentSort, currentCategory, currentBrand, currentMinPrice, currentMaxPrice, currentPage]);
-
-  async function fetchCategories() {
-    try {
-      const res = await fetch('/api/categories');
-      const data = await res.json();
-      setCategories(data.categories || []);
-    } catch { }
-  }
-
-  async function fetchBrands() {
-    try {
-      const res = await fetch('/api/brands');
-      const data = await res.json();
-      setBrands(data.brands || []);
-    } catch { }
-  }
-
-  async function fetchProducts() {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', currentPage.toString());
-      params.set('limit', '12');
-      params.set('sort', currentSort);
-      if (currentCategory) params.set('category', currentCategory);
-      if (currentBrand) params.set('brand', currentBrand);
-      if (currentMinPrice) params.set('minPrice', currentMinPrice);
-      if (currentMaxPrice) params.set('maxPrice', currentMaxPrice);
-
-      const res = await fetch(`/api/products?${params}`);
-      const data = await res.json();
-      setProducts(data.products || []);
-      setPagination(data.pagination || { page: 1, totalPages: 1, total: 0 });
-    } catch { }
-    setLoading(false);
-  }
+  const {
+    products,
+    pagination,
+    isLoading: loading,
+  } = useShopProducts({
+    page: currentPage,
+    limit: 12,
+    sort: currentSort,
+    category: currentCategory,
+    brand: currentBrand,
+    minPrice: currentMinPrice,
+    maxPrice: currentMaxPrice,
+  });
 
   function updateFilters(updates) {
     const params = new URLSearchParams(searchParams);
@@ -129,7 +99,7 @@ export default function ProductsPage() {
           : `Explore quality curated items for your home and lifestyle (${pagination.total} total)`;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+    <div className="max-w-4xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Breadcrumb Navigation */}
       <Breadcrumbs items={[{ label: pageTitle, href: '/products' }]} />
 
@@ -238,10 +208,10 @@ export default function ProductsPage() {
       )}
 
       {/* Main Grid Layout */}
-      <div className="flex gap-5">
+      <div className="flex gap-5 items-start">
         {/* Desktop Filter Sidebar */}
         <aside className="hidden lg:block w-48 shrink-0">
-          <div className="bg-white border border-warm-200 rounded-lg p-3 shadow-xs sticky top-20">
+          <div className="bg-white border border-warm-200 rounded-lg p-2.5 shadow-2xs sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto scrollbar-thin">
             <FilterPanel
               categories={categories}
               brands={brands}
@@ -264,14 +234,14 @@ export default function ProductsPage() {
         {/* Product List Content */}
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="aspect-square bg-warm-100 rounded-md animate-pulse" />
               ))}
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

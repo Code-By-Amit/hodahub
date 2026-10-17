@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { usersApi } from '@/lib/apiClient/users.api';
 
 /**
  * @typedef {Object} AdminUserRecord
@@ -35,20 +36,7 @@ export function useAdminUsers({ page = 1, limit = 20, search = '' } = {}) {
   const queryClient = useQueryClient();
   const trimmedSearch = search.trim();
 
-  const fetchUsers = async (p, l, s) => {
-    const params = new URLSearchParams({
-      page: String(p),
-      limit: String(l),
-    });
-    if (s) params.set('search', s);
-
-    const res = await fetch(`/api/admin/users?${params.toString()}`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to fetch users');
-    }
-    return res.json();
-  };
+  const fetchUsers = (p, l, s) => usersApi.getAdmin({ page: p, limit: l, search: s });
 
   const queryKey = ['admin', 'users', { page, limit, search: trimmedSearch }];
 
@@ -56,6 +44,8 @@ export function useAdminUsers({ page = 1, limit = 20, search = '' } = {}) {
     queryKey,
     queryFn: () => fetchUsers(page, limit, trimmedSearch),
     staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    placeholderData: (previousData) => previousData,
   });
 
   // Prefetch next page if available
@@ -73,18 +63,7 @@ export function useAdminUsers({ page = 1, limit = 20, search = '' } = {}) {
 
   // Mutation with optimistic updates for changing user roles
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }) => {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, role }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update user role');
-      }
-      return data;
-    },
+    mutationFn: ({ userId, role }) => usersApi.updateRole({ userId, role }),
     onMutate: async ({ userId, role }) => {
       // Cancel outgoing refetches so they don't overwrite optimistic update
       await queryClient.cancelQueries({ queryKey: ['admin', 'users'] });
@@ -110,26 +89,21 @@ export function useAdminUsers({ page = 1, limit = 20, search = '' } = {}) {
         queryClient.setQueryData(queryKey, context.previousData);
       }
     },
-    onSettled: () => {
-      // Invalidate queries to ensure server consistency
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    onSuccess: (data, { userId, role }) => {
+      // Reconcile across all admin user queries without refetching the whole list
+      queryClient.setQueriesData({ queryKey: ['admin', 'users'] }, (oldData) => {
+        if (!oldData?.users) return oldData;
+        return {
+          ...oldData,
+          users: oldData.users.map((u) => (u.id === userId ? { ...u, role } : u)),
+        };
+      });
     },
   });
 
   // Mutation for creating a new admin user
   const createAdminMutation = useMutation({
-    mutationFn: async (payload) => {
-      const res = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create admin user');
-      }
-      return data;
-    },
+    mutationFn: (payload) => usersApi.createAdmin(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
     },

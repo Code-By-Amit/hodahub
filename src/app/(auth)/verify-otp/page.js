@@ -7,6 +7,7 @@ import { setUser } from '@/lib/store/authSlice';
 import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, CheckCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 function VerifyOTPContent() {
   const router = useRouter();
@@ -50,18 +51,7 @@ function VerifyOTPContent() {
     setSuccess('');
 
     try {
-      const res = await fetch('/api/auth/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, otp: otpString }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Verification failed');
-        return;
-      }
+      const data = await authApi.verifyOtp({ email, otp: otpString });
 
       const redirect = searchParams.get('redirect') || '';
       setSuccess('Email verified successfully! Redirecting...');
@@ -71,8 +61,8 @@ function VerifyOTPContent() {
       setTimeout(() => {
         router.push(redirect || '/');
       }, 800);
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setError(err.message || 'Verification failed');
     } finally {
       setLoading(false);
     }
@@ -123,26 +113,15 @@ function VerifyOTPContent() {
     setSuccess('');
 
     try {
-      const res = await fetch('/api/auth/resend-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Failed to resend OTP');
-        return;
-      }
+      await authApi.resendOtp({ email });
 
       setSuccess('A new OTP has been sent to your email!');
       setOtp(['', '', '', '', '', '']);
       setResendTimer(60);
       setCanResend(false);
       inputRefs.current[0]?.focus();
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setError(err.message || 'Failed to resend OTP');
     }
   };
 

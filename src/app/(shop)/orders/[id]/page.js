@@ -25,6 +25,9 @@ import {
   FiPhoneCall,
   FiStar,
 } from 'react-icons/fi';
+import { ordersApi } from '@/lib/apiClient/orders.api';
+import { paymentsApi } from '@/lib/apiClient/payments.api';
+import { productsApi } from '@/lib/apiClient/products.api';
 
 const statusSteps = ['pending', 'confirmed', 'packed', 'shipped', 'delivered'];
 const statusIcons = { pending: FiPackage, confirmed: FiCheck, packed: FiPackage, shipped: FiTruck, delivered: FiMapPin };
@@ -75,9 +78,8 @@ export default function OrderDetailPage() {
   async function fetchOrder() {
     try {
       const search = typeof window !== 'undefined' ? window.location.search : '';
-      const res = await fetch(`/api/orders/${id}${search}`);
-      const data = await res.json();
-      if (res.ok) {
+      const data = await ordersApi.getById(id, search);
+      if (data?.order) {
         setOrder(data.order);
         setItems(data.items || []);
         setHistory(data.history || []);
@@ -93,9 +95,8 @@ export default function OrderDetailPage() {
   async function fetchTracking(orderId) {
     try {
       const search = typeof window !== 'undefined' ? window.location.search : '';
-      const res = await fetch(`/api/orders/${orderId}/tracking${search}`);
-      const data = await res.json();
-      if (res.ok) {
+      const data = await ordersApi.getTracking(orderId, search);
+      if (data) {
         setTrackingInfo(data);
       }
     } catch {}
@@ -109,21 +110,12 @@ export default function OrderDetailPage() {
     }
     setCancelling(true);
     try {
-      const res = await fetch(`/api/orders/${id}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: cancelReason }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || 'Order cancelled!');
-        setShowCancelModal(false);
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to cancel order');
-      }
-    } catch {
-      toast.error('Network error');
+      const data = await ordersApi.cancel(id, { reason: cancelReason });
+      toast.success(data?.message || 'Order cancelled!');
+      setShowCancelModal(false);
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel order');
     }
     setCancelling(false);
   }
@@ -136,21 +128,12 @@ export default function OrderDetailPage() {
     }
     setReturning(true);
     try {
-      const res = await fetch(`/api/orders/${id}/return`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: returnReason }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || 'Return request submitted!');
-        setShowReturnModal(false);
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to submit return');
-      }
-    } catch {
-      toast.error('Network error');
+      const data = await ordersApi.returnOrder(id, { reason: returnReason });
+      toast.success(data?.message || 'Return request submitted!');
+      setShowReturnModal(false);
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit return');
     }
     setReturning(false);
   }
@@ -163,10 +146,9 @@ export default function OrderDetailPage() {
   async function handleRetryPayment() {
     setRetryingPayment(true);
     try {
-      const res = await fetch(`/api/payment/retry/${order.id}`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to start payment retry');
+      const data = await paymentsApi.retry(order.id);
+      if (!data) {
+        toast.error('Failed to start payment retry');
         setRetryingPayment(false);
         return;
       }
@@ -180,25 +162,16 @@ export default function OrderDetailPage() {
         order_id: data.razorpayOrderId,
         handler: async function (response) {
           try {
-            const verifyRes = await fetch('/api/payment/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderId: order.id,
-              }),
+            await paymentsApi.verify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              orderId: order.id,
             });
-            const verifyData = await verifyRes.json();
-            if (verifyRes.ok) {
-              toast.success('Payment successful!');
-              fetchOrder();
-            } else {
-              toast.error(verifyData.error || 'Payment verification failed');
-            }
-          } catch {
-            toast.error('Payment verification error');
+            toast.success('Payment successful!');
+            fetchOrder();
+          } catch (err) {
+            toast.error(err.message || 'Payment verification failed');
           }
           setRetryingPayment(false);
         },
@@ -218,8 +191,8 @@ export default function OrderDetailPage() {
         setRetryingPayment(false);
       });
       rzp.open();
-    } catch {
-      toast.error('Error opening payment window');
+    } catch (err) {
+      toast.error(err.message || 'Error opening payment window');
       setRetryingPayment(false);
     }
   }
@@ -233,27 +206,18 @@ export default function OrderDetailPage() {
     }
     setSubmittingReview(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(reviewModalItem.productSlug)}/reviews`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rating: Number(reviewRating),
-          comment: reviewComment.trim(),
-          mediaUrls: reviewMediaUrls,
-        }),
+      await productsApi.createReview(reviewModalItem.productSlug, {
+        rating: Number(reviewRating),
+        comment: reviewComment.trim(),
+        mediaUrls: reviewMediaUrls,
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Review submitted successfully!');
-        setReviewModalItem(null);
-        setReviewComment('');
-        setReviewMediaUrls([]);
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to submit review');
-      }
-    } catch {
-      toast.error('Network error submitting review');
+      toast.success('Review submitted successfully!');
+      setReviewModalItem(null);
+      setReviewComment('');
+      setReviewMediaUrls([]);
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit review');
     }
     setSubmittingReview(false);
   }

@@ -8,10 +8,15 @@ export async function GET(request, { params }) {
   try {
     const { slug } = await params;
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+    const categoryCondition = isUuid
+      ? or(eq(categories.slug, slug), eq(categories.id, slug))
+      : eq(categories.slug, slug);
+
     const [category] = await db
       .select()
       .from(categories)
-      .where(eq(categories.slug, slug))
+      .where(categoryCondition)
       .limit(1);
 
     if (!category) {

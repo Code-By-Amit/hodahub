@@ -35,6 +35,9 @@ import FieldError from '@/components/ui/FieldError';
 import Script from 'next/script';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatCurrency } from '@/lib/utils';
+import { settingsApi } from '@/lib/apiClient/settings.api';
+import { addressesApi } from '@/lib/apiClient/addresses.api';
+import { paymentsApi } from '@/lib/apiClient/payments.api';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -207,9 +210,8 @@ export default function CheckoutPage() {
 
   async function fetchStoreSettings() {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (res.ok && data.settings) {
+      const data = await settingsApi.getPublic();
+      if (data?.settings) {
         setStoreSettings({
           codEnabled: data.settings.codEnabled ?? true,
           shippingFee: Number(data.settings.shippingFee || 0),
@@ -223,9 +225,8 @@ export default function CheckoutPage() {
 
   async function fetchAddresses() {
     try {
-      const res = await fetch('/api/addresses');
-      const data = await res.json();
-      if (res.ok) {
+      const data = await addressesApi.getAll();
+      if (data) {
         setAddresses(data.addresses || []);
         const def = data.addresses?.find((a) => a.isDefault);
         if (def) setSelectedAddress(def.id);
@@ -242,21 +243,16 @@ export default function CheckoutPage() {
     }
     setAddrLoading(true);
     try {
-      const res = await fetch('/api/addresses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addrForm),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await addressesApi.create(addrForm);
+      if (data?.address) {
         toast.success('Address added!');
         setAddrForm({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
         setShowAddForm(false);
         fetchAddresses();
         setSelectedAddress(data.address.id);
-      } else toast.error(data.error);
-    } catch {
-      toast.error('Failed to add address');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to add address');
     }
     setAddrLoading(false);
   }
@@ -371,15 +367,11 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
             paymentMethod,
           };
 
-      const createRes = await fetch('/api/payment/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const createData = await createRes.json();
-      if (!createRes.ok) {
-        toast.error(createData.error || 'Failed to create order');
+      let createData;
+      try {
+        createData = await paymentsApi.createOrder(payload);
+      } catch (err) {
+        toast.error(err.message || 'Failed to create order');
         setPaying(false);
         return;
       }
@@ -404,30 +396,21 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
         order_id: createData.razorpayOrderId,
         handler: async function (response) {
           try {
-            const verifyRes = await fetch('/api/payment/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderId: createData.orderId,
-              }),
+            const verifyData = await paymentsApi.verify({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              orderId: createData.orderId,
             });
-            const verifyData = await verifyRes.json();
-            if (verifyRes.ok) {
-              const finalOrderId = verifyData.orderId || createData.orderId;
-              recordPurchase(finalOrderId, items, total);
-              dispatch(clearCart());
-              toast.success(createData.requiresAdvance ? 'COD advance paid! Order confirmed.' : 'Payment successful! Order placed.');
-              const accessCode = verifyData.accessCode || createData.accessCode;
-              const redirectUrl = `/orders/${finalOrderId}${accessCode ? `?accessCode=${accessCode}` : ''}`;
-              router.push(redirectUrl);
-            } else {
-              toast.error(verifyData.error || 'Payment verification failed');
-            }
-          } catch {
-            toast.error('Payment verification error');
+            const finalOrderId = verifyData?.orderId || createData.orderId;
+            recordPurchase(finalOrderId, items, total);
+            dispatch(clearCart());
+            toast.success(createData.requiresAdvance ? 'COD advance paid! Order confirmed.' : 'Payment successful! Order placed.');
+            const accessCode = verifyData?.accessCode || createData.accessCode;
+            const redirectUrl = `/orders/${finalOrderId}${accessCode ? `?accessCode=${accessCode}` : ''}`;
+            router.push(redirectUrl);
+          } catch (err) {
+            toast.error(err.message || 'Payment verification failed');
           }
           setPaying(false);
         },

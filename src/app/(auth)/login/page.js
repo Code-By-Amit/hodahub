@@ -14,6 +14,7 @@ import PasswordInput from '@/components/ui/PasswordInput';
 import { loginSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
 import { useMsg91Otp } from '@/hooks/useMsg91Otp';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 function LoginContent() {
   const router = useRouter();
@@ -145,43 +146,33 @@ function LoginContent() {
     setEmailLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailForm.email.trim(),
-          password: emailForm.password,
-        }),
+      const data = await authApi.login({
+        email: emailForm.email.trim(),
+        password: emailForm.password,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.requiresVerification) {
-          router.push(
-            `/verify-otp?email=${encodeURIComponent(data.email)}${
-              redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''
-            }`
-          );
-          return;
-        }
-        setEmailServerErrors(data);
-        setEmailError(data.error || 'Login failed');
-        return;
-      }
 
       dispatch(setUser(data.user));
       await syncWishlistOnAuth(dispatch, guestWishlistItems);
 
-      if (data.user.role === 'admin') {
+      if (data.user?.role === 'admin') {
         router.push('/admin');
       } else if (redirect) {
         router.push(redirect);
       } else {
         router.push('/');
       }
-    } catch {
-      setEmailError('Network error. Please try again.');
+    } catch (err) {
+      if (err.requiresVerification || err.data?.requiresVerification) {
+        const targetEmail = err.email || err.data?.email || emailForm.email.trim();
+        router.push(
+          `/verify-otp?email=${encodeURIComponent(targetEmail)}${
+            redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''
+          }`
+        );
+        return;
+      }
+      setEmailServerErrors({ errors: err.errors, error: err.message });
+      setEmailError(err.message || 'Login failed');
     } finally {
       setEmailLoading(false);
     }
@@ -391,7 +382,7 @@ function LoginContent() {
                   id="login-password"
                   value={emailForm.password}
                   onChange={(e) => handleEmailChange('password', e.target.value)}
-                  className={`pl-8 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
+                  className={`pl-8 h-6 bg-white border rounded-md text-[11px] text-warm-900 placeholder-warm-400 focus:outline-none transition-all ${
                     emailErrors.password ? 'border-red-500 bg-red-50/20' : 'border-warm-200 focus:border-brand-600'
                   }`}
                   placeholder="Enter password"

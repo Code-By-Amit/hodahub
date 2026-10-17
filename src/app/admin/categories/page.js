@@ -9,29 +9,16 @@ import FieldError from '@/components/ui/FieldError';
 import { categorySchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
 
+import useAdminCategories from '@/hooks/useAdminCategories';
+
 export default function AdminCategoriesPage() {
   const toast = useToast();
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { categories, isLoading: loading, saveCategory, isSaving: saving, deleteCategory } = useAdminCategories();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentIds: [] });
   const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
   const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
-
-  useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  async function fetchCategories() {
-    try {
-      const res = await fetch('/api/admin/categories');
-      const data = await res.json();
-      setCategories(data.categories || []);
-    } catch {}
-    setLoading(false);
-  }
 
   function startEdit(cat) {
     setEditingId(cat.id);
@@ -82,41 +69,19 @@ export default function AdminCategoriesPage() {
       return;
     }
     setErrors({});
-    setSaving(true);
     try {
-      const url = editingId ? `/api/admin/categories/${editingId}` : '/api/admin/categories';
-      const method = editingId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingId ? 'Category updated!' : 'Category created!');
-        resetForm();
-        fetchCategories();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to save category');
-      }
-    } catch {
-      toast.error('Network error');
+      await saveCategory({ id: editingId, payload });
+      resetForm();
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
     }
-    setSaving(false);
   }
 
   async function handleDelete(id, name) {
     if (!confirm(`Delete "${name}"?`)) return;
     try {
-      const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Category deleted');
-        fetchCategories();
-      } else toast.error('Failed to delete category');
-    } catch {
-      toast.error('Error deleting category');
-    }
+      await deleteCategory(id);
+    } catch {}
   }
 
   const availableParents = categories.filter((c) => c.id !== editingId);

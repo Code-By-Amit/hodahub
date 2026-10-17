@@ -5,6 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { setUser, clearUser } from '@/lib/store/authSlice';
 import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 export default function AuthHydrator({ children }) {
   const dispatch = useDispatch();
@@ -14,9 +15,8 @@ export default function AuthHydrator({ children }) {
   useEffect(() => {
     async function hydrateAuth() {
       try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const data = await res.json();
+        const data = await authApi.me();
+        if (data?.user) {
           dispatch(setUser(data.user));
 
           if (!syncAttempted.current) {

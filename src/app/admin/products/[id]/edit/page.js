@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { ProductForm } from '../../new/page';
+import { productsApi } from '@/lib/apiClient/products.api';
 
 export default function EditProductPage() {
   const { id } = useParams();
@@ -12,9 +13,8 @@ export default function EditProductPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/admin/products/${id}`);
-        const data = await res.json();
-        if (res.ok) {
+        const data = await productsApi.getAdminById(id);
+        if (data?.product) {
           const p = data.product;
           setInitialData({
             name: p.name, slug: p.slug, description: p.description || '',

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { formatIndianMobile, extract10DigitMobile } from '@/lib/msg91';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 const MSG91_SCRIPT_URL = 'https://verify.msg91.com/otp-provider.js';
 
@@ -442,20 +443,13 @@ export function useMsg91Otp() {
         try {
           console.log('[MSG91] Verifying access token server-side with phone binding...');
           const claimedPhone = phone || lastPhoneRef.current;
-          const res = await fetch('/api/auth/msg91/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              accessToken,
-              phone: claimedPhone,
-            }),
+          const data = await authApi.verifyMsg91Otp({
+            accessToken,
+            phone: claimedPhone,
           });
 
-          const data = await res.json();
-          console.log('[MSG91] Server verify response:', res.status, data?.success ? 'success' : 'failed');
-
-          if (!res.ok || !data.success) {
-            const err = data.error || 'Server-side token verification failed';
+          if (!data?.success) {
+            const err = data?.error || 'Server-side token verification failed';
             setOtpState('error');
             setErrorMessage(err);
             return resolve({ success: false, error: err });

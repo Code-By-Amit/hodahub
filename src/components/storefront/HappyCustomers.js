@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { selectVisibleScreenshots } from '@/lib/happy-customers';
+import { happyCustomersApi } from '@/lib/apiClient/happyCustomers.api';
 
 export default function HappyCustomers() {
   const [screenshots, setScreenshots] = useState([]);
@@ -16,8 +17,7 @@ export default function HappyCustomers() {
   useEffect(() => {
     async function fetchScreenshots() {
       try {
-        const res = await fetch('/api/happy-customers');
-        const data = await res.json();
+        const data = await happyCustomersApi.getAll();
         setScreenshots(data.happyCustomers || []);
       } catch {
         setScreenshots([]);
@@ -79,7 +79,7 @@ export default function HappyCustomers() {
                 type="button"
                 onClick={goPrev}
                 aria-label="Previous screenshot"
-                className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-white border border-warm-200 items-center justify-center text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors shadow-xs"
+                className="hidden sm:flex w-10 h-10 shrink-0 rounded-full bg-white border border-warm-200 items-center justify-center text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-900"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -110,18 +110,22 @@ export default function HappyCustomers() {
               )}
 
               {visible.length > 1 && (
-                <div className="mt-2.5 flex items-center justify-center gap-1.5">
+                <div className="mt-1 flex items-center justify-center">
                   {visible.map((item, i) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => setCurrentIndex(i)}
-                      aria-label={`Go to screenshot ${i + 1}`}
+                      aria-label={`Go to screenshot ${i + 1} of ${visible.length}`}
                       aria-current={activeIndex === i}
-                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                        activeIndex === i ? 'w-4 bg-warm-900' : 'w-1.5 bg-warm-300 hover:bg-warm-400'
-                      }`}
-                    />
+                      className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-900 rounded-full transition-transform active:scale-95"
+                    >
+                      <span
+                        className={`h-1.5 rounded-full transition-all block ${
+                          activeIndex === i ? 'w-4 bg-warm-900' : 'w-1.5 bg-warm-300 hover:bg-warm-400'
+                        }`}
+                      />
+                    </button>
                   ))}
                 </div>
               )}
@@ -132,7 +136,7 @@ export default function HappyCustomers() {
                 type="button"
                 onClick={goNext}
                 aria-label="Next screenshot"
-                className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-white border border-warm-200 items-center justify-center text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors shadow-xs"
+                className="hidden sm:flex w-10 h-10 shrink-0 rounded-full bg-white border border-warm-200 items-center justify-center text-warm-600 hover:text-warm-900 hover:bg-warm-100 transition-colors shadow-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-900"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

@@ -9,6 +9,8 @@ import ProductCard from '@/components/ui/ProductCard';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { useToast } from '@/components/ui/Toast';
 import { Heart, Trash2, ArrowRight, ShoppingBag } from 'lucide-react';
+import { productsApi } from '@/lib/apiClient/products.api';
+import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
 export default function WishlistPage() {
   const dispatch = useDispatch();
@@ -21,13 +23,8 @@ export default function WishlistPage() {
     const checkWishlistAvailability = async () => {
       try {
         const productIds = wishlistItems.map((i) => i.id);
-        const res = await fetch('/api/products/check-availability', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productIds }),
-        });
-        const data = await res.json();
-        if (res.ok && data.unavailableItems && data.unavailableItems.length > 0) {
+        const data = await productsApi.checkAvailability({ productIds });
+        if (data?.unavailableItems && data.unavailableItems.length > 0) {
           for (const unitem of data.unavailableItems) {
             dispatch(removeFromWishlist(unitem.id));
             toast.warning(`"${unitem.name}" was removed from your wishlist as it is no longer available.`);
@@ -48,9 +45,7 @@ export default function WishlistPage() {
         // Clear each item in database
         try {
           await Promise.all(
-            wishlistItems.map((item) =>
-              fetch(`/api/wishlist/${item.id}`, { method: 'DELETE' })
-            )
+            wishlistItems.map((item) => wishlistApi.remove(item.id))
           );
         } catch {}
       }

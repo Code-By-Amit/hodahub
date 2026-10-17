@@ -9,6 +9,9 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
 import { Search, Filter, X, SlidersHorizontal, Package } from 'lucide-react';
+import { productsApi } from '@/lib/apiClient/products.api';
+import { categoriesApi } from '@/lib/apiClient/categories.api';
+import { brandsApi } from '@/lib/apiClient/brands.api';
 
 const sortOptions = [
   { label: 'Relevance', value: 'newest' },
@@ -48,20 +51,20 @@ function SearchContent() {
     async function search() {
       setLoading(true);
       try {
-        const params = new URLSearchParams();
-        if (query) params.set('search', query);
-        params.set('page', page.toString());
-        params.set('limit', '12');
-        params.set('sort', currentSort);
-        if (currentCategory) params.set('category', currentCategory);
-        if (currentBrand) params.set('brand', currentBrand);
-        if (currentMinPrice) params.set('minPrice', currentMinPrice);
-        if (currentMaxPrice) params.set('maxPrice', currentMaxPrice);
+        const params = {
+          search: query || undefined,
+          page,
+          limit: 12,
+          sort: currentSort,
+          category: currentCategory || undefined,
+          brand: currentBrand || undefined,
+          minPrice: currentMinPrice || undefined,
+          maxPrice: currentMaxPrice || undefined,
+        };
 
-        const res = await fetch(`/api/products?${params.toString()}`);
-        const data = await res.json();
-        setProducts(data.products || []);
-        setPagination(data.pagination || { page: 1, totalPages: 1, total: 0 });
+        const data = await productsApi.getAll(params);
+        setProducts(data?.products || []);
+        setPagination(data?.pagination || { page: 1, totalPages: 1, total: 0 });
       } catch {}
       setLoading(false);
     }
@@ -70,18 +73,16 @@ function SearchContent() {
 
   async function fetchCategories() {
     try {
-      const res = await fetch('/api/categories');
-      const data = await res.json();
-      setCategories(data.categories || []);
-      setAllCategoriesList(data.allCategories || data.categories || []);
+      const data = await categoriesApi.getAll();
+      setCategories(data?.categories || []);
+      setAllCategoriesList(data?.allCategories || data?.categories || []);
     } catch {}
   }
 
   async function fetchBrands() {
     try {
-      const res = await fetch(`/api/brands${query ? '?search=' + encodeURIComponent(query) : ''}`);
-      const data = await res.json();
-      setBrands(data.brands || []);
+      const data = await brandsApi.getAll(query ? { search: query } : undefined);
+      setBrands(data?.brands || []);
     } catch {}
   }
 
@@ -263,9 +264,9 @@ function SearchContent() {
       )}
 
       {/* Layout Grid */}
-      <div className="flex gap-8">
+      <div className="flex gap-8 items-start">
         <aside className="hidden lg:block w-64 shrink-0">
-          <div className="bg-white border border-warm-200 rounded-xl p-5 shadow-xs sticky top-24">
+          <div className="bg-white border border-warm-200 rounded-xl p-4 shadow-xs sticky top-24 max-h-[calc(100vh-6.5rem)] overflow-y-auto scrollbar-thin">
             <FilterPanel
               categories={categories}
               brands={brands}
@@ -286,14 +287,14 @@ function SearchContent() {
 
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="aspect-square bg-warm-100 rounded-xl animate-pulse" />
               ))}
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

@@ -8,6 +8,7 @@ import FieldError from '@/components/ui/FieldError';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { ArrowLeft, ArrowRight, Lock, Mail, Key } from 'lucide-react';
 import { forgotPasswordSchema, resetPasswordSchema } from '@/lib/validations';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -41,21 +42,14 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await authApi.forgotPassword({ email: email.trim() });
+      if (data) {
         toast.success(data.message || 'Verification code sent!');
         setStep(2);
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to request reset code');
       }
-    } catch {
-      toast.error('Network error. Please try again.');
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
+      toast.error(err.message || 'Failed to request reset code');
     }
     setLoading(false);
   }
@@ -76,21 +70,14 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), otp, newPassword }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await authApi.resetPassword({ email: email.trim(), otp, newPassword });
+      if (data) {
         toast.success(data.message || 'Password reset successfully!');
         router.push('/login');
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to reset password');
       }
-    } catch {
-      toast.error('Network error. Please try again.');
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
+      toast.error(err.message || 'Failed to reset password');
     }
     setLoading(false);
   }

@@ -8,12 +8,22 @@ import { useToast } from '@/components/ui/Toast';
 import NumericInput from '@/components/ui/NumericInput';
 import { Edit2, ExternalLink, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
 
+import useAdminBanners from '@/hooks/useAdminBanners';
+
 export default function AdminBannersPage() {
   const toast = useToast();
-  const [banners, setBanners] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    banners,
+    isLoading: loading,
+    toggleStatus,
+    isToggling,
+    togglingId,
+    saveBanner,
+    isSaving: saving,
+    deleteBanner,
+  } = useAdminBanners();
+
   const [modalOpen, setModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editingBanner, setEditingBanner] = useState(null);
 
   const [form, setForm] = useState({
@@ -24,22 +34,6 @@ export default function AdminBannersPage() {
     isActive: true,
     sortOrder: 0,
   });
-
-  useEffect(() => {
-    fetchBanners();
-  }, []);
-
-  async function fetchBanners() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/banners');
-      const data = await res.json();
-      setBanners(data.banners || []);
-    } catch {
-      toast.error('Failed to load banners');
-    }
-    setLoading(false);
-  }
 
   function handleOpenCreate() {
     setEditingBanner(null);
@@ -73,60 +67,23 @@ export default function AdminBannersPage() {
       toast.error('Banner image or title is required');
       return;
     }
-    setSaving(true);
     try {
-      const url = editingBanner ? `/api/admin/banners/${editingBanner.id}` : '/api/admin/banners';
-      const method = editingBanner ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingBanner ? 'Banner updated!' : 'Banner created!');
-        setModalOpen(false);
-        fetchBanners();
-      } else {
-        toast.error(data.error || 'Failed to save banner');
-      }
-    } catch {
-      toast.error('Network error');
-    }
-    setSaving(false);
+      await saveBanner({ id: editingBanner?.id, payload: form });
+      setModalOpen(false);
+    } catch {}
   }
 
   async function handleDelete(id) {
     if (!confirm('Are you sure you want to delete this banner?')) return;
     try {
-      const res = await fetch(`/api/admin/banners/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Banner deleted');
-        fetchBanners();
-      } else {
-        toast.error('Failed to delete banner');
-      }
-    } catch {
-      toast.error('Error deleting banner');
-    }
+      await deleteBanner(id);
+    } catch {}
   }
 
-  async function toggleActive(b) {
+  async function handleToggleActive(b) {
     try {
-      const res = await fetch(`/api/admin/banners/${b.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...b, isActive: !b.isActive }),
-      });
-      if (res.ok) {
-        toast.success(`Banner ${!b.isActive ? 'activated' : 'deactivated'}`);
-        fetchBanners();
-      }
-    } catch {
-      toast.error('Error toggling banner status');
-    }
+      await toggleStatus(b);
+    } catch {}
   }
 
   return (
@@ -196,12 +153,20 @@ export default function AdminBannersPage() {
                 <td className="px-3 py-2.5 text-center font-bold text-warm-900 text-[11px]">{b.sortOrder}</td>
                 <td className="px-3 py-2.5 text-center">
                   <button
-                    onClick={() => toggleActive(b)}
-                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize inline-flex items-center gap-1 ${
+                    type="button"
+                    disabled={isToggling && togglingId === b.id}
+                    onClick={() => handleToggleActive(b)}
+                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize inline-flex items-center gap-1 transition-all cursor-pointer disabled:opacity-60 ${
                       b.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-warm-100 text-warm-500'
                     }`}
                   >
-                    {b.isActive ? <Eye className="w-2.5 h-2.5" /> : <EyeOff className="w-2.5 h-2.5" />}
+                    {isToggling && togglingId === b.id ? (
+                      <span className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                    ) : b.isActive ? (
+                      <Eye className="w-2.5 h-2.5" />
+                    ) : (
+                      <EyeOff className="w-2.5 h-2.5" />
+                    )}
                     {b.isActive ? 'Active' : 'Inactive'}
                   </button>
                 </td>

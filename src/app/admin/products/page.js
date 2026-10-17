@@ -1,150 +1,76 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useToast } from '@/components/ui/Toast';
 import Pagination from '@/components/ui/Pagination';
 import { Package } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { FiPlus, FiEdit, FiTrash2, FiSearch, FiCheck, FiX, FiExternalLink } from 'react-icons/fi';
+import useAdminProducts from '@/hooks/useAdminProducts';
+import useAdminCategories from '@/hooks/useAdminCategories';
 
 export default function AdminProductsPage() {
-  const toast = useToast();
-  const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState([]);
+  const [page, setPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedActive, setSelectedActive] = useState('');
   const [selectedStock, setSelectedStock] = useState('');
-  const [search, setSearch] = useState('');         
-  const [searchInput, setSearchInput] = useState('');  
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
-  const [loadingId, setLoadingId] = useState(null);
+  const { categories } = useAdminCategories();
 
-  useEffect(() => {
-    fetch('/api/admin/categories')
-      .then((res) => res.json())
-      .then((d) => setCategories(d.categories || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [pagination.page, search, selectedCategory, selectedActive, selectedStock]);
-
-  async function fetchProducts() {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: pagination.page, limit: '15' });
-      if (search) params.set('search', search);
-      if (selectedCategory) params.set('category', selectedCategory);
-      if (selectedActive) params.set('active', selectedActive);
-      if (selectedStock) params.set('stock', selectedStock);
-
-      const res = await fetch(`/api/admin/products?${params}`);
-      const data = await res.json();
-      if (res.ok) {
-        setProducts(data.products || []);
-        setPagination(data.pagination || { page: 1, totalPages: 1, total: 0 });
-      }
-    } catch {}
-    setLoading(false);
-  }
+  const {
+    products,
+    pagination,
+    isLoading,
+    isFetching,
+    toggleStatus,
+    isToggling,
+    togglingVariables,
+    deleteProduct,
+  } = useAdminProducts({
+    page,
+    limit: 15,
+    search,
+    category: selectedCategory,
+    active: selectedActive,
+    stock: selectedStock,
+  });
 
   async function handleToggleStatus(id, currentActive) {
-    const nextVal = !currentActive;
-    setLoadingId(id + '_active');
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isActive: nextVal } : p))
-    );
     try {
-      const res = await fetch(`/api/admin/products/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: nextVal }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success(`Product status set to ${nextVal ? 'Active' : 'Inactive'}`);
-      } else {
-        toast.error(data.error || 'Failed to update active status');
-        fetchProducts();
-      }
-    } catch {
-      toast.error('Failed to update active status');
-      fetchProducts();
-    }
-    setLoadingId(null);
+      await toggleStatus({ id, patch: { isActive: !currentActive } });
+    } catch {}
   }
 
   async function handleToggleShowOnHome(id, currentShowOnHome) {
-    const nextVal = !currentShowOnHome;
-    setLoadingId(id + '_showOnHome');
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, showOnHome: nextVal } : p))
-    );
     try {
-      const res = await fetch(`/api/admin/products/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ showOnHome: nextVal }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success(`Product home visibility set to ${nextVal ? 'Show on Home' : 'Hide on Home'}`);
-      } else {
-        toast.error(data.error || 'Failed to update home visibility');
-        fetchProducts();
-      }
-    } catch {
-      toast.error('Failed to update home visibility');
-      fetchProducts();
-    }
-    setLoadingId(null);
+      await toggleStatus({ id, patch: { showOnHome: !currentShowOnHome } });
+    } catch {}
   }
 
   async function handleToggleStockStatus(id, currentIsOutOfStock) {
-    const nextVal = !currentIsOutOfStock;
-    setLoadingId(id + '_stock');
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isOutOfStock: nextVal } : p))
-    );
     try {
-      const res = await fetch(`/api/admin/products/${id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isOutOfStock: nextVal }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success(`Product stock status set to ${nextVal ? 'Out of Stock' : 'In Stock'}`);
-      } else {
-        toast.error(data.error || 'Failed to update stock status');
-        fetchProducts();
-      }
-    } catch {
-      toast.error('Failed to update stock status');
-      fetchProducts();
-    }
-    setLoadingId(null);
+      await toggleStatus({ id, patch: { isOutOfStock: !currentIsOutOfStock } });
+    } catch {}
   }
 
   async function handleDelete(id, name) {
     if (!confirm(`Delete "${name}"?`)) return;
     try {
-      const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
-      if (res.ok) { toast.success('Product deleted'); fetchProducts(); }
-      else toast.error('Failed to delete');
-    } catch { toast.error('Error'); }
+      await deleteProduct({ id });
+    } catch {}
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-base font-bold text-warm-900">Products</h1>
-        <Link href="/admin/products/new" className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-white text-[11px] font-medium rounded-md hover:bg-brand-600 transition-colors">
+        <Link
+          href="/admin/products/new"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-white text-[11px] font-medium rounded-md hover:bg-brand-600 transition-colors"
+        >
           <FiPlus className="w-3.5 h-3.5" /> Add Product
         </Link>
       </div>
@@ -155,7 +81,12 @@ export default function AdminProductsPage() {
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && setSearch(searchInput)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setSearch(searchInput.trim());
+                setPage(1);
+              }
+            }}
             placeholder="Search products..."
             className="w-full pl-8 pr-3 py-1.5 border border-warm-200 rounded-md text-[11px] outline-none focus:border-brand-400 bg-white"
           />
@@ -164,7 +95,10 @@ export default function AdminProductsPage() {
         {/* Category Filter */}
         <select
           value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
+          onChange={(e) => {
+            setSelectedCategory(e.target.value);
+            setPage(1);
+          }}
           className="px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-700 outline-none focus:border-brand-400 cursor-pointer"
         >
           <option value="">All Categories</option>
@@ -178,7 +112,10 @@ export default function AdminProductsPage() {
         {/* Active/Inactive Filter */}
         <select
           value={selectedActive}
-          onChange={(e) => setSelectedActive(e.target.value)}
+          onChange={(e) => {
+            setSelectedActive(e.target.value);
+            setPage(1);
+          }}
           className="px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-700 outline-none focus:border-brand-400 cursor-pointer"
         >
           <option value="">All Statuses</option>
@@ -189,7 +126,10 @@ export default function AdminProductsPage() {
         {/* Stock Filter */}
         <select
           value={selectedStock}
-          onChange={(e) => setSelectedStock(e.target.value)}
+          onChange={(e) => {
+            setSelectedStock(e.target.value);
+            setPage(1);
+          }}
           className="px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-700 outline-none focus:border-brand-400 cursor-pointer"
         >
           <option value="">All Stock States</option>
@@ -205,133 +145,219 @@ export default function AdminProductsPage() {
               setSelectedStock('');
               setSearch('');
               setSearchInput('');
+              setPage(1);
             }}
-            className="px-2.5 py-1.5 text-[10px] font-semibold text-warm-600 hover:text-red-600 bg-warm-100 rounded-md transition-colors"
+            className="text-[11px] text-warm-500 hover:text-warm-900 transition-colors"
           >
             Clear Filters
           </button>
         )}
       </div>
 
-      <div className="bg-white rounded-md border border-warm-100 overflow-hidden">
+      <div className="bg-white rounded-md border border-warm-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[11px]">
-            <thead><tr className="bg-warm-50 text-warm-600 text-[10px] uppercase tracking-wider">
-              <th className="px-3 py-2 text-left">Product</th>
-              <th className="px-3 py-2 text-left">Price</th>
-              <th className="px-3 py-2 text-left">Stock State</th>
-              <th className="px-3 py-2 text-left">Category</th>
-              <th className="px-3 py-2 text-left">Active Status</th>
-              <th className="px-3 py-2 text-left">Home Display</th>
-              <th className="px-3 py-2 text-left">COD</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr></thead>
+            <thead>
+              <tr className="bg-warm-50/70 border-b border-warm-200 text-warm-600 text-[10px] uppercase tracking-wider font-semibold">
+                <th className="px-3 py-2 text-left">Product</th>
+                <th className="px-3 py-2 text-left">Price</th>
+                <th className="px-3 py-2 text-left">Stock State</th>
+                <th className="px-3 py-2 text-left">Category</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Home Visibility</th>
+                <th className="px-3 py-2 text-left">COD</th>
+                <th className="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-warm-100">
-              {loading ? Array.from({length:5}).map((_,i) => (
-                <tr key={i}><td colSpan={8} className="px-3 py-3"><div className="h-8 shimmer rounded" /></td></tr>
-              )) : products.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-8 text-center text-warm-400">No products found</td></tr>
-              ) : products.map(p => {
-                const isStockUpdating = loadingId === p.id + '_stock';
-                const isActiveUpdating = loadingId === p.id + '_active';
-                const isShowOnHomeUpdating = loadingId === p.id + '_showOnHome';
-                const isOutOfStock = Boolean(p.isOutOfStock);
-                const isActive = Boolean(p.isActive);
-                const showOnHome = p.showOnHome !== false;
+              {isLoading && products.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-6 text-center text-warm-400">
+                    Loading products...
+                  </td>
+                </tr>
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-6 text-center text-warm-400">
+                    No products found.
+                  </td>
+                </tr>
+              ) : (
+                products.map((p) => {
+                  const isActive = p.isActive !== false;
+                  const isOutOfStock = p.isOutOfStock === true || Number(p.stock) <= 0;
+                  const showOnHome = p.showOnHome !== false;
 
-                return (
-                  <tr key={p.id} className="hover:bg-warm-50/50">
-                    <td className="px-3 py-2"><div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-md bg-warm-100 overflow-hidden shrink-0 relative">
-                        {p.images?.[0] ? <Image src={p.images[0]} alt="" fill className="object-cover" sizes="32px" /> : <div className="w-full h-full flex items-center justify-center text-warm-400"><Package className="w-4 h-4" /></div>}
-                      </div>
-                      <span className="font-medium text-warm-900 truncate max-w-[180px]">{p.name}</span>
-                    </div></td>
-                    <td className="px-3 py-2 text-warm-700">{formatCurrency(p.discountPrice || p.price)}{p.discountPrice && <span className="text-warm-400 line-through ml-1 text-[10px]">{formatCurrency(p.price)}</span>}</td>
-                    
-                    {/* Stock State Pill Button */}
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-semibold min-w-[50px] ${p.stock > 0 ? 'text-green-700' : 'text-red-500'}`}>{p.stock} pcs</span>
+                  const isTogglingThis = isToggling && togglingVariables?.id === p.id;
+                  const isStockUpdating = isTogglingThis && 'isOutOfStock' in (togglingVariables?.patch || {});
+                  const isActiveUpdating = isTogglingThis && 'isActive' in (togglingVariables?.patch || {});
+                  const isShowOnHomeUpdating = isTogglingThis && 'showOnHome' in (togglingVariables?.patch || {});
+
+                  return (
+                    <tr key={p.id} className="hover:bg-warm-50/50">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-md bg-warm-100 overflow-hidden shrink-0 relative">
+                            {p.images?.[0] ? (
+                              <Image
+                                src={p.images[0]}
+                                alt=""
+                                fill
+                                className="object-cover"
+                                sizes="32px"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-warm-400">
+                                <Package className="w-4 h-4" />
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-medium text-warm-900 truncate max-w-[180px]">
+                            {p.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-warm-700">
+                        {formatCurrency(p.discountPrice || p.price)}
+                        {p.discountPrice && (
+                          <span className="text-warm-400 line-through ml-1 text-[10px]">
+                            {formatCurrency(p.price)}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Stock State Pill Button */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-semibold min-w-[50px] ${
+                              p.stock > 0 ? 'text-green-700' : 'text-red-500'
+                            }`}
+                          >
+                            {p.stock} pcs
+                          </span>
+                          <StatusPillButton
+                            active={!isOutOfStock}
+                            loading={isStockUpdating}
+                            activeLabel="In Stock"
+                            inactiveLabel="Out of Stock"
+                            activeClass="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 hover:border-emerald-400 hover:shadow-xs"
+                            inactiveClass="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 hover:border-amber-400 hover:shadow-xs"
+                            onClick={() => handleToggleStockStatus(p.id, isOutOfStock)}
+                            title="Click to toggle Stock availability"
+                          />
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2 text-warm-500">{p.categoryName || '—'}</td>
+
+                      {/* Active Status Pill Button */}
+                      <td className="px-3 py-2">
                         <StatusPillButton
-                          active={!isOutOfStock}
-                          loading={isStockUpdating}
-                          activeLabel="In Stock"
-                          inactiveLabel="Out of Stock"
+                          active={isActive}
+                          loading={isActiveUpdating}
+                          activeLabel="Active"
+                          inactiveLabel="Inactive"
                           activeClass="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 hover:border-emerald-400 hover:shadow-xs"
-                          inactiveClass="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200 hover:border-amber-400 hover:shadow-xs"
-                          onClick={() => handleToggleStockStatus(p.id, isOutOfStock)}
-                          title="Click to toggle Stock availability"
+                          inactiveClass="bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200 hover:border-rose-400 hover:shadow-xs"
+                          onClick={() => handleToggleStatus(p.id, isActive)}
+                          title="Click to toggle Active/Inactive system status"
                         />
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-3 py-2 text-warm-500">{p.categoryName || '—'}</td>
+                      {/* Home Display Pill Button */}
+                      <td className="px-3 py-2">
+                        <StatusPillButton
+                          active={showOnHome}
+                          loading={isShowOnHomeUpdating}
+                          activeLabel="Show on Home"
+                          inactiveLabel="Hide on Home"
+                          activeClass="bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 hover:border-blue-400 hover:shadow-xs"
+                          inactiveClass="bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:border-slate-400 hover:shadow-xs"
+                          onClick={() => handleToggleShowOnHome(p.id, showOnHome)}
+                          title="Click to toggle visibility on Home Page sections"
+                        />
+                      </td>
 
-                    {/* Active Status Pill Button */}
-                    <td className="px-3 py-2">
-                      <StatusPillButton
-                        active={isActive}
-                        loading={isActiveUpdating}
-                        activeLabel="Active"
-                        inactiveLabel="Inactive"
-                        activeClass="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200 hover:border-emerald-400 hover:shadow-xs"
-                        inactiveClass="bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200 hover:border-rose-400 hover:shadow-xs"
-                        onClick={() => handleToggleStatus(p.id, isActive)}
-                        title="Click to toggle Active/Inactive system status"
-                      />
-                    </td>
-
-                    {/* Home Display Pill Button */}
-                    <td className="px-3 py-2">
-                      <StatusPillButton
-                        active={showOnHome}
-                        loading={isShowOnHomeUpdating}
-                        activeLabel="Show on Home"
-                        inactiveLabel="Hide on Home"
-                        activeClass="bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200 hover:border-blue-400 hover:shadow-xs"
-                        inactiveClass="bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:border-slate-400 hover:shadow-xs"
-                        onClick={() => handleToggleShowOnHome(p.id, showOnHome)}
-                        title="Click to toggle visibility on Home Page sections"
-                      />
-                    </td>
-
-                    <td className="px-3 py-2">{p.codAvailable !== false ? <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 rounded-md">Yes</span> : <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-50 text-red-600 rounded-md">No</span>}</td>
-                    <td className="px-3 py-2 text-right"><div className="flex items-center justify-end gap-1">
-                      <Link href={`/admin/products/${p.id}/edit`} className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors" title="Edit Full Product Form"><FiEdit className="w-3.5 h-3.5" /></Link>
-                      <button onClick={() => handleDelete(p.id, p.name)} className="p-1 text-warm-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete Product"><FiTrash2 className="w-3.5 h-3.5" /></button>
-                    </div></td>
-                  </tr>
-                );
-              })}
+                      <td className="px-3 py-2">
+                        {p.codAvailable !== false ? (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 rounded-md">
+                            Yes
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-50 text-red-600 rounded-md">
+                            No
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Link
+                            href={`/admin/products/${p.id}/edit`}
+                            className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors"
+                            title="Edit Full Product Form"
+                          >
+                            <FiEdit className="w-3.5 h-3.5" />
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(p.id, p.name)}
+                            className="p-1 text-warm-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Delete Product"
+                          >
+                            <FiTrash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
-      {pagination.totalPages > 1 && <div className="mt-4"><Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={p => setPagination({...pagination, page: p})} /></div>}
+      {pagination.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-[11px] text-warm-500">
+            Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total products)
+          </p>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={(p) => setPage(p)}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-function StatusPillButton({ active, loading, onClick, activeLabel, inactiveLabel, activeClass, inactiveClass, title }) {
+function StatusPillButton({
+  active,
+  loading,
+  onClick,
+  activeLabel,
+  inactiveLabel,
+  activeClass,
+  inactiveClass,
+  title,
+}) {
   return (
     <button
       type="button"
       disabled={loading}
       onClick={onClick}
       title={title}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-bold transition-all cursor-pointer active:scale-95 select-none ${
-        loading ? 'opacity-60 pointer-events-none' : ''
-      } ${active ? activeClass : inactiveClass}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed ${
+        active ? activeClass : inactiveClass
+      }`}
     >
       {loading ? (
-        <div className="w-2.5 h-2.5 border-2 border-current/30 border-t-current rounded-full animate-spin shrink-0" />
-      ) : active ? (
-        <FiCheck className="w-2.5 h-2.5 shrink-0 stroke-[2.5]" />
+        <span className="w-1.5 h-1.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
       ) : (
-        <FiX className="w-2.5 h-2.5 shrink-0 stroke-[2.5]" />
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? 'bg-current' : 'bg-warm-400'}`} />
       )}
-      <span>{active ? activeLabel : inactiveLabel}</span>
+      <span>{loading ? 'Updating...' : active ? activeLabel : inactiveLabel}</span>
     </button>
   );
 }

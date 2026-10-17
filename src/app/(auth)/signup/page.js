@@ -14,6 +14,7 @@ import FieldError from '@/components/ui/FieldError';
 import { signupSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
 import { useMsg91Otp } from '@/hooks/useMsg91Otp';
+import { authApi } from '@/lib/apiClient/auth.api';
 
 function SignupContent() {
   const router = useRouter();
@@ -155,32 +156,21 @@ function SignupContent() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name ? form.name.trim() : null,
-          email: form.email.trim(),
-          password: form.password,
-          phone: form.phone || null,
-        }),
+      const data = await authApi.signup({
+        name: form.name ? form.name.trim() : null,
+        email: form.email.trim(),
+        password: form.password,
+        phone: form.phone || null,
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setServerErrors(data);
-        setError(data.error || 'Something went wrong');
-        return;
-      }
-
       router.push(
-        `/verify-otp?email=${encodeURIComponent(data.email)}${
+        `/verify-otp?email=${encodeURIComponent(data?.email || form.email.trim())}${
           redirect ? `&redirect=${encodeURIComponent(redirect)}` : ''
         }`
       );
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setServerErrors({ errors: err.errors, error: err.message });
+      setError(err.message || 'Something went wrong');
     } finally {
       setLoading(false);
     }

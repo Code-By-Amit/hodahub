@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDispatch } from 'react-redux';
 import { useEffect } from 'react';
 import { setUser } from '@/lib/store/authSlice';
+import { profileApi } from '@/lib/apiClient/profile.api';
 
 /**
  * @typedef {Object} CurrentUser
@@ -31,14 +32,14 @@ export function useCurrentUser() {
   const query = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('/api/profile');
-      if (!res.ok) {
-        if (res.status === 401) {
+      try {
+        return await profileApi.get();
+      } catch (err) {
+        if (err.status === 401) {
           return { user: null, addresses: [] };
         }
-        throw new Error('Failed to fetch profile');
+        throw err;
       }
-      return res.json();
     },
     staleTime: 2 * 60 * 1000,
   });
@@ -53,18 +54,7 @@ export function useCurrentUser() {
   }, [query.data, dispatch]);
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (payload) => {
-      const res = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to update profile');
-      }
-      return data;
-    },
+    mutationFn: (payload) => profileApi.update(payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['me'], (old) =>
         old ? { ...old, user: data.user } : { user: data.user, addresses: [] }

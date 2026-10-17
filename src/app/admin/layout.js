@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectUser, clearUser } from '@/lib/store/authSlice';
+import { authApi } from '@/lib/apiClient/auth.api';
 import {
   LayoutDashboard,
   Package,
@@ -62,7 +63,9 @@ export default function AdminLayout({ children }) {
   }
 
   async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await authApi.logout();
+    } catch {}
     dispatch(clearUser());
     router.push('/');
   }

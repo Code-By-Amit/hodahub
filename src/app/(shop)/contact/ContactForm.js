@@ -6,6 +6,7 @@ import FieldError from '@/components/ui/FieldError';
 import { contactSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
 import { FiMail, FiUser, FiSend } from 'react-icons/fi';
+import { contactApi } from '@/lib/apiClient/contact.api';
 
 export default function ContactForm({ contactEmail }) {
   const toast = useToast();
@@ -33,21 +34,13 @@ export default function ContactForm({ contactEmail }) {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || 'Message sent successfully!');
-        reset({ name: '', email: '', subject: '', message: '' });
-      } else {
-        setServerErrors(data);
-        toast.error(data.error || 'Failed to send message');
-      }
-    } catch {
-      toast.error('Network error. Please try again.');
+      const data = await contactApi.submit(form);
+      toast.success(data?.message || 'Message sent successfully!');
+      reset({ name: '', email: '', subject: '', message: '' });
+    } catch (err) {
+      if (err.errors) setServerErrors({ errors: err.errors, error: err.message });
+      else setServerErrors({ error: err.message });
+      toast.error(err.message || 'Failed to send message');
     }
     setLoading(false);
   }

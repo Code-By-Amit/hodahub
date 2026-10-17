@@ -8,6 +8,7 @@ import PhoneInput from '@/components/ui/PhoneInput';
 import FieldError from '@/components/ui/FieldError';
 import { storeSettingsSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
+import { settingsApi } from '@/lib/apiClient/settings.api';
 
 export default function AdminSettingsPage() {
   const toast = useToast();
@@ -43,9 +44,8 @@ export default function AdminSettingsPage() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch('/api/admin/settings');
-      const data = await res.json();
-      if (res.ok && data.settings) {
+      const data = await settingsApi.getAdmin();
+      if (data?.settings) {
         setForm({
           storeName: data.settings.storeName || 'HodaHub',
           contactEmail: data.settings.contactEmail || '',
@@ -92,22 +92,14 @@ export default function AdminSettingsPage() {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadToValidate),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Store settings saved successfully!');
-      } else {
-        setServerErrors(data);
-        toast.error(data.error || 'Failed to save settings');
-      }
-    } catch {
-      toast.error('Network error');
+      await settingsApi.updateAdmin(payloadToValidate);
+      toast.success('Store settings saved successfully!');
+    } catch (err) {
+      if (err.data) setServerErrors(err.data);
+      toast.error(err.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   if (loading) {

@@ -101,6 +101,17 @@ function createPool() {
         );
         CREATE INDEX IF NOT EXISTS happy_customers_is_active_idx ON happy_customers (is_active);
         CREATE INDEX IF NOT EXISTS happy_customers_sort_order_idx ON happy_customers (sort_order);
+        CREATE INDEX IF NOT EXISTS reviews_product_id_idx ON reviews (product_id);
+        CREATE INDEX IF NOT EXISTS reviews_user_id_idx ON reviews (user_id);
+        CREATE INDEX IF NOT EXISTS reviews_is_hidden_idx ON reviews (is_hidden);
+        CREATE INDEX IF NOT EXISTS reviews_created_at_idx ON reviews (created_at);
+        CREATE INDEX IF NOT EXISTS products_is_active_idx ON products (is_active);
+        CREATE INDEX IF NOT EXISTS products_created_at_idx ON products (created_at);
+        CREATE INDEX IF NOT EXISTS products_active_home_idx ON products (is_active, show_on_home);
+        CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status);
+        CREATE INDEX IF NOT EXISTS orders_payment_status_idx ON orders (payment_status);
+        CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders (created_at);
+        CREATE INDEX IF NOT EXISTS category_relations_parent_id_idx ON category_relations (parent_id);
       `)
       .catch(() => {});
   }

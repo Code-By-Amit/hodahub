@@ -110,6 +110,7 @@ export const categoryRelations = pgTable(
   },
   (table) => [
     unique('category_parent_unique').on(table.categoryId, table.parentId),
+    index('category_relations_parent_id_idx').on(table.parentId),
   ]
 );
 
@@ -150,6 +151,9 @@ export const products = pgTable('products', {
 (table) => [
   index('products_category_id_idx').on(table.categoryId),
   index('products_brand_id_idx').on(table.brandId),
+  index('products_is_active_idx').on(table.isActive),
+  index('products_created_at_idx').on(table.createdAt),
+  index('products_active_home_idx').on(table.isActive, table.showOnHome),
 ]
 );
 
@@ -201,7 +205,14 @@ export const reviews = pgTable('reviews', {
   mediaUrls: text('media_urls').array().default([]),
   isHidden: boolean('is_hidden').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+},
+(table) => [
+  index('reviews_product_id_idx').on(table.productId),
+  index('reviews_user_id_idx').on(table.userId),
+  index('reviews_is_hidden_idx').on(table.isHidden),
+  index('reviews_created_at_idx').on(table.createdAt),
+]
+);
 
 // --- Coupons ---
 export const coupons = pgTable('coupons', {
@@ -267,6 +278,9 @@ export const orders = pgTable('orders', {
 (table) => [
   index('orders_user_id_idx').on(table.userId),
   index('orders_razorpay_order_id_idx').on(table.razorpayOrderId),
+  index('orders_status_idx').on(table.status),
+  index('orders_payment_status_idx').on(table.paymentStatus),
+  index('orders_created_at_idx').on(table.createdAt),
 ]
 );
 

@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal';
 import { Package, Phone } from 'lucide-react';
 import { FiArrowLeft, FiSend, FiCheck, FiX, FiRefreshCw, FiBox, FiCheckCircle, FiAlertTriangle, FiEdit3, FiExternalLink } from 'react-icons/fi';
 import { formatCurrency } from '@/lib/utils';
+import { ordersApi } from '@/lib/apiClient/orders.api';
 
 const statusOptions = ['pending', 'confirmed', 'packed', 'shipped', 'delivered', 'cancelled'];
 const paymentStatusOptions = ['pending', 'paid', 'failed', 'refunded'];
@@ -60,9 +61,8 @@ export default function AdminOrderDetailPage() {
 
   async function fetchOrder() {
     try {
-      const res = await fetch(`/api/admin/orders/${id}`);
-      const data = await res.json();
-      if (res.ok) {
+      const data = await ordersApi.getAdminById(id);
+      if (data?.order) {
         setOrder(data.order);
         setItems(data.items || []);
         setHistory(data.history || []);
@@ -87,9 +87,8 @@ export default function AdminOrderDetailPage() {
 
   async function fetchTracking(orderId) {
     try {
-      const res = await fetch(`/api/orders/${orderId}/tracking`);
-      const data = await res.json();
-      if (res.ok) {
+      const data = await ordersApi.getTracking(orderId);
+      if (data) {
         setTrackingInfo(data);
       }
     } catch { }
@@ -117,31 +116,20 @@ export default function AdminOrderDetailPage() {
 
     setPacking(true);
     try {
-      const res = await fetch(`/api/admin/orders/${id}/pack`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          packageWeight,
-          packageLength,
-          packageWidth,
-          packageHeight,
-        }),
+      await ordersApi.pack(id, {
+        packageWeight,
+        packageLength,
+        packageWidth,
+        packageHeight,
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Order packed successfully! Real shipment creation enabled.');
-        setIsEditingPackage(false);
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to pack order');
-      }
-    } catch {
-      toast.error('Network error during order packing');
+      toast.success('Order packed successfully! Real shipment creation enabled.');
+      setIsEditingPackage(false);
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to pack order');
     }
     setPacking(false);
   }
-
-
 
   // Real Shipment Creation (Uses DELHIVERY_ENV setting)
   async function handleCreateShipment() {
@@ -152,18 +140,11 @@ export default function AdminOrderDetailPage() {
 
     setCreatingShipment(true);
     try {
-      const res = await fetch(`/api/admin/orders/${id}/shipment`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(`Shipment created successfully! AWB: ${data.order.awbNumber}`);
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to create shipment');
-      }
-    } catch {
-      toast.error('Network error during shipment creation');
+      const data = await ordersApi.createShipment(id);
+      toast.success(`Shipment created successfully! AWB: ${data.order?.awbNumber || ''}`);
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to create shipment');
     }
     setCreatingShipment(false);
   }
@@ -177,22 +158,13 @@ export default function AdminOrderDetailPage() {
     }
     setSavingManualAwb(true);
     try {
-      const res = await fetch(`/api/admin/orders/${id}/manual-awb`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ awbNumber: manualAwbNumber.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Tracking number saved! Order marked as shipped.');
-        setShowManualAwbModal(false);
-        setManualAwbNumber('');
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to save tracking number');
-      }
-    } catch {
-      toast.error('Network error while saving tracking number');
+      await ordersApi.manualAwb(id, { awbNumber: manualAwbNumber.trim() });
+      toast.success('Tracking number saved! Order marked as shipped.');
+      setShowManualAwbModal(false);
+      setManualAwbNumber('');
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to save tracking number');
     }
     setSavingManualAwb(false);
   }
@@ -200,25 +172,16 @@ export default function AdminOrderDetailPage() {
   async function handleAdminAction(actionType, extraData = {}) {
     setUpdating(true);
     try {
-      const res = await fetch(`/api/admin/orders/${id}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: actionType,
-          reason: actionReason,
-          ...extraData,
-        }),
+      const data = await ordersApi.takeAction(id, {
+        action: actionType,
+        reason: actionReason,
+        ...extraData,
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(data.message || 'Action executed successfully');
-        setActionReason('');
-        fetchOrder();
-      } else {
-        toast.error(data.error || 'Failed to execute action');
-      }
-    } catch {
-      toast.error('Network error');
+      toast.success(data?.message || 'Action executed successfully');
+      setActionReason('');
+      fetchOrder();
+    } catch (err) {
+      toast.error(err.message || 'Failed to execute action');
     }
     setUpdating(false);
   }

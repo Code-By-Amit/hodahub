@@ -9,10 +9,7 @@ export async function GET(request) {
     const authUser = await getAuthUser(request);
 
     if (!authUser) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
+      return NextResponse.json({ user: null }, { status: 200 });
     }
 
     const [dbUser] = await db

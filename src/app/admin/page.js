@@ -29,6 +29,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import { settingsApi } from '@/lib/apiClient/settings.api';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -41,20 +42,13 @@ export default function AdminDashboard() {
   async function loadData(isManual = false) {
     if (isManual) setRefreshing(true);
     try {
-      const [statsRes, analyticsRes] = await Promise.all([
-        fetch('/api/admin/stats'),
-        fetch('/api/admin/analytics'),
+      const [statsData, analyticsData] = await Promise.all([
+        settingsApi.getStats(),
+        settingsApi.getAnalytics(),
       ]);
 
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
-
-      if (analyticsRes.ok) {
-        const analyticsData = await analyticsRes.json();
-        setAnalytics(analyticsData);
-      }
+      if (statsData) setStats(statsData);
+      if (analyticsData) setAnalytics(analyticsData);
 
       setLastUpdated(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }));
     } catch { }

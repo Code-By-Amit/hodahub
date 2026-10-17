@@ -11,11 +11,24 @@ import { isVideoUrl } from '@/lib/utils';
 import { adminReviewSchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
 
+import useAdminReviews from '@/hooks/useAdminReviews';
+import { productsApi } from '@/lib/apiClient/products.api';
+
 export default function AdminReviewsPage() {
   const toast = useToast();
-  const [reviews, setReviews] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const {
+    reviews,
+    pagination,
+    isLoading: loading,
+    toggleVisibility,
+    isToggling,
+    togglingId,
+    saveReview,
+    isSaving,
+    deleteReview,
+  } = useAdminReviews({ page, limit: 15 });
+
   const [modalMedia, setModalMedia] = useState(null);
 
   // Admin Create Review states
@@ -43,31 +56,19 @@ export default function AdminReviewsPage() {
   });
 
   useEffect(() => {
-    fetchReviews();
     fetchProducts();
-  }, [pagination.page]);
+  }, []);
 
   async function fetchProducts() {
     try {
-      const res = await fetch('/api/admin/products?limit=100');
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.products)) {
+      const data = await productsApi.getAdmin({ limit: 100 });
+      if (Array.isArray(data?.products)) {
         setProductsList(data.products);
         if (data.products.length > 0) {
           setAddForm((prev) => ({ ...prev, productId: data.products[0].id }));
         }
       }
     } catch {}
-  }
-
-  async function fetchReviews() {
-    try {
-      const res = await fetch(`/api/admin/reviews?page=${pagination.page}`);
-      const data = await res.json();
-      setReviews(data.reviews || []);
-      setPagination(data.pagination || pagination);
-    } catch {}
-    setLoading(false);
   }
 
   async function handleCreateReview(e) {
@@ -91,24 +92,12 @@ export default function AdminReviewsPage() {
     setErrors({});
     setSubmitting(true);
     try {
-      const res = await fetch('/api/admin/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Customer review published successfully!');
-        setShowAddModal(false);
-        setErrors({});
-        setAddForm({ productId: productsList[0]?.id || '', userName: '', rating: 5, comment: '', mediaUrls: [] });
-        fetchReviews();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to create review');
-      }
-    } catch {
-      toast.error('Network error');
+      await saveReview({ payload });
+      setShowAddModal(false);
+      setErrors({});
+      setAddForm({ productId: productsList[0]?.id || '', userName: '', rating: 5, comment: '', mediaUrls: [] });
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
     }
     setSubmitting(false);
   }
@@ -141,50 +130,26 @@ export default function AdminReviewsPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/admin/reviews/${editingReview.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Review updated successfully!');
-        setEditingReview(null);
-        setErrors({});
-        fetchReviews();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to update review');
-      }
-    } catch {
-      toast.error('Network error');
+      await saveReview({ id: editingReview.id, payload });
+      setEditingReview(null);
+      setErrors({});
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
     }
     setSubmitting(false);
   }
 
   async function toggleHide(id) {
     try {
-      const res = await fetch(`/api/admin/reviews/${id}`, { method: 'PATCH' });
-      if (res.ok) {
-        toast.success('Review visibility updated');
-        fetchReviews();
-      }
-    } catch {
-      toast.error('Error updating review');
-    }
+      await toggleVisibility(id);
+    } catch {}
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this review permanently?')) return;
     try {
-      const res = await fetch(`/api/admin/reviews/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Review deleted');
-        fetchReviews();
-      }
-    } catch {
-      toast.error('Error deleting review');
-    }
+      await deleteReview(id);
+    } catch {}
   }
 
   return (
@@ -283,11 +248,12 @@ export default function AdminReviewsPage() {
                       </button>
                       <button
                         onClick={() => toggleHide(r.id)}
+                        disabled={isToggling && togglingId === r.id}
                         className={`p-1 rounded-md transition-colors ${
                           r.isHidden
                             ? 'text-emerald-600 hover:bg-emerald-50'
                             : 'text-warm-500 hover:bg-warm-100'
-                        }`}
+                        } ${isToggling && togglingId === r.id ? 'opacity-50 cursor-wait' : ''}`}
                         title={r.isHidden ? 'Publish review' : 'Hide review'}
                       >
                         {r.isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -313,7 +279,7 @@ export default function AdminReviewsPage() {
           <Pagination
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
-            onPageChange={(p) => setPagination({ ...pagination, page: p })}
+            onPageChange={(p) => setPage(p)}
           />
         </div>
       )}

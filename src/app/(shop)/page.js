@@ -29,8 +29,33 @@ async function getHomepageData() {
     );
 
     const [allCategories, newArrivals, bestSellers] = await Promise.all([
-      db.select().from(categories).orderBy(asc(categories.name)).limit(12),
-      db.select().from(products)
+      db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug,
+          imageUrl: categories.imageUrl,
+        })
+        .from(categories)
+        .orderBy(asc(categories.name))
+        .limit(12),
+      db
+        .select({
+          id: products.id,
+          name: products.name,
+          slug: products.slug,
+          description: products.description,
+          price: products.price,
+          discountPrice: products.discountPrice,
+          images: products.images,
+          ratingAvg: products.ratingAvg,
+          reviewCount: products.reviewCount,
+          stock: products.stock,
+          isOutOfStock: products.isOutOfStock,
+          codAvailable: products.codAvailable,
+          createdAt: products.createdAt,
+        })
+        .from(products)
         .where(availableCondition)
         .orderBy(desc(products.createdAt), desc(products.id))
         .limit(12),

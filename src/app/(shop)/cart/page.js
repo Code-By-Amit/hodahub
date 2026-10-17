@@ -21,6 +21,8 @@ import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatCurrency } from '@/lib/utils';
 import { ShoppingBag, Package, Trash2, Minus, Plus, Tag, ArrowRight, Check } from 'lucide-react';
+import { productsApi } from '@/lib/apiClient/products.api';
+import { couponsApi } from '@/lib/apiClient/coupons.api';
 
 export default function CartPage() {
   const dispatch = useDispatch();
@@ -40,13 +42,8 @@ export default function CartPage() {
     const checkAvailability = async () => {
       try {
         const productIds = items.map((i) => i.productId);
-        const res = await fetch('/api/products/check-availability', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productIds }),
-        });
-        const data = await res.json();
-        if (res.ok && data.unavailableItems && data.unavailableItems.length > 0) {
+        const data = await productsApi.checkAvailability({ productIds });
+        if (data?.unavailableItems && data.unavailableItems.length > 0) {
           for (const unitem of data.unavailableItems) {
             dispatch(removeItem(unitem.id));
             toast.warning(`"${unitem.name}" was removed from your cart because it's no longer available.`);
@@ -71,13 +68,8 @@ export default function CartPage() {
     setCouponLoading(true);
     setCouponError('');
     try {
-      const res = await fetch('/api/coupons/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: couponCode.trim(), subtotal }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await couponsApi.validate({ code: couponCode.trim(), subtotal });
+      if (data?.coupon) {
         dispatch(
           applyCoupon({
             code: data.coupon.code,
@@ -88,11 +80,9 @@ export default function CartPage() {
         );
         toast.success('Coupon code applied!');
         setCouponCode('');
-      } else {
-        setCouponError(data.error);
       }
-    } catch {
-      setCouponError('Failed to validate coupon');
+    } catch (err) {
+      setCouponError(err.message || 'Failed to validate coupon');
     }
     setCouponLoading(false);
   }

@@ -4,28 +4,16 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
+import useShopBanners from '@/hooks/useShopBanners';
 
 export default function BannerCarousel() {
-  const [banners, setBanners] = useState([]);
+  const { banners } = useShopBanners();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
   const isSwiping = useRef(false);
-
-  useEffect(() => {
-    async function fetchActiveBanners() {
-      try {
-        const res = await fetch('/api/banners');
-        const data = await res.json();
-        setBanners(data.banners || []);
-      } catch {
-        setBanners([]);
-      }
-    }
-    fetchActiveBanners();
-  }, []);
 
   useEffect(() => {
     if (banners.length <= 1 || isPaused) return;
@@ -131,17 +119,22 @@ export default function BannerCarousel() {
 
         {/* Indicator Dots */}
         {banners.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+          <div className="absolute bottom-1 sm:bottom-2 left-1/2 -translate-x-1/2 flex items-center justify-center z-20">
             {banners.map((_, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={(e) => handleDotClick(e, i)}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  currentIndex === i ? 'w-5 bg-white shadow-xs' : 'w-2 bg-white/50 hover:bg-white/80'
-                }`}
-                aria-label={`Go to slide ${i + 1}`}
-              />
+                className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-full transition-transform active:scale-95"
+                aria-label={`Go to slide ${i + 1} of ${banners.length}`}
+                aria-current={currentIndex === i ? 'true' : undefined}
+              >
+                <span
+                  className={`h-2 rounded-full transition-all block ${
+                    currentIndex === i ? 'w-5 bg-white shadow-xs' : 'w-2 bg-white/50 hover:bg-white/80'
+                  }`}
+                />
+              </button>
             ))}
           </div>
         )}

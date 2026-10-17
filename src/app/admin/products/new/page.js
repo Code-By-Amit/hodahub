@@ -18,6 +18,10 @@ import {
 } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
 import CustomSelect from '@/components/ui/CustomSelect';
+import { categoriesApi } from '@/lib/apiClient/categories.api';
+import { brandsApi } from '@/lib/apiClient/brands.api';
+import { addonsApi } from '@/lib/apiClient/addons.api';
+import { productsApi } from '@/lib/apiClient/products.api';
 import NumericInput from '@/components/ui/NumericInput';
 import FieldError from '@/components/ui/FieldError';
 import { productSchema, productAddonSchema } from '@/lib/validations';
@@ -91,19 +95,19 @@ export function ProductForm({ initialData, productId }) {
   }, [initialData]);
 
   useEffect(() => {
-    fetch('/api/admin/categories')
-      .then((r) => r.json())
+    categoriesApi
+      .getAdmin()
       .then((d) => setCategories(d.categories || []))
       .catch(() => {});
 
-    fetch('/api/admin/brands')
-      .then((r) => r.json())
+    brandsApi
+      .getAdmin()
       .then((d) => setBrands(d.brands || []))
       .catch(() => {});
 
     // Fetch ONLY ACTIVE library add-ons for the selection dropdown
-    fetch('/api/admin/addons?active=true')
-      .then((r) => r.json())
+    addonsApi
+      .getAdmin({ active: 'true' })
       .then((d) => setLibraryAddons(d.addons || []))
       .catch(() => {});
   }, []);
@@ -228,14 +232,8 @@ export function ProductForm({ initialData, productId }) {
     setInlineSaving(true);
 
     try {
-      const res = await fetch('/api/admin/addons', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.addon) {
+      const data = await addonsApi.save(null, payload);
+      if (data?.addon) {
         toast.success(`Add-on "${data.addon.name}" created and added to library!`);
         
         // Add to active library list state
@@ -255,12 +253,10 @@ export function ProductForm({ initialData, productId }) {
         // Reset modal state
         setInlineForm({ name: '', price: '0', isFree: false, imageUrl: '', isActive: true });
         setShowInlineAddonModal(false);
-      } else {
-        if (data.errors) setInlineErrors(data.errors);
-        toast.error(data.error || 'Failed to create add-on');
       }
-    } catch {
-      toast.error('Network error creating add-on');
+    } catch (err) {
+      if (err.errors) setInlineErrors(err.errors);
+      toast.error(err.message || 'Failed to create add-on');
     }
     setInlineSaving(false);
   }
@@ -308,24 +304,12 @@ export function ProductForm({ initialData, productId }) {
     setLoading(true);
 
     try {
-      const url = isEditing ? `/api/admin/products/${productId}` : '/api/admin/products';
-      const method = isEditing ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
-        router.push('/admin/products');
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to save product');
-      }
-    } catch {
-      toast.error('Network error');
+      await productsApi.save(isEditing ? productId : null, payload);
+      toast.success(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
+      router.push('/admin/products');
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
+      toast.error(err.message || 'Failed to save product');
     } finally {
       setLoading(false);
     }

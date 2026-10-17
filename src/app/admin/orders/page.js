@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/ui/Pagination';
 import CustomSelect from '@/components/ui/CustomSelect';
-
 import { formatCurrency } from '@/lib/utils';
 import { Phone } from 'lucide-react';
+import useAdminOrders from '@/hooks/useAdminOrders';
 
 const statusColors = {
   pending: 'bg-amber-100 text-amber-800',
@@ -30,35 +30,27 @@ const statusOptions = [
 
 export default function AdminOrdersPage() {
   const router = useRouter();
-  const [orders, setOrders] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
 
-  useEffect(() => { fetchOrders(); }, [pagination.page, statusFilter]);
-
-  async function fetchOrders() {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: pagination.page, limit: '20' });
-      if (statusFilter) params.set('status', statusFilter);
-      const res = await fetch(`/api/admin/orders?${params}`); const data = await res.json();
-      setOrders(data.orders || []); setPagination(data.pagination || pagination);
-    } catch { } setLoading(false);
-  }
+  const {
+    orders,
+    pagination,
+    isLoading: loading,
+    markPaid,
+    isMarkingPaid,
+    markingPaidId,
+  } = useAdminOrders({
+    page,
+    limit: 20,
+    status: statusFilter,
+  });
 
   async function handleMarkPaid(e, orderId) {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_payment_status', paymentStatus: 'paid' }),
-      });
-      if (res.ok) {
-        fetchOrders();
-      }
-    } catch { }
+      await markPaid(orderId);
+    } catch {}
   }
 
   return (
@@ -69,7 +61,10 @@ export default function AdminOrdersPage() {
           <CustomSelect
             options={statusOptions}
             value={statusFilter}
-            onChange={(val) => { setStatusFilter(val); setPagination({ ...pagination, page: 1 }); }}
+            onChange={(val) => {
+              setStatusFilter(val);
+              setPage(1);
+            }}
             placeholder="All Statuses"
           />
         </div>
@@ -88,80 +83,110 @@ export default function AdminOrdersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-100">
-            {loading ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-warm-400 text-[11px]">Loading orders...</td></tr>
+            {loading && orders.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-warm-400 text-[11px]">
+                  Loading orders...
+                </td>
+              </tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-warm-400 text-[11px]">No orders found.</td></tr>
-            ) : orders.map((o) => (
-              <tr
-                key={o.id}
-                onClick={() => router.push(`/admin/orders/${o.id}`)}
-                className="hover:bg-warm-50/50 transition-colors cursor-pointer"
-              >
-                <td className="px-3 py-2.5 font-mono text-[10px] text-warm-900 font-medium">{o.id.slice(0, 8)}</td>
-                <td className="px-3 py-2.5">
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-warm-900 font-medium text-[11px]">
-                        {o.userName || o.guestName || 'Guest Customer'}
-                      </p>
-                      {!o.userName && (
-                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-purple-100 text-purple-800 uppercase">
-                          Guest
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-warm-400 text-[11px]">
+                  No orders found.
+                </td>
+              </tr>
+            ) : (
+              orders.map((o) => (
+                <tr
+                  key={o.id}
+                  onClick={() => router.push(`/admin/orders/${o.id}`)}
+                  className="hover:bg-warm-50/50 transition-colors cursor-pointer"
+                >
+                  <td className="px-3 py-2.5 font-mono text-[10px] text-warm-900 font-medium">
+                    {o.id.slice(0, 8)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-warm-900 font-medium text-[11px]">
+                          {o.userName || o.guestName || 'Guest Customer'}
+                        </p>
+                        {!o.userName && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-purple-100 text-purple-800 uppercase">
+                            Guest
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-warm-400 text-[10px]">{o.userEmail || o.guestEmail}</p>
+                      {(o.userPhone || o.guestPhone) && (
+                        <p className="flex items-center gap-1 text-warm-500 text-[10px] font-mono">
+                          <Phone className="w-1.5 h-1.5 shrink-0" />
+                          <span>{o.userPhone || o.guestPhone}</span>
+                        </p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 font-bold text-warm-900">
+                    {formatCurrency(o.totalAmount)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-col gap-1 items-start">
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${
+                          statusColors[o.status] || 'bg-warm-100 text-warm-600'
+                        }`}
+                      >
+                        {o.status}
+                      </span>
+                      {o.paymentStatus === 'pending' ? (
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-100 text-amber-900 uppercase border border-amber-300">
+                          Payment Pending ({o.paymentMethod || 'COD'})
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-100 text-emerald-800 uppercase border border-emerald-300">
+                          Paid ({o.paymentMethod || 'Online'})
                         </span>
                       )}
                     </div>
-                    <p className="text-warm-400 text-[10px]">{o.userEmail || o.guestEmail}</p>
-                    {(o.userPhone || o.guestPhone) && (
-                      <p className="flex items-center gap-1 text-warm-500 text-[10px] font-mono">
-                        <Phone className="w-1.5 h-1.5 shrink-0" />
-                        <span>{o.userPhone || o.guestPhone}</span>
-                      </p>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-2.5 font-bold text-warm-900">{formatCurrency(o.totalAmount)}</td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-col gap-1 items-start">
-                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize ${statusColors[o.status] || 'bg-warm-100 text-warm-600'}`}>
-                      {o.status}
-                    </span>
-                    {o.paymentStatus === 'pending' ? (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-100 text-amber-900 uppercase border border-amber-300">
-                        Payment Pending ({o.paymentMethod || 'COD'})
+                  </td>
+                  <td className="px-3 py-2.5 text-warm-500 text-[10px]">
+                    {new Date(o.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      {o.paymentMethod?.toLowerCase() === 'cod' &&
+                        o.paymentStatus !== 'paid' &&
+                        o.status !== 'cancelled' && (
+                          <button
+                            disabled={isMarkingPaid && markingPaidId === o.id}
+                            onClick={(e) => handleMarkPaid(e, o.id)}
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold rounded transition-colors disabled:opacity-60"
+                            title="Mark COD Cash Collected as Paid"
+                          >
+                            {isMarkingPaid && markingPaidId === o.id ? 'Updating...' : 'Mark Paid'}
+                          </button>
+                        )}
+                      <span className="text-warm-900 font-semibold text-[10px] hover:underline">
+                        Details →
                       </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-100 text-emerald-800 uppercase border border-emerald-300">
-                        Paid ({o.paymentMethod || 'Online'})
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-2.5 text-warm-500 text-[10px]">{new Date(o.createdAt).toLocaleDateString()}</td>
-                <td className="px-3 py-2.5 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    {o.paymentMethod?.toLowerCase() === 'cod' && o.paymentStatus !== 'paid' && o.status !== 'cancelled' && (
-                      <button
-                        onClick={(e) => handleMarkPaid(e, o.id)}
-                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold rounded transition-colors"
-                        title="Mark COD Cash Collected as Paid"
-                      >
-                        Mark Paid
-                      </button>
-                    )}
-                    <span className="text-warm-900 font-semibold text-[10px] hover:underline">
-                      Details →
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
       {pagination.totalPages > 1 && (
-        <div className="mt-4">
-          <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={(p) => setPagination({ ...pagination, page: p })} />
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-[11px] text-warm-500">
+            Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total orders)
+          </p>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={(p) => setPage(p)}
+          />
         </div>
       )}
     </div>

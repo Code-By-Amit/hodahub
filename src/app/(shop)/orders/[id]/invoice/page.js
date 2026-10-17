@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { FiPrinter, FiArrowLeft } from 'react-icons/fi';
 import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
+import { ordersApi } from '@/lib/apiClient/orders.api';
+import { settingsApi } from '@/lib/apiClient/settings.api';
 
 export default function InvoicePage() {
   const { id } = useParams();
@@ -15,17 +17,15 @@ export default function InvoicePage() {
   useEffect(() => {
     async function fetchOrder() {
       try {
-        const res = await fetch(`/api/orders/${id}`);
-        const data = await res.json();
-        if (res.ok) setOrderData(data);
+        const data = await ordersApi.getById(id);
+        if (data) setOrderData(data);
       } catch {}
       setLoading(false);
     }
     async function fetchSettings() {
       try {
-        const res = await fetch('/api/settings');
-        const data = await res.json();
-        if (res.ok && data.settings) setStoreSettings(data.settings);
+        const data = await settingsApi.getPublic();
+        if (data?.settings) setStoreSettings(data.settings);
       } catch {}
     }
     fetchOrder();
@@ -91,7 +91,7 @@ export default function InvoicePage() {
             <div className="flex items-center gap-2">
               <img src="/logof.png" alt="HodaHub" className="h-8 w-auto object-contain" />
               <h1 className="text-xl font-extrabold text-warm-900 tracking-tight">
-                Hoda<span className="text-brand-500">Hub</span>
+                Hoda<span className="text-brand-700">Hub</span>
               </h1>
             </div>
             <p className="text-[11px] text-warm-500 mt-1">Official Purchase Invoice</p>

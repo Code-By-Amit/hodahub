@@ -15,7 +15,8 @@
     "db:seed": "node src/lib/db/seed.js",
     "db:migrate-categories": "node src/lib/db/migrate-category-relations.js",
     "db:migrate-addons": "node src/lib/db/migrate-addons.js",
-    "db:migrate-happy-customers": "node src/lib/db/migrate-happy-customers.js"
+    "db:migrate-happy-customers": "node src/lib/db/migrate-happy-customers.js",
+    "db:migrate-indexes": "node src/lib/db/migrate-performance-indexes.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

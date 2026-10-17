@@ -10,10 +10,21 @@ import FieldError from '@/components/ui/FieldError';
 import { productAddonSchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
 
+import useAdminAddons from '@/hooks/useAdminAddons';
+
 export default function AdminAddonsPage() {
   const toast = useToast();
-  const [addonsList, setAddonsList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    addons: addonsList,
+    isLoading: loading,
+    toggleStatus,
+    isToggling,
+    togglingId,
+    saveAddon,
+    isSaving: saving,
+    deleteAddon,
+  } = useAdminAddons();
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -24,20 +35,6 @@ export default function AdminAddonsPage() {
     isActive: true,
   });
   const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchAddons();
-  }, []);
-
-  async function fetchAddons() {
-    try {
-      const res = await fetch('/api/admin/addons');
-      const data = await res.json();
-      setAddonsList(data.addons || []);
-    } catch {}
-    setLoading(false);
-  }
 
   function startEdit(addon) {
     setEditingId(addon.id);
@@ -83,50 +80,32 @@ export default function AdminAddonsPage() {
       return;
     }
     setErrors({});
-    setSaving(true);
 
     try {
-      const url = editingId ? `/api/admin/addons/${editingId}` : '/api/admin/addons';
-      const method = editingId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingId ? 'Add-on updated!' : 'Add-on created!');
-        resetForm();
-        fetchAddons();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to save add-on');
-      }
-    } catch {
-      toast.error('Network error');
+      await saveAddon({ id: editingId, payload });
+      resetForm();
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
     }
-    setSaving(false);
   }
 
   async function handleDelete(addon) {
-    const confirmMsg = addon.productCount > 0
-      ? `"${addon.name}" is currently linked to ${addon.productCount} product(s). Are you sure you want to delete and unlink it from all products?`
-      : `Delete "${addon.name}" from library?`;
+    const confirmMsg =
+      addon.productCount > 0
+        ? `"${addon.name}" is currently linked to ${addon.productCount} product(s). Are you sure you want to delete and unlink it from all products?`
+        : `Delete "${addon.name}" from library?`;
 
     if (!confirm(confirmMsg)) return;
 
     try {
-      const res = await fetch(`/api/admin/addons/${addon.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Add-on deleted');
-        fetchAddons();
-      } else {
-        toast.error('Failed to delete add-on');
-      }
-    } catch {
-      toast.error('Error deleting add-on');
-    }
+      await deleteAddon(addon.id);
+    } catch {}
+  }
+
+  async function handleToggleStatus(id, currentActive) {
+    try {
+      await toggleStatus(id, !currentActive);
+    } catch {}
   }
 
   return (
@@ -331,15 +310,34 @@ export default function AdminAddonsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    {addon.isActive !== false ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        Active
+                    <button
+                      type="button"
+                      disabled={isToggling && togglingId === addon.id}
+                      onClick={() => handleToggleStatus(addon.id, addon.isActive !== false)}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all cursor-pointer disabled:opacity-60 ${
+                        addon.isActive !== false
+                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+                          : 'bg-warm-100 text-warm-600 hover:bg-warm-200 border-warm-200'
+                      }`}
+                      title="Click to toggle active status"
+                    >
+                      {isToggling && togglingId === addon.id ? (
+                        <span className="w-1.5 h-1.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                      ) : (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            addon.isActive !== false ? 'bg-emerald-500' : 'bg-warm-400'
+                          }`}
+                        />
+                      )}
+                      <span>
+                        {isToggling && togglingId === addon.id
+                          ? 'Updating...'
+                          : addon.isActive !== false
+                          ? 'Active'
+                          : 'Inactive'}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warm-500 bg-warm-100 px-2 py-0.5 rounded border border-warm-200">
-                        Inactive
-                      </span>
-                    )}
+                    </button>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">

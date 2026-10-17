@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
@@ -11,13 +11,18 @@ import {
   selectIsWishlisted,
 } from '@/lib/store/wishlistSlice';
 import { selectUser } from '@/lib/store/authSlice';
+import dynamic from 'next/dynamic';
 import { useToast } from '@/components/ui/Toast';
 import StarRating from '@/components/ui/StarRating';
-import QuickViewModal from '@/components/ui/QuickViewModal';
 import { formatCurrency } from '@/lib/utils';
+
+const QuickViewModal = dynamic(() => import('@/components/ui/QuickViewModal'), {
+  ssr: false,
+});
 import { trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
 import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { Heart, ShoppingBag, Eye, Package } from 'lucide-react';
+import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
 export default function ProductCard({ product, variant = 'default' }) {
   const dispatch = useDispatch();
@@ -40,7 +45,10 @@ export default function ProductCard({ product, variant = 'default' }) {
     ? Math.round(((price - discountPrice) / price) * 100)
     : 0;
 
-  const isNew = createdAt && (Date.now() - new Date(createdAt).getTime()) < 14 * 24 * 60 * 60 * 1000;
+  const isNew = useMemo(
+    () => Boolean(createdAt && (Date.now() - new Date(createdAt).getTime()) < 14 * 24 * 60 * 60 * 1000),
+    [createdAt]
+  );
 
   const handleAddToCart = (e) => {
     e.preventDefault();
@@ -68,7 +76,7 @@ export default function ProductCard({ product, variant = 'default' }) {
       toast.info(`Removed ${name} from wishlist`);
       if (user) {
         try {
-          await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+          await wishlistApi.remove(id);
         } catch { }
       }
     } else {
@@ -76,11 +84,7 @@ export default function ProductCard({ product, variant = 'default' }) {
       toast.success(`Added ${name} to wishlist!`);
       if (user) {
         try {
-          await fetch('/api/wishlist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId: id }),
-          });
+          await wishlistApi.add(id);
         } catch { }
       }
     }
@@ -264,11 +268,13 @@ export default function ProductCard({ product, variant = 'default' }) {
         </Link>
       </div>
 
-      <QuickViewModal
-        product={product}
-        isOpen={quickViewOpen}
-        onClose={() => setQuickViewOpen(false)}
-      />
+      {quickViewOpen && (
+        <QuickViewModal
+          product={product}
+          isOpen={quickViewOpen}
+          onClose={() => setQuickViewOpen(false)}
+        />
+      )}
     </>
   );
 }

@@ -47,6 +47,10 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import ReturnPolicyContent from '@/components/storefront/ReturnPolicyContent';
+import { productsApi } from '@/lib/apiClient/products.api';
+import { settingsApi } from '@/lib/apiClient/settings.api';
+import { pincodeApi } from '@/lib/apiClient/pincode.api';
+import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
@@ -119,9 +123,8 @@ export default function ProductDetailPage() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (res.ok && data.settings?.whatsappNumber) {
+      const data = await settingsApi.getPublic();
+      if (data?.settings?.whatsappNumber) {
         setWhatsappNumber(data.settings.whatsappNumber);
       } else {
         setWhatsappNumber('');
@@ -140,9 +143,8 @@ export default function ProductDetailPage() {
     const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(slugStr)}`);
-      const data = await res.json();
-      if (res.ok && data.product) {
+      const data = await productsApi.getBySlug(slugStr);
+      if (data?.product) {
         setProduct(data.product);
         setLoading(false);
         trackViewContent(data.product);
@@ -156,9 +158,7 @@ export default function ProductDetailPage() {
             // 1. Same category
             if (data.product.categorySlug) {
               fetches.push(
-                fetch(`/api/products?category=${encodeURIComponent(data.product.categorySlug)}&limit=10`)
-                  .then((r) => (r.ok ? r.json() : null))
-                  .catch(() => null)
+                productsApi.getAll({ category: data.product.categorySlug, limit: 10 }).catch(() => null)
               );
             } else {
               fetches.push(Promise.resolve(null));
@@ -168,9 +168,7 @@ export default function ProductDetailPage() {
             const brandTerm = data.product.brandSlug || data.product.brand;
             if (brandTerm) {
               fetches.push(
-                fetch(`/api/products?brand=${encodeURIComponent(brandTerm)}&limit=10`)
-                  .then((r) => (r.ok ? r.json() : null))
-                  .catch(() => null)
+                productsApi.getAll({ brand: brandTerm, limit: 10 }).catch(() => null)
               );
             } else {
               fetches.push(Promise.resolve(null));
@@ -178,9 +176,7 @@ export default function ProductDetailPage() {
 
             // 3. Fallback newest
             fetches.push(
-              fetch('/api/products?sort=newest&limit=10')
-                .then((r) => (r.ok ? r.json() : null))
-                .catch(() => null)
+              productsApi.getAll({ sort: 'newest', limit: 10 }).catch(() => null)
             );
 
             const [catRes, brandRes, newestRes] = await Promise.all(fetches);
@@ -232,11 +228,10 @@ export default function ProductDetailPage() {
     const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setReviewsLoading(true);
     try {
-      const res = await fetch(`/api/products/${encodeURIComponent(slugStr)}/reviews`);
-      const data = await res.json();
-      setReviews(data.reviews || []);
-      setUserHasOrdered(!!data.userHasOrdered);
-      setUserReview(data.userReview || null);
+      const data = await productsApi.getReviews(slugStr);
+      setReviews(data?.reviews || []);
+      setUserHasOrdered(!!data?.userHasOrdered);
+      setUserReview(data?.userReview || null);
     } catch {}
     setReviewsLoading(false);
   }
@@ -255,21 +250,14 @@ export default function ProductDetailPage() {
     if (!userReview) return;
     if (!confirm('Are you sure you want to delete your review?')) return;
     try {
-      const res = await fetch(`/api/products/${slug}/reviews/${userReview.id}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Your review was deleted');
-        setIsEditingReview(false);
-        setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
-        fetchReviews();
-        fetchProduct();
-      } else {
-        toast.error(data.error || 'Failed to delete review');
-      }
-    } catch {
-      toast.error('Network error');
+      await productsApi.deleteReview(slug, userReview.id);
+      toast.success('Your review was deleted');
+      setIsEditingReview(false);
+      setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
+      fetchReviews();
+      fetchProduct();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete review');
     }
   }
 
@@ -286,28 +274,18 @@ export default function ProductDetailPage() {
     setSubmittingReview(true);
     try {
       const isEdit = isEditingReview && userReview?.id;
-      const endpoint = isEdit
-        ? `/api/products/${slug}/reviews/${userReview.id}`
-        : `/api/products/${slug}/reviews`;
-      const method = isEdit ? 'PUT' : 'POST';
-
-      const res = await fetch(endpoint, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reviewForm),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(isEdit ? 'Review updated successfully!' : 'Review submitted successfully!');
-        setIsEditingReview(false);
-        setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
-        fetchReviews();
-        fetchProduct();
+      if (isEdit) {
+        await productsApi.updateReview(slug, userReview.id, reviewForm);
       } else {
-        toast.error(data.error || 'Failed to submit review');
+        await productsApi.createReview(slug, reviewForm);
       }
-    } catch {
-      toast.error('Network error');
+      toast.success(isEdit ? 'Review updated successfully!' : 'Review submitted successfully!');
+      setIsEditingReview(false);
+      setReviewForm({ rating: 5, comment: '', mediaUrls: [] });
+      fetchReviews();
+      fetchProduct();
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit review');
     }
     setSubmittingReview(false);
   }
@@ -329,15 +307,14 @@ export default function ProductDetailPage() {
     setPincodeLoading(true);
     setPincodeStatus(null);
     try {
-      const res = await fetch(`/api/pincode/check?pincode=${cleaned}`);
-      const data = await res.json();
-      if (res.ok && data.serviceable) {
+      const data = await pincodeApi.check(cleaned);
+      if (data?.serviceable) {
         setPincodeStatus({
           type: 'success',
           message: data.message || 'Delivery available (Est. 3-7 business days)',
         });
       } else {
-        setPincodeStatus({ type: 'error', message: data.error || 'Please enter a valid 6-digit pincode' });
+        setPincodeStatus({ type: 'error', message: data?.error || 'Please enter a valid 6-digit pincode' });
       }
     } catch {
       setPincodeStatus({ type: 'success', message: 'Delivery available (Est. 3-7 business days)' });
@@ -762,18 +739,14 @@ export default function ProductDetailPage() {
                   dispatch(removeFromWishlist(product.id));
                   toast.info(`Removed ${product.name} from wishlist`);
                   if (user) {
-                    try { await fetch(`/api/wishlist/${product.id}`, { method: 'DELETE' }); } catch {}
+                    try { await wishlistApi.remove(product.id); } catch {}
                   }
                 } else {
                   dispatch(addToWishlist(product));
                   toast.success(`Added ${product.name} to wishlist!`);
                   if (user) {
                     try {
-                      await fetch('/api/wishlist', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ productId: product.id }),
-                      });
+                      await wishlistApi.add(product.id);
                     } catch {}
                   }
                 }

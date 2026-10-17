@@ -26,6 +26,8 @@ import {
   FiLock,
   FiSmartphone,
 } from 'react-icons/fi';
+import { profileApi } from '@/lib/apiClient/profile.api';
+import { addressesApi } from '@/lib/apiClient/addresses.api';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -114,9 +116,8 @@ export default function ProfilePage() {
 
   async function fetchProfile() {
     try {
-      const res = await fetch('/api/profile');
-      const data = await res.json();
-      if (res.ok && data.user) {
+      const data = await profileApi.get();
+      if (data?.user) {
         setProfileData({
           name: data.user.name || '',
           email: data.user.email || '',
@@ -146,23 +147,16 @@ export default function ProfilePage() {
     }
     setSendingOtp(true);
     try {
-      const res = await fetch('/api/user/phone/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: profileData.phone }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await profileApi.sendPhoneOtp({ phone: profileData.phone });
+      if (data) {
         toast.success(data.message || 'OTP sent to mobile number');
         if (data.demoOtp && process.env.NODE_ENV === 'development') {
           toast.info(`Dev Mode OTP: ${data.demoOtp}`);
         }
         setShowPhoneModal(true);
-      } else {
-        toast.error(data.error || 'Failed to send OTP');
       }
-    } catch {
-      toast.error('Network error');
+    } catch (err) {
+      toast.error(err.message || 'Failed to send OTP');
     }
     setSendingOtp(false);
   }
@@ -175,13 +169,8 @@ export default function ProfilePage() {
     }
     setVerifyingOtp(true);
     try {
-      const res = await fetch('/api/user/phone/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: phoneOtpInput }),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await profileApi.verifyPhoneOtp({ otp: phoneOtpInput });
+      if (data) {
         toast.success('Mobile number verified successfully!');
         setProfileData((prev) => ({
           ...prev,
@@ -191,11 +180,9 @@ export default function ProfilePage() {
         setShowPhoneModal(false);
         setPhoneOtpInput('');
         if (data.user) dispatch(setUser(data.user));
-      } else {
-        toast.error(data.error || 'Invalid OTP');
       }
-    } catch {
-      toast.error('Verification error');
+    } catch (err) {
+      toast.error(err.message || 'Invalid OTP');
     }
     setVerifyingOtp(false);
   }
@@ -223,17 +210,12 @@ export default function ProfilePage() {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: profileData.name,
-          phone: profileData.phone,
-          avatarUrl: profileData.avatarUrl,
-        }),
+      const data = await profileApi.update({
+        name: profileData.name,
+        phone: profileData.phone,
+        avatarUrl: profileData.avatarUrl,
       });
-      const data = await res.json();
-      if (res.ok) {
+      if (data) {
         toast.success('Profile updated!');
         if (data.user) {
           dispatch(setUser(data.user));
@@ -245,12 +227,10 @@ export default function ProfilePage() {
             isPhoneAuth: Boolean(data.user.isPhoneAuth),
           }));
         }
-      } else {
-        if (data.errors) setProfileErrors(data.errors);
-        toast.error(data.error || 'Failed to update profile');
       }
-    } catch {
-      toast.error('Network error');
+    } catch (err) {
+      if (err.errors) setProfileErrors(err.errors);
+      toast.error(err.message || 'Failed to update profile');
     }
     setSaving(false);
   }
@@ -270,21 +250,14 @@ export default function ProfilePage() {
 
     setPasswordSaving(true);
     try {
-      const res = await fetch('/api/profile/password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(passwordData),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await profileApi.changePassword(passwordData);
+      if (data) {
         toast.success(data.message || 'Password updated successfully!');
         setPasswordData({ currentPassword: '', newPassword: '' });
-      } else {
-        if (data.errors) setPasswordErrors(data.errors);
-        toast.error(data.error || 'Failed to update password');
       }
-    } catch {
-      toast.error('Network error');
+    } catch (err) {
+      if (err.errors) setPasswordErrors(err.errors);
+      toast.error(err.message || 'Failed to update password');
     }
     setPasswordSaving(false);
   }
@@ -307,23 +280,16 @@ export default function ProfilePage() {
 
     setAddrSaving(true);
     try {
-      const res = await fetch('/api/addresses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(addrForm),
-      });
-      const data = await res.json();
-      if (res.ok) {
+      const data = await addressesApi.create(addrForm);
+      if (data) {
         toast.success('Address added!');
         setAddrForm({ label: '', line1: '', line2: '', city: '', state: '', pincode: '', phone: '' });
         setShowAddAddr(false);
         fetchProfile();
-      } else {
-        if (data.errors) setAddrErrors(data.errors);
-        toast.error(data.error || 'Failed to add address');
       }
-    } catch {
-      toast.error('Failed to add address');
+    } catch (err) {
+      if (err.errors) setAddrErrors(err.errors);
+      toast.error(err.message || 'Failed to add address');
     }
     setAddrSaving(false);
   }

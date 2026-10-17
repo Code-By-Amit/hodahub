@@ -1,21 +1,17 @@
-import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { banners } from '@/lib/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { routeHandler, ApiResponse } from '@/lib/route-handler';
+import { bannerService } from '@/services/banner.service';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  try {
-    const activeBanners = await db
-      .select()
-      .from(banners)
-      .where(eq(banners.isActive, true))
-      .orderBy(asc(banners.sortOrder), asc(banners.createdAt));
-
-    return NextResponse.json({ banners: activeBanners });
-  } catch (error) {
-    console.error('Fetch active banners error:', error);
-    return NextResponse.json({ banners: [] });
-  }
-}
+export const GET = routeHandler({
+  auth: false,
+  handler: async () => {
+    try {
+      const activeBanners = await bannerService.getActiveBanners();
+      return ApiResponse.success({ banners: activeBanners });
+    } catch (error) {
+      console.error('Fetch active banners error:', error);
+      return ApiResponse.success({ banners: [] });
+    }
+  },
+});

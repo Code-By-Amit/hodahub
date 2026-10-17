@@ -277,3 +277,17 @@ export const happyCustomerUpdateSchema = z.object({
   sortOrder: customerSortOrder.optional(),
 });
 
+// --- Brands ---
+export const brandQuerySchema = z.object({
+  q: z.string().max(100).optional(),
+  page: z.string().optional(),
+  limit: z.string().optional(),
+  category: z.string().optional(),
+  search: z.string().optional(),
+});
+
+export const brandParamSchema = z.object({
+  slug: z.string().min(1, 'Slug is required'),
+});
+
+

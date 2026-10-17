@@ -1,21 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Modal from '@/components/ui/Modal';
 import ImageUpload from '@/components/ui/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
 import NumericInput from '@/components/ui/NumericInput';
-import { buildOrderPatch } from '@/lib/happy-customers';
 import { ArrowDown, ArrowUp, Edit2, Eye, EyeOff, Images, Plus, Trash2 } from 'lucide-react';
+import useAdminHappyCustomers from '@/hooks/useAdminHappyCustomers';
 
 export default function AdminHappyCustomersPage() {
   const toast = useToast();
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [savingOrder, setSavingOrder] = useState(false);
+  const {
+    items,
+    isLoading: loading,
+    toggleActive,
+    isToggling,
+    togglingId,
+    saveItem,
+    isSaving: saving,
+    reorderItems,
+    isReordering: savingOrder,
+    deleteItem,
+  } = useAdminHappyCustomers();
+
   const [modalOpen, setModalOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
   const [form, setForm] = useState({
@@ -24,27 +33,6 @@ export default function AdminHappyCustomersPage() {
     isActive: true,
     sortOrder: 0,
   });
-
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
-  async function fetchItems() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/happy-customers');
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || 'Failed to load customer screenshots');
-        return;
-      }
-      setItems(data.happyCustomers || []);
-    } catch {
-      toast.error('Failed to load customer screenshots');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function handleOpenCreate() {
     setEditingItem(null);
@@ -79,103 +67,32 @@ export default function AdminHappyCustomersPage() {
       return;
     }
 
-    setSaving(true);
     try {
-      const url = editingItem ? `/api/admin/happy-customers/${editingItem.id}` : '/api/admin/happy-customers';
-      const res = await fetch(url, {
-        method: editingItem ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingItem ? 'Screenshot updated!' : 'Screenshot added!');
-        setModalOpen(false);
-        fetchItems();
-      } else {
-        toast.error(data.error || 'Failed to save screenshot');
-      }
-    } catch {
-      toast.error('Network error');
-    }
-    setSaving(false);
+      await saveItem({ id: editingItem?.id, form });
+      setModalOpen(false);
+    } catch {}
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this screenshot? The stored image is removed as well.')) return;
     try {
-      const res = await fetch(`/api/admin/happy-customers/${id}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success('Screenshot deleted');
-        fetchItems();
-      } else {
-        toast.error(data.error || 'Failed to delete screenshot');
-      }
-    } catch {
-      toast.error('Error deleting screenshot');
-    }
+      await deleteItem(id);
+    } catch {}
   }
 
-  async function toggleActive(item) {
+  async function handleToggle(item) {
     try {
-      const res = await fetch(`/api/admin/happy-customers/${item.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !item.isActive }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        toast.success(`Screenshot ${!item.isActive ? 'published' : 'unpublished'}`);
-        fetchItems();
-      } else {
-        toast.error(data.error || 'Failed to update status');
-      }
-    } catch {
-      toast.error('Error updating status');
-    }
+      await toggleActive(item);
+    } catch {}
   }
 
-  async function persistOrder(nextItems) {
-    const patch = buildOrderPatch(nextItems);
-    if (patch.length === 0) return true;
-
-    const results = await Promise.all(
-      patch.map(({ id, sortOrder }) =>
-        fetch(`/api/admin/happy-customers/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sortOrder }),
-        })
-      )
-    );
-
-    return results.every((res) => res.ok);
-  }
-
-  async function moveItem(index, direction) {
+  function moveItem(index, direction) {
     const target = index + direction;
     if (target < 0 || target >= items.length || savingOrder) return;
 
     const next = [...items];
     [next[index], next[target]] = [next[target], next[index]];
-    setItems(next);
-    setSavingOrder(true);
-
-    try {
-      const ok = await persistOrder(next);
-      if (!ok) {
-        toast.error('Failed to save the new order');
-      } else {
-        toast.success('Display order updated');
-      }
-    } catch {
-      toast.error('Error updating display order');
-    } finally {
-      setSavingOrder(false);
-      fetchItems();
-    }
+    reorderItems(next);
   }
 
   return (
@@ -241,10 +158,11 @@ export default function AdminHappyCustomersPage() {
                   <td className="px-3 py-2.5 text-center font-bold text-warm-900 text-[11px]">{item.sortOrder}</td>
                   <td className="px-3 py-2.5 text-center">
                     <button
-                      onClick={() => toggleActive(item)}
+                      onClick={() => handleToggle(item)}
+                      disabled={isToggling && togglingId === item.id}
                       className={`px-2 py-0.5 text-[10px] font-semibold rounded-full capitalize inline-flex items-center gap-1 ${
                         item.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-warm-100 text-warm-500'
-                      }`}
+                      } ${isToggling && togglingId === item.id ? 'opacity-50 cursor-wait' : ''}`}
                     >
                       {item.isActive ? <Eye className="w-2.5 h-2.5" /> : <EyeOff className="w-2.5 h-2.5" />}
                       {item.isActive ? 'Published' : 'Hidden'}

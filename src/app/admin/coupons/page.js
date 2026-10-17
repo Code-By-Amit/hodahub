@@ -11,11 +11,23 @@ import FieldError from '@/components/ui/FieldError';
 import { couponSchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
 
+import useAdminCoupons from '@/hooks/useAdminCoupons';
+
 export default function AdminCouponsPage() {
   const toast = useToast();
-  const [coupons, setCoupons] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const {
+    coupons,
+    pagination,
+    isLoading: loading,
+    toggleStatus,
+    isToggling,
+    togglingId,
+    saveCoupon,
+    isSaving: saving,
+    deleteCoupon,
+  } = useAdminCoupons({ page, limit: 20 });
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
@@ -27,21 +39,6 @@ export default function AdminCouponsPage() {
     isActive: true,
   });
   const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchCoupons();
-  }, [pagination.page]);
-
-  async function fetchCoupons() {
-    try {
-      const res = await fetch(`/api/admin/coupons?page=${pagination.page}`);
-      const data = await res.json();
-      setCoupons(data.coupons || []);
-      setPagination(data.pagination || pagination);
-    } catch {}
-    setLoading(false);
-  }
 
   function startEdit(c) {
     setEditingId(c.id);
@@ -88,41 +85,25 @@ export default function AdminCouponsPage() {
       return;
     }
     setErrors({});
-    setSaving(true);
     try {
-      const url = editingId ? `/api/admin/coupons/${editingId}` : '/api/admin/coupons';
-      const method = editingId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingId ? 'Coupon updated!' : 'Coupon created!');
-        resetForm();
-        fetchCoupons();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to save coupon');
-      }
-    } catch {
-      toast.error('Network error');
+      await saveCoupon({ id: editingId, payload });
+      resetForm();
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
     }
-    setSaving(false);
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this coupon?')) return;
     try {
-      const res = await fetch(`/api/admin/coupons/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Coupon deleted');
-        fetchCoupons();
-      } else toast.error('Failed to delete coupon');
-    } catch {
-      toast.error('Error deleting coupon');
-    }
+      await deleteCoupon(id);
+    } catch {}
+  }
+
+  async function handleToggleStatus(id, currentActive) {
+    try {
+      await toggleStatus(id, !currentActive);
+    } catch {}
   }
 
   const typeOptions = [
@@ -326,15 +307,34 @@ export default function AdminCouponsPage() {
                     {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : 'Never'}
                   </td>
                   <td className="px-3 py-2">
-                    {c.isActive ? (
-                      <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-semibold rounded-md border border-emerald-200">
-                        Active
+                    <button
+                      type="button"
+                      disabled={isToggling && togglingId === c.id}
+                      onClick={() => handleToggleStatus(c.id, c.isActive)}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all cursor-pointer disabled:opacity-60 ${
+                        c.isActive
+                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+                          : 'bg-warm-100 text-warm-600 hover:bg-warm-200 border-warm-200'
+                      }`}
+                      title="Click to toggle active status"
+                    >
+                      {isToggling && togglingId === c.id ? (
+                        <span className="w-1.5 h-1.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                      ) : (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            c.isActive ? 'bg-emerald-500' : 'bg-warm-400'
+                          }`}
+                        />
+                      )}
+                      <span>
+                        {isToggling && togglingId === c.id
+                          ? 'Updating...'
+                          : c.isActive
+                          ? 'Active'
+                          : 'Inactive'}
                       </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 bg-warm-100 text-warm-500 text-[10px] font-medium rounded-md">
-                        Inactive
-                      </span>
-                    )}
+                    </button>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -366,7 +366,7 @@ export default function AdminCouponsPage() {
           <Pagination
             currentPage={pagination.page}
             totalPages={pagination.totalPages}
-            onPageChange={(p) => setPagination({ ...pagination, page: p })}
+            onPageChange={(p) => setPage(p)}
           />
         </div>
       )}

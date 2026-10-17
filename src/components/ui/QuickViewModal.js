@@ -17,6 +17,7 @@ import { formatCurrency, isVideoUrl } from '@/lib/utils';
 import { trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
 import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { X, ShoppingBag, Heart, Package, ArrowRight, Minus, Plus } from 'lucide-react';
+import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
 export default function QuickViewModal({ product, isOpen, onClose }) {
   const dispatch = useDispatch();
@@ -92,7 +93,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       toast.info('Removed from wishlist');
       if (user) {
         try {
-          await fetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+          await wishlistApi.remove(id);
         } catch {}
       }
     } else {
@@ -100,11 +101,7 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
       toast.success('Added to wishlist!');
       if (user) {
         try {
-          await fetch('/api/wishlist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId: id }),
-          });
+          await wishlistApi.add(id);
         } catch {}
       }
     }

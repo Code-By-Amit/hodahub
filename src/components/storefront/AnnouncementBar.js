@@ -1,5 +1,3 @@
-'use client';
-
 import { Truck, Percent, Zap, Gift, ShieldCheck } from 'lucide-react';
 
 export default function AnnouncementBar() {

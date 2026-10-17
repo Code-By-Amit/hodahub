@@ -8,6 +8,7 @@ import ImageUpload from '@/components/ui/ImageUpload';
 import FieldError from '@/components/ui/FieldError';
 import { brandSchema } from '@/lib/validations';
 import { flattenZodErrors } from '@/lib/zod-utils';
+import { brandsApi } from '@/lib/apiClient/brands.api';
 
 export default function AdminBrandsPage() {
   const toast = useToast();
@@ -25,8 +26,7 @@ export default function AdminBrandsPage() {
 
   async function fetchBrands() {
     try {
-      const res = await fetch('/api/admin/brands');
-      const data = await res.json();
+      const data = await brandsApi.getAdmin();
       setBrands(data.brands || []);
     } catch {}
     setLoading(false);
@@ -70,24 +70,13 @@ export default function AdminBrandsPage() {
     setErrors({});
     setSaving(true);
     try {
-      const url = editingId ? `/api/admin/brands/${editingId}` : '/api/admin/brands';
-      const method = editingId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(editingId ? 'Brand updated!' : 'Brand created!');
-        resetForm();
-        fetchBrands();
-      } else {
-        if (data.errors) setErrors(data.errors);
-        toast.error(data.error || 'Failed to save brand');
-      }
-    } catch {
-      toast.error('Network error');
+      await brandsApi.save(editingId, form);
+      toast.success(editingId ? 'Brand updated!' : 'Brand created!');
+      resetForm();
+      fetchBrands();
+    } catch (err) {
+      if (err.errors) setErrors(err.errors);
+      toast.error(err.message || 'Failed to save brand');
     }
     setSaving(false);
   }
@@ -95,11 +84,9 @@ export default function AdminBrandsPage() {
   async function handleDelete(id, name) {
     if (!confirm(`Delete brand "${name}"? Products attached to this brand will become unbranded.`)) return;
     try {
-      const res = await fetch(`/api/admin/brands/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Brand deleted');
-        fetchBrands();
-      } else toast.error('Failed to delete brand');
+      await brandsApi.remove(id);
+      toast.success('Brand deleted');
+      fetchBrands();
     } catch {
       toast.error('Error deleting brand');
     }

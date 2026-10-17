@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Upload, X, ArrowLeft, ArrowRight, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { isVideoUrl } from '@/lib/utils';
+import { uploadApi } from '@/lib/apiClient/upload.api';
 
 export default function ImageUpload({
   uploadType = 'product-image',
@@ -46,18 +47,8 @@ export default function ImageUpload({
     }
 
     // Fetch signed params from server
-    const sigRes = await fetch('/api/upload/signature', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uploadType: effectiveUploadType }),
-    });
-
-    if (!sigRes.ok) {
-      const errData = await sigRes.json();
-      throw new Error(errData.error || 'Failed to authorize upload.');
-    }
-
-    const { signature, timestamp, folder, apiKey, cloudName, params } = await sigRes.json();
+    const { signature, timestamp, folder, apiKey, cloudName, params } =
+      await uploadApi.getSignature({ uploadType: effectiveUploadType });
 
     const formData = new FormData();
     formData.append('file', file);

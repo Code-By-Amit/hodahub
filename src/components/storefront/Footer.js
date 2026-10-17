@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { FiInstagram, FiTwitter, FiFacebook, FiYoutube } from 'react-icons/fi';
+import { settingsApi } from '@/lib/apiClient/settings.api';
 
 const footerLinks = {
   Shop: [
@@ -10,6 +11,7 @@ const footerLinks = {
     { label: 'Best Sellers', href: '/products?sort=best-sellers' },
     { label: 'All Products', href: '/products' },
     { label: 'Categories', href: '/categories' },
+    { label: 'Brands', href: '/brands' },
     { label: 'Sale', href: '/products?sort=discount' },
   ],
   'Customer Service': [
@@ -36,8 +38,8 @@ export default function Footer() {
   });
 
   useEffect(() => {
-    fetch('/api/settings')
-      .then((res) => res.json())
+    settingsApi
+      .getPublic()
       .then((data) => {
         if (data?.settings) {
           setSettings(data.settings);

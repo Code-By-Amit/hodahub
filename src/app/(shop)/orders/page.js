@@ -8,6 +8,7 @@ import { selectUser, selectAuthLoading } from '@/lib/store/authSlice';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import { formatCurrency } from '@/lib/utils';
 import { FiPackage, FiChevronRight } from 'react-icons/fi';
+import { ordersApi } from '@/lib/apiClient/orders.api';
 
 const statusColors = {
   pending: 'bg-amber-100 text-amber-800',
@@ -33,9 +34,8 @@ export default function OrdersPage() {
 
   async function fetchOrders() {
     try {
-      const res = await fetch('/api/orders');
-      const data = await res.json();
-      if (res.ok) setOrders(data.orders || []);
+      const data = await ordersApi.getAll();
+      if (data?.orders) setOrders(data.orders || []);
     } catch {}
     setLoading(false);
   }
