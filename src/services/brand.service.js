@@ -9,6 +9,9 @@ let cachedBrandsData = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 60 * 1000;
 
+const brandCategoriesCache = new Map();
+let brandCategoriesCacheTimestamp = 0;
+
 /**
  * Derives unique brands from active, in-stock products with deterministic slugs,
  * product counts, and tile images (brand logo or first image of the best active product).
@@ -275,11 +278,145 @@ export const brandService = {
   },
 
   /**
+   * GET brand categories hierarchy with descendant rollup and image fallback
+   */
+  async getBrandCategoryHierarchy({ slug, categorySlug = null }) {
+    if (!slug) throw AppError.badRequest('Slug is required');
+    const brand = await this.getBrandBySlug(slug);
+
+    const now = Date.now();
+    const cleanCategorySlug = typeof categorySlug === 'string' ? categorySlug.trim().slice(0, 100) : null;
+    const cacheKey = `${brand.name}:${cleanCategorySlug || '__root__'}`;
+
+    if (now - brandCategoriesCacheTimestamp < CACHE_TTL_MS && brandCategoriesCache.has(cacheKey)) {
+      return brandCategoriesCache.get(cacheKey);
+    }
+
+    const [allRelations, tree, brandProducts] = await Promise.all([
+      categoryService.getCategoryRelations(),
+      categoryService.getPublicTree(),
+      db
+        .select({
+          id: products.id,
+          categoryId: products.categoryId,
+          images: products.images,
+        })
+        .from(products)
+        .leftJoin(brands, eq(products.brandId, brands.id))
+        .where(
+          and(
+            eq(products.isActive, true),
+            eq(products.isOutOfStock, false),
+            gt(products.stock, 0),
+            or(
+              eq(products.brand, brand.name),
+              eq(brands.name, brand.name)
+            )
+          )
+        ),
+    ]);
+
+    const { allCategories, rootCategories } = tree;
+
+    // Precalculate descendant set for all categories
+    // and count matching brand products (each product counted once per category)
+    const categoryDataMap = new Map();
+    for (const cat of allCategories) {
+      const descendantIds = new Set(await categoryService.getDescendantCategoryIds(cat.id));
+      const matching = brandProducts.filter((p) => descendantIds.has(p.categoryId));
+      const count = matching.length;
+      const firstImage = matching.find((p) => Array.isArray(p.images) && p.images.length > 0)?.images[0] || null;
+
+      categoryDataMap.set(cat.id, {
+        id: cat.id,
+        _id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        imageUrl: cat.imageUrl || firstImage || null,
+        productCount: count,
+      });
+    }
+
+    // Determine how many root categories have active products for this brand
+    const activeRoots = rootCategories
+      .map((r) => categoryDataMap.get(r.id))
+      .filter((c) => c && c.productCount > 0);
+
+    const isSingleCategory = activeRoots.length === 1;
+
+    let selectedCategory = null;
+    let categoriesList = [];
+    let breadcrumbs = [];
+
+    if (!cleanCategorySlug) {
+      // Landing page: candidate categories are the root categories with active products
+      categoriesList = activeRoots.sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));
+      breadcrumbs = [
+        { label: 'Brands', href: '/brands' },
+        { label: brand.name },
+      ];
+    } else {
+      // Category level: find category by exact slug (or uuid if slug matches id)
+      const foundCat = allCategories.find((c) => c.slug === cleanCategorySlug || c.id === cleanCategorySlug);
+
+      if (foundCat && categoryDataMap.get(foundCat.id)?.productCount > 0) {
+        selectedCategory = categoryDataMap.get(foundCat.id);
+
+        // Child categories containing this brand's products
+        const childRelations = allRelations.filter((r) => r.parentId === foundCat.id);
+        const childCategoryIds = childRelations.map((r) => r.categoryId);
+        categoriesList = childCategoryIds
+          .map((cid) => categoryDataMap.get(cid))
+          .filter((c) => c && c.productCount > 0)
+          .sort((a, b) => b.productCount - a.productCount || a.name.localeCompare(b.name));
+
+        // Breadcrumbs for selected category
+        const { getPrimaryBreadcrumbs } = await import('@/lib/category-tree');
+        const rawPath = getPrimaryBreadcrumbs(foundCat.id, allCategories, allRelations);
+        breadcrumbs = [
+          { label: 'Brands', href: '/brands' },
+          { label: brand.name, href: `/brands/${brand.slug}` },
+          ...rawPath.slice(0, -1).map((c) => ({
+            label: c.name,
+            href: `/brands/${brand.slug}?category=${c.slug}`,
+          })),
+          { label: selectedCategory.name },
+        ];
+      } else {
+        selectedCategory = null;
+        categoriesList = [];
+        breadcrumbs = [
+          { label: 'Brands', href: '/brands' },
+          { label: brand.name, href: `/brands/${brand.slug}` },
+        ];
+      }
+    }
+
+    const result = {
+      brand,
+      categories: categoriesList,
+      selectedCategory,
+      breadcrumbs,
+      isSingleCategory,
+    };
+
+    if (now - brandCategoriesCacheTimestamp >= CACHE_TTL_MS) {
+      brandCategoriesCache.clear();
+      brandCategoriesCacheTimestamp = now;
+    }
+    brandCategoriesCache.set(cacheKey, result);
+
+    return result;
+  },
+
+  /**
    * Invalidate brand cache
    */
   invalidateCache() {
     cachedBrandsData = null;
     lastCacheTime = 0;
+    brandCategoriesCache.clear();
+    brandCategoriesCacheTimestamp = 0;
   },
 };
 

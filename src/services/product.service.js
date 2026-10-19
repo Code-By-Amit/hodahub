@@ -42,6 +42,9 @@ export const productService = {
       if (cat) {
         const descendantIds = await categoryService.getDescendantCategoryIds(cat.id);
         conditions.push(inArray(products.categoryId, descendantIds));
+      } else {
+        // Unknown or invalid category requested: return 0 results cleanly
+        conditions.push(sql`1 = 0`);
       }
     }
 
@@ -399,13 +402,26 @@ export const productService = {
     } = body;
 
     const numStock = Number(stock || 0);
+
+    const [catExists] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.id, categoryId))
+      .limit(1);
+
+    if (!catExists) {
+      const error = new Error('Selected category does not exist');
+      error.status = 400;
+      throw error;
+    }
+
     const [product] = await db
       .insert(products)
       .values({
         name,
         slug: slug.toLowerCase().replace(/\s+/g, '-'),
         description: description || null,
-        brand: brand ? brand.trim() : null,
+        brand: brand && brand.trim() ? brand.trim().slice(0, 60) : null,
         price: price.toString(),
         discountPrice: discountPrice ? discountPrice.toString() : null,
         categoryId: categoryId,

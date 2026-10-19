@@ -116,10 +116,13 @@ export function getPrimaryBreadcrumbs(targetCategoryId, allCategories = [], allR
 
   const path = [];
   const visited = new Set();
+  const MAX_DEPTH = 50;
   let currentId = targetCategoryId;
+  let depth = 0;
 
-  while (currentId && categoryMap.has(currentId) && !visited.has(currentId)) {
+  while (currentId && categoryMap.has(currentId) && !visited.has(currentId) && depth < MAX_DEPTH) {
     visited.add(currentId);
+    depth++;
     const cat = categoryMap.get(currentId);
     path.unshift({ id: cat.id, name: cat.name, slug: cat.slug });
 

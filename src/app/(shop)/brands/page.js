@@ -36,8 +36,14 @@ function BrandsDirectoryContent() {
       isFirstMount.current = false;
       return;
     }
+
+    // Do nothing if searchTerm matches the active URL query (e.g. during page navigation)
+    if (searchTerm.trim() === (urlQ || '').trim()) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      const nextParams = new URLSearchParams(searchParams.toString());
+      const nextParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : searchParams.toString());
       if (searchTerm.trim()) {
         nextParams.set('q', searchTerm.trim());
       } else {
@@ -49,7 +55,7 @@ function BrandsDirectoryContent() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, router, searchParams]);
+  }, [searchTerm, urlQ, router, searchParams]);
 
   // Fetch brands data
   useEffect(() => {

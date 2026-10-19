@@ -19,7 +19,7 @@ export default function EditProductPage() {
           setInitialData({
             name: p.name, slug: p.slug, description: p.description || '',
             price: p.price, discountPrice: p.discountPrice || '',
-            categoryId: p.categoryId || '', brandId: p.brandId || '', stock: p.stock.toString(),
+            categoryId: p.categoryId || '', brandId: p.brandId || '', brand: p.brand || '', stock: p.stock.toString(),
             images: p.images || [], specifications: p.specifications || [],
             addonIds: p.addonIds || (p.addons || []).map((a) => a.id),
             addonLinks: p.addonLinks || [],

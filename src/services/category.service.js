@@ -34,16 +34,18 @@ export const categoryService = {
    */
   async getDescendantCategoryIds(categoryId) {
     const allRelations = await this.getCategoryRelations();
+    const MAX_DEPTH = 50;
     const descendantIds = new Set([categoryId]);
-    const queue = [categoryId];
+    const queue = [{ id: categoryId, depth: 0 }];
 
     while (queue.length > 0) {
-      const currentParentId = queue.shift();
+      const { id: currentParentId, depth } = queue.shift();
+      if (depth >= MAX_DEPTH) continue;
       const children = allRelations.filter((r) => r.parentId === currentParentId);
       for (const child of children) {
         if (!descendantIds.has(child.categoryId)) {
           descendantIds.add(child.categoryId);
-          queue.push(child.categoryId);
+          queue.push({ id: child.categoryId, depth: depth + 1 });
         }
       }
     }
@@ -76,7 +78,35 @@ export const categoryService = {
    * Admin: Create a new category with multi-parent relationships
    */
   async createCategory({ name, slug, imageUrl, parentIds }) {
-    const normalizedParentIds = Array.isArray(parentIds) ? parentIds.filter(Boolean) : [];
+    const normalizedParentIds = Array.from(
+      new Set(Array.isArray(parentIds) ? parentIds.filter(Boolean) : [])
+    );
+
+    const formattedSlug = slug.toLowerCase().replace(/\s+/g, '-');
+    const [existingSlug] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.slug, formattedSlug))
+      .limit(1);
+
+    if (existingSlug) {
+      const error = new Error('A category with this slug already exists');
+      error.status = 400;
+      throw error;
+    }
+
+    if (normalizedParentIds.length > 0) {
+      const existingParents = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(inArray(categories.id, normalizedParentIds));
+
+      if (existingParents.length !== normalizedParentIds.length) {
+        const error = new Error('One or more parent categories do not exist');
+        error.status = 400;
+        throw error;
+      }
+    }
 
     const allRelations = await db.select().from(categoryRelations);
     const cycleCheck = checkCategoryCycle(null, normalizedParentIds, allRelations);
@@ -90,7 +120,7 @@ export const categoryService = {
       .insert(categories)
       .values({
         name,
-        slug: slug.toLowerCase().replace(/\s+/g, '-'),
+        slug: formattedSlug,
         imageUrl: imageUrl || null,
       })
       .returning();
@@ -119,8 +149,39 @@ export const categoryService = {
    * Admin: Update category metadata and parent relations
    */
   async updateCategory(id, { name, slug, imageUrl, parentIds }) {
+    const formattedSlug = slug ? slug.toLowerCase().replace(/\s+/g, '-') : undefined;
+
+    if (formattedSlug) {
+      const [existingSlug] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.slug, formattedSlug), sql`${categories.id} != ${id}`))
+        .limit(1);
+
+      if (existingSlug) {
+        const error = new Error('A category with this slug already exists');
+        error.status = 400;
+        throw error;
+      }
+    }
+
     if (parentIds !== undefined) {
-      const normalizedParentIds = Array.isArray(parentIds) ? parentIds.filter(Boolean) : [];
+      const normalizedParentIds = Array.from(
+        new Set(Array.isArray(parentIds) ? parentIds.filter(Boolean) : [])
+      );
+
+      if (normalizedParentIds.length > 0) {
+        const existingParents = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(inArray(categories.id, normalizedParentIds));
+
+        if (existingParents.length !== normalizedParentIds.length) {
+          const error = new Error('One or more parent categories do not exist');
+          error.status = 400;
+          throw error;
+        }
+      }
 
       const allRelations = await db.select().from(categoryRelations);
       const cycleCheck = checkCategoryCycle(id, normalizedParentIds, allRelations);
@@ -145,7 +206,7 @@ export const categoryService = {
       .update(categories)
       .set({
         ...(name && { name }),
-        ...(slug && { slug: slug.toLowerCase().replace(/\s+/g, '-') }),
+        ...(formattedSlug && { slug: formattedSlug }),
         ...(imageUrl !== undefined && { imageUrl: imageUrl || null }),
       })
       .where(eq(categories.id, id))
@@ -177,9 +238,22 @@ export const categoryService = {
   },
 
   /**
-   * Admin: Delete category if no products are assigned
+   * Admin: Delete category if no products or child categories are assigned
    */
   async deleteCategory(id) {
+    const [{ childCount }] = await db
+      .select({ childCount: sql`count(*)::int` })
+      .from(categoryRelations)
+      .where(eq(categoryRelations.parentId, id));
+
+    if (childCount > 0) {
+      const error = new Error(
+        `Cannot delete category: ${childCount} child category/categories exist. Please reassign or delete child categories first.`
+      );
+      error.status = 400;
+      throw error;
+    }
+
     const [{ count }] = await db
       .select({ count: sql`count(*)::int` })
       .from(products)

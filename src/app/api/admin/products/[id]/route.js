@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
-import { products, productAddons, addons } from '@/lib/db/schema';
+import { products, productAddons, addons, categories } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { resolveAddonPricing } from '@/lib/addon-utils';
@@ -94,13 +94,25 @@ export async function PUT(request, { params }) {
       addonLinks,
     } = body;
 
+    if (categoryId) {
+      const [catExists] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.id, categoryId))
+        .limit(1);
+
+      if (!catExists) {
+        return NextResponse.json({ error: 'Selected category does not exist' }, { status: 400 });
+      }
+    }
+
     const [product] = await db
       .update(products)
       .set({
         ...(name && { name }),
         ...(slug && { slug: slug.toLowerCase().replace(/\s+/g, '-') }),
         ...(description !== undefined && { description }),
-        ...(brand !== undefined && { brand: brand ? brand.trim() : null }),
+        ...(brand !== undefined && { brand: brand && brand.trim() ? brand.trim().slice(0, 60) : null }),
         ...(price !== undefined && { price: price.toString() }),
         ...(discountPrice !== undefined && { discountPrice: discountPrice ? discountPrice.toString() : null }),
         ...(categoryId && { categoryId }),
@@ -116,7 +128,9 @@ export async function PUT(request, { params }) {
         ...(showOnHome !== undefined && { showOnHome }),
         ...(codAvailable !== undefined && { codAvailable }),
         ...(isBestSeller !== undefined && { isBestSeller: Boolean(isBestSeller) }),
-        ...(productLink !== undefined && { productLink: productLink || null }),
+        ...(productLink !== undefined && {
+          productLink: (parseResult.data.productLink !== undefined ? parseResult.data.productLink : productLink) || null,
+        }),
       })
       .where(eq(products.id, id))
       .returning();

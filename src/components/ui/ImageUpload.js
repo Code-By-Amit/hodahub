@@ -21,6 +21,8 @@ export default function ImageUpload({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const effectiveUploadType = type || uploadType;
 
@@ -113,7 +115,7 @@ export default function ImageUpload({
       }
 
       const newList = multiple ? [...mediaList, ...uploadedUrls] : uploadedUrls.slice(-1);
-      onChange(multiple ? newList : newList[0] || '');
+      (onChangeRef.current || onChange)(multiple ? newList : newList[0] || '');
     } catch (err) {
       console.error('ImageUpload error:', err);
       setError(err.message || 'Upload failed');

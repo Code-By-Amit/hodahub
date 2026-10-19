@@ -276,9 +276,11 @@ export function ProductForm({ initialData, productId }) {
       isFreeOverride: link.isFreeOverride === true ? true : (link.isFreeOverride === false ? false : null),
     }));
 
-    // Auto-populate brand text field from selected brandId (for backward compat with products.brand)
+    // Auto-populate brand text field, prioritizing verbatim brand input trimmed to 60 chars
     const selectedBrandObj = form.brandId ? brands.find((b) => b.id === form.brandId) : null;
-    const brandText = selectedBrandObj ? selectedBrandObj.name : (form.brand ? form.brand.trim() : null);
+    const brandText = form.brand && form.brand.trim()
+      ? form.brand.trim().slice(0, 60)
+      : (selectedBrandObj ? selectedBrandObj.name : null);
 
     const payload = {
       ...form,
@@ -304,7 +306,11 @@ export function ProductForm({ initialData, productId }) {
     setLoading(true);
 
     try {
-      await productsApi.save(isEditing ? productId : null, payload);
+      const payloadToSend = {
+        ...payload,
+        productLink: validation.data.productLink,
+      };
+      await productsApi.save(isEditing ? productId : null, payloadToSend);
       toast.success(isEditing ? 'Product updated successfully!' : 'Product created successfully!');
       router.push('/admin/products');
     } catch (err) {
@@ -404,7 +410,7 @@ export function ProductForm({ initialData, productId }) {
               <input
                 type="text"
                 value={form.slug}
-                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
                 className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 font-mono focus:outline-none ${
                   errors.slug ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
                 }`}
@@ -422,7 +428,7 @@ export function ProductForm({ initialData, productId }) {
             </label>
             <textarea
               value={form.description || ''}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               rows={4}
               className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10 resize-none"
               placeholder="Detailed description of materials, sizing, features..."
@@ -434,12 +440,19 @@ export function ProductForm({ initialData, productId }) {
               Product Link (Admin Reference / Supplier Link — Never shown to customers)
             </label>
             <input
-              type="url"
+              type="text"
               value={form.productLink || ''}
-              onChange={(e) => setForm({ ...form, productLink: e.target.value })}
-              className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 font-mono focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/10"
+              onChange={(e) => {
+                const val = e.target.value;
+                setForm((prev) => ({ ...prev, productLink: val }));
+                if (errors.productLink) setErrors((prev) => ({ ...prev, productLink: null }));
+              }}
+              className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 font-mono focus:outline-none ${
+                errors.productLink ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+              }`}
               placeholder="https://supplier.com/product-source-link"
             />
+            <FieldError message={errors.productLink} />
           </div>
         </div>
 
@@ -456,7 +469,7 @@ export function ProductForm({ initialData, productId }) {
               </label>
               <NumericInput
                 value={form.price}
-                onChange={(val) => setForm({ ...form, price: val })}
+                onChange={(val) => setForm((prev) => ({ ...prev, price: val }))}
                 className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
                   errors.price ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
                 }`}
@@ -471,7 +484,7 @@ export function ProductForm({ initialData, productId }) {
               </label>
               <NumericInput
                 value={form.discountPrice || ''}
-                onChange={(val) => setForm({ ...form, discountPrice: val })}
+                onChange={(val) => setForm((prev) => ({ ...prev, discountPrice: val }))}
                 className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
                   errors.discountPrice ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
                 }`}
@@ -488,7 +501,7 @@ export function ProductForm({ initialData, productId }) {
                 allowDecimals={false}
                 min={0}
                 value={form.stock}
-                onChange={(val) => setForm({ ...form, stock: val })}
+                onChange={(val) => setForm((prev) => ({ ...prev, stock: val }))}
                 className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
                   errors.stock ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
                 }`}
@@ -503,7 +516,7 @@ export function ProductForm({ initialData, productId }) {
               <CustomSelect
                 options={categoryOptions}
                 value={form.categoryId || ''}
-                onChange={(val) => setForm({ ...form, categoryId: val })}
+                onChange={(val) => setForm((prev) => ({ ...prev, categoryId: val }))}
                 placeholder="Select category..."
               />
               <FieldError message={errors.categoryId} />
@@ -513,13 +526,31 @@ export function ProductForm({ initialData, productId }) {
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                 Brand
               </label>
-              <CustomSelect
-                options={brandOptions}
-                value={form.brandId || ''}
-                onChange={(val) => setForm({ ...form, brandId: val })}
-                placeholder="Select brand..."
+              <input
+                type="text"
+                list="brand-suggestions"
+                value={form.brand || ''}
+                maxLength={60}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const matchingBrand = brands.find((b) => b.name.toLowerCase() === val.trim().toLowerCase());
+                  setForm((prev) => ({
+                    ...prev,
+                    brand: val,
+                    brandId: matchingBrand ? matchingBrand.id : (val.trim() === '' ? '' : prev.brandId),
+                  }));
+                }}
+                placeholder="Type or pick brand..."
+                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
+                  errors.brand ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
+                }`}
               />
-              <FieldError message={errors.brandId} />
+              <datalist id="brand-suggestions">
+                {brands.map((b) => (
+                  <option key={b.id} value={b.name} />
+                ))}
+              </datalist>
+              <FieldError message={errors.brand || errors.brandId} />
             </div>
           </div>
 
@@ -528,7 +559,7 @@ export function ProductForm({ initialData, productId }) {
               <input
                 type="checkbox"
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                 className="accent-warm-900 w-3.5 h-3.5 rounded"
               />
               <span className="text-[11px] font-medium text-warm-800">
@@ -540,7 +571,7 @@ export function ProductForm({ initialData, productId }) {
               <input
                 type="checkbox"
                 checked={form.showOnHome !== false}
-                onChange={(e) => setForm({ ...form, showOnHome: e.target.checked })}
+                onChange={(e) => setForm((prev) => ({ ...prev, showOnHome: e.target.checked }))}
                 className="accent-blue-600 w-3.5 h-3.5 rounded"
               />
               <span className="text-[11px] font-semibold text-blue-900">
@@ -552,7 +583,7 @@ export function ProductForm({ initialData, productId }) {
               <input
                 type="checkbox"
                 checked={form.codAvailable}
-                onChange={(e) => setForm({ ...form, codAvailable: e.target.checked })}
+                onChange={(e) => setForm((prev) => ({ ...prev, codAvailable: e.target.checked }))}
                 className="accent-warm-900 w-3.5 h-3.5 rounded"
               />
               <span className="text-[11px] font-medium text-warm-800">
@@ -564,7 +595,7 @@ export function ProductForm({ initialData, productId }) {
               <input
                 type="checkbox"
                 checked={!!form.isBestSeller}
-                onChange={(e) => setForm({ ...form, isBestSeller: e.target.checked })}
+                onChange={(e) => setForm((prev) => ({ ...prev, isBestSeller: e.target.checked }))}
                 className="accent-amber-600 w-3.5 h-3.5 rounded"
               />
               <span className="text-[11px] font-semibold text-amber-900 flex items-center gap-1">
@@ -582,7 +613,7 @@ export function ProductForm({ initialData, productId }) {
           <ImageUpload
             uploadType="product-image"
             value={form.images || []}
-            onChange={(urls) => setForm({ ...form, images: urls })}
+            onChange={(urls) => setForm((prev) => ({ ...prev, images: urls }))}
             multiple={true}
             maxFiles={8}
             label="Upload Product Photos"

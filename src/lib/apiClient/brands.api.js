@@ -6,7 +6,19 @@ export const brandsApi = {
     return api.get(`/api/brands${qs ? `?${qs}` : ''}`, opts);
   },
 
-  getBySlug: (slug, opts) => api.get(`/api/brands/${slug}`, opts),
+  getBySlug: (slug, params, opts) => {
+    const isParamsQuery =
+      params &&
+      typeof params === 'object' &&
+      !('headers' in params) &&
+      !('signal' in params) &&
+      !('next' in params) &&
+      !('cache' in params);
+    const query = isParamsQuery ? params : undefined;
+    const options = isParamsQuery ? opts : params;
+    const qs = toQueryString(query);
+    return api.get(`/api/brands/${slug}${qs ? `?${qs}` : ''}`, options);
+  },
 
   getAdmin: (opts) => api.get('/api/admin/brands', opts),
 

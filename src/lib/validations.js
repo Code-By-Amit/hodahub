@@ -69,7 +69,13 @@ export const productSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(500),
   slug: z.string().min(1, 'Slug is required').max(500),
   description: z.string().optional().nullable(),
-  brand: z.string().max(255).optional().nullable(),
+  brand: z
+    .string()
+    .trim()
+    .max(60, 'Brand name cannot exceed 60 characters')
+    .optional()
+    .nullable()
+    .transform((val) => (val && val.trim().length > 0 ? val.trim() : null)),
   price: z.coerce.number().positive('Price must be greater than 0'),
   discountPrice: z.coerce.number().positive('Discount price must be greater than 0').optional().nullable(),
   categoryId: z.string().uuid('Category selection is required'),
@@ -77,11 +83,55 @@ export const productSchema = z.object({
   stock: z.coerce.number().int('Stock must be an integer').min(0, 'Stock cannot be negative'),
   isOutOfStock: z.boolean().default(false),
   images: z.array(z.string().url()).default([]),
+  specifications: z
+    .array(
+      z.object({
+        label: z.string().optional().default(''),
+        value: z.string().optional().default(''),
+      })
+    )
+    .optional()
+    .default([]),
+  productLink: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .or(z.literal(''))
+    .transform((val) => {
+      if (!val || val.trim().length === 0) return null;
+      let trimmed = val.trim();
+      if (!/^https?:\/\//i.test(trimmed)) {
+        trimmed = `https://${trimmed}`;
+      }
+      return trimmed;
+    })
+    .refine(
+      (val) => {
+        if (val === null || val === undefined) return true;
+        try {
+          new URL(val);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Please enter a valid URL' }
+    ),
   isActive: z.boolean().default(true),
   showOnHome: z.boolean().default(true),
   codAvailable: z.boolean().default(true),
   isBestSeller: z.boolean().default(false),
   addonIds: z.array(z.string().uuid()).optional().default([]),
+  addonLinks: z
+    .array(
+      z.object({
+        addonId: z.string().uuid('Invalid add-on ID'),
+        priceOverride: z.coerce.number().min(0).optional().nullable(),
+        isFreeOverride: z.boolean().optional().nullable(),
+      })
+    )
+    .optional(),
 });
 
 export const productStatusToggleSchema = z.object({
@@ -102,7 +152,7 @@ export const categorySchema = z.object({
   name: z.string().min(1, 'Category name is required').max(255),
   slug: z.string().min(1, 'Slug is required').max(255),
   imageUrl: z.string().url().optional().nullable(),
-  parentIds: z.array(z.string().uuid()).optional().default([]),
+  parentIds: z.array(z.string().uuid()).max(10, 'A category cannot have more than 10 parent categories').optional().default([]),
 });
 
 export const brandSchema = z.object({
@@ -288,6 +338,13 @@ export const brandQuerySchema = z.object({
 
 export const brandParamSchema = z.object({
   slug: z.string().min(1, 'Slug is required'),
+});
+
+export const brandDetailQuerySchema = z.object({
+  category: z.string().trim().max(100).optional(),
+  view: z.enum(['all']).optional(),
+  page: z.string().optional(),
+  limit: z.string().optional(),
 });
 
 
