@@ -27,4 +27,11 @@ export class AppError extends Error {
   }
 }
 
+export {
+  handleApiError,
+  logServerError,
+  extractErrorDetails,
+  getDescriptiveErrorMessage,
+} from './error-handler.js';
+
 export default AppError;

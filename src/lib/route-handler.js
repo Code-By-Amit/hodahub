@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireAdmin } from '@/lib/auth';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
+import { handleApiError } from '@/lib/error-handler';
+
+export { handleApiError } from '@/lib/error-handler';
 
 /**
  * Standard API response helper for consistent JSON payloads
@@ -174,21 +177,7 @@ export function routeHandler({
       // If plain object was returned, wrap with NextResponse.json
       return ApiResponse.success(result);
     } catch (error) {
-      if (error?.message === 'Unauthorized') {
-        return ApiResponse.unauthorized('Unauthorized');
-      }
-      if (error?.message === 'Forbidden') {
-        return ApiResponse.forbidden('Forbidden');
-      }
-      if (error?.status && error?.message) {
-        return ApiResponse.error(error.message, error.status, error.errors);
-      }
-
-      console.error('[Route Handler Error]:', error);
-      return ApiResponse.error(
-        process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
-        500
-      );
+      return handleApiError(error, request);
     }
   };
 }

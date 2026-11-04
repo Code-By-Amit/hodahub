@@ -18,6 +18,7 @@ export const revalidate = 60;
 
 
 import { getBestSellerProducts } from '@/lib/best-sellers';
+import { logServerError } from '@/lib/error-handler';
 
 async function getHomepageData() {
   try {
@@ -64,7 +65,7 @@ async function getHomepageData() {
 
     return { categories: allCategories, newArrivals, bestSellers };
   } catch (error) {
-    console.error('Homepage data fetch error:', error);
+    logServerError('Homepage (Server Component)', error);
     return { categories: [], newArrivals: [], bestSellers: [] };
   }
 }

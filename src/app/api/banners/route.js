@@ -6,12 +6,7 @@ export const dynamic = 'force-dynamic';
 export const GET = routeHandler({
   auth: false,
   handler: async () => {
-    try {
-      const activeBanners = await bannerService.getActiveBanners();
-      return ApiResponse.success({ banners: activeBanners });
-    } catch (error) {
-      console.error('Fetch active banners error:', error);
-      return ApiResponse.success({ banners: [] });
-    }
+    const activeBanners = await bannerService.getActiveBanners();
+    return ApiResponse.success({ banners: activeBanners });
   },
 });
