@@ -14,6 +14,8 @@ import FieldError from '@/components/ui/FieldError';
 import { signupSchema } from '@/lib/validations';
 import { useZodForm } from '@/hooks/useZodForm';
 import { useMsg91Otp } from '@/hooks/useMsg91Otp';
+import { trackCompleteRegistration } from '@/lib/metaPixel';
+import { trackSignUp } from '@/lib/ga';
 import { authApi } from '@/lib/apiClient/auth.api';
 
 function SignupContent() {
@@ -120,6 +122,8 @@ function SignupContent() {
 
     if (result.success && result.user) {
       dispatch(setUser(result.user));
+      trackCompleteRegistration();
+      trackSignUp();
       try {
         await syncWishlistOnAuth(dispatch, guestWishlistItems);
       } catch (syncErr) {

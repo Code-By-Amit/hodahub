@@ -9,6 +9,8 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
 import { Search, Filter, X, SlidersHorizontal, Package } from 'lucide-react';
+import { trackSearch as trackPixelSearch } from '@/lib/metaPixel';
+import { trackSearch as trackGASearch } from '@/lib/ga';
 import { productsApi } from '@/lib/apiClient/products.api';
 import { categoriesApi } from '@/lib/apiClient/categories.api';
 import { brandsApi } from '@/lib/apiClient/brands.api';
@@ -65,6 +67,10 @@ function SearchContent() {
         const data = await productsApi.getAll(params);
         setProducts(data?.products || []);
         setPagination(data?.pagination || { page: 1, totalPages: 1, total: 0 });
+        if (query && query.trim()) {
+          trackPixelSearch(query.trim());
+          trackGASearch(query.trim());
+        }
       } catch {}
       setLoading(false);
     }

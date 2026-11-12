@@ -24,78 +24,65 @@ function RouteChangeTracker() {
   return null;
 }
 
-// Installs the fbq stub into window.
-// fbevents.js REQUIRES the stub to already exist when it loads —
-// it upgrades the stub's queue into the real implementation.
-// This must run before the <Script src="fbevents.js"> is rendered.
-function installStub() {
-  if (typeof window === 'undefined' || window.fbq) return;
-  const n = function (...args) {
-    if (n.callMethod) n.callMethod.apply(n, args);
-    else n.queue.push(args);
-  };
-  window.fbq = n;
-  window._fbq = n;
-  n.push = n;
-  n.loaded = true;
-  n.version = '2.0';
-  n.queue = [];
+// Installs the fbq stub into window and immediately queues 'init' and first 'PageView'.
+// fbevents.js upgrades the stub's queue into the real implementation.
+function installStub(pixelId) {
+  if (typeof window === 'undefined') return;
+  if (!window.fbq) {
+    const n = function (...args) {
+      if (n.callMethod) n.callMethod.apply(n, args);
+      else n.queue.push(args);
+    };
+    window.fbq = n;
+    window._fbq = n;
+    n.push = n;
+    n.loaded = true;
+    n.version = '2.0';
+    n.queue = [];
+  }
+  if (pixelId && !window._fbq_initialized) {
+    window._fbq_initialized = true;
+    window.fbq('consent', 'grant');
+    window.fbq('init', pixelId);
+    window.fbq('track', 'PageView');
+  }
 }
 
 export default function MetaPixel() {
+  const pathname = usePathname();
   const [granted, setGranted] = useState(false);
-  // Becomes true only after installStub() has run, so the <Script>
-  // is never rendered before window.fbq exists.
   const [stubReady, setStubReady] = useState(false);
-  const initialized = useRef(false);
 
-  // Sync consent state from localStorage
+  // Sync consent state: active unless visitor explicitly clicks 'Reject'
   useEffect(() => {
-    const sync = () => setGranted(getConsent() === 'granted');
+    const sync = () => setGranted(getConsent() !== 'denied');
     sync();
     window.addEventListener(CONSENT_EVENT, sync);
     return () => window.removeEventListener(CONSENT_EVENT, sync);
   }, []);
 
-  // When consent is granted: install the stub, then allow the <Script> to render.
-  // When consent is revoked: signal Meta and reset so re-granting works.
+  // When consent is active: install the stub with init and PageView, then load fbevents.js.
+  // When consent is revoked: signal Meta to revoke cookies.
   useEffect(() => {
-    if (granted && PIXEL_ID) {
-      installStub();
+    if (granted && PIXEL_ID && !pathname?.startsWith('/admin')) {
+      installStub(PIXEL_ID);
       setStubReady(true);
     } else {
       window.fbq?.('consent', 'revoke');
-      // Reset so the next consent grant re-initialises cleanly
-      initialized.current = false;
       setStubReady(false);
     }
-  }, [granted]);
+  }, [granted, pathname]);
 
-  // Called by <Script onLoad> once fbevents.js has upgraded the stub
+  // Called by <Script onLoad> once fbevents.js is loaded
   function handleLoad() {
-    if (initialized.current) return; // guard against double-fire
-    initialized.current = true;
-    window.fbq('consent', 'grant');
-    window.fbq('init', PIXEL_ID);
-    window.fbq('track', 'PageView');
-    // Tell metaPixel.js helpers that the queue can now be flushed
     window.dispatchEvent(new Event('meta-pixel-ready'));
   }
 
-  // Do not render anything until:
-  //   1. PIXEL_ID is configured
-  //   2. user has granted consent
-  //   3. the fbq stub is in window (so fbevents.js finds it when it loads)
-  if (!PIXEL_ID || !granted || !stubReady) return null;
+  // Do not render in admin or if pixel ID missing or consent denied
+  if (!PIXEL_ID || !granted || !stubReady || pathname?.startsWith('/admin')) return null;
 
   return (
     <>
-      {/*
-        Uses src= so Next.js creates a real <script> DOM element.
-        strategy="afterInteractive" injects it after hydration.
-        fbevents.js finds window.fbq (the stub) already in place,
-        upgrades it to the full implementation, then onLoad fires.
-      */}
       <Script
         id="meta-pixel"
         src="https://connect.facebook.net/en_US/fbevents.js"
@@ -103,6 +90,15 @@ export default function MetaPixel() {
         onLoad={handleLoad}
         onError={() => console.warn('[MetaPixel] fbevents.js failed to load — ad blocker?')}
       />
+      <noscript>
+        <img
+          height="1"
+          width="1"
+          style={{ display: 'none' }}
+          src={`https://www.facebook.com/tr?id=${PIXEL_ID}&ev=PageView&noscript=1`}
+          alt=""
+        />
+      </noscript>
       <Suspense fallback={null}>
         <RouteChangeTracker />
       </Suspense>

@@ -19,7 +19,7 @@ import { formatCurrency } from '@/lib/utils';
 const QuickViewModal = dynamic(() => import('@/components/ui/QuickViewModal'), {
   ssr: false,
 });
-import { trackAddToCart as trackPixelAddToCart } from '@/lib/metaPixel';
+import { trackAddToCart as trackPixelAddToCart, trackAddToWishlist } from '@/lib/metaPixel';
 import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { Heart, ShoppingBag, Eye, Package } from 'lucide-react';
 import { wishlistApi } from '@/lib/apiClient/wishlist.api';
@@ -81,6 +81,7 @@ export default function ProductCard({ product, variant = 'default' }) {
       }
     } else {
       dispatch(addToWishlist(product));
+      trackAddToWishlist(product);
       toast.success(`Added ${name} to wishlist!`);
       if (user) {
         try {

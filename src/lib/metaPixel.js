@@ -22,7 +22,7 @@ if (typeof window !== 'undefined') window.addEventListener('meta-pixel-ready', f
 
 export function track(event, params = {}, eventId) {
   if (typeof window === 'undefined' || !PIXEL_ID) return;
-  if (getConsent() !== 'granted') return;
+  if (getConsent() === 'denied') return;
   if (window.fbq) send(event, params, eventId);
   else queue.push([event, params, eventId]);
 }
@@ -135,7 +135,7 @@ function getCookie(name) {
 }
 
 export function getTrackingData() {
-  if (typeof window === 'undefined' || getConsent() !== 'granted') return null;
+  if (typeof window === 'undefined' || getConsent() === 'denied') return null;
   return {
     fbp: getCookie('_fbp'),
     fbc: getCookie('_fbc'),

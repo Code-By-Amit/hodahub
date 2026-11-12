@@ -7,6 +7,8 @@ import { setUser } from '@/lib/store/authSlice';
 import { selectWishlistItems } from '@/lib/store/wishlistSlice';
 import { syncWishlistOnAuth } from '@/lib/store/syncWishlist';
 import { AlertCircle, CheckCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { trackCompleteRegistration } from '@/lib/metaPixel';
+import { trackSignUp } from '@/lib/ga';
 import { authApi } from '@/lib/apiClient/auth.api';
 
 function VerifyOTPContent() {
@@ -56,6 +58,8 @@ function VerifyOTPContent() {
       const redirect = searchParams.get('redirect') || '';
       setSuccess('Email verified successfully! Redirecting...');
       dispatch(setUser(data.user));
+      trackCompleteRegistration();
+      trackSignUp();
       await syncWishlistOnAuth(dispatch, guestWishlistItems);
 
       setTimeout(() => {

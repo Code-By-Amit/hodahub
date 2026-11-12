@@ -15,20 +15,13 @@ export default function GA4() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Sync consent state
+  // Sync consent state: active unless visitor explicitly clicks 'Reject'
   useEffect(() => {
-    const sync = () => setGranted(getConsent() === 'granted');
+    const sync = () => setGranted(getConsent() !== 'denied');
     sync();
     window.addEventListener(CONSENT_EVENT, sync);
     return () => window.removeEventListener(CONSENT_EVENT, sync);
   }, []);
-
-  // If consent revoked, disable GA (no direct API to revoke, just stop sending)
-  useEffect(() => {
-    if (!granted) {
-      // No explicit revocation for GA; we simply avoid sending further events.
-    }
-  }, [granted]);
 
   // Track page view on route change (skip first render which is handled in onLoad / initialization)
   useEffect(() => {
@@ -36,7 +29,7 @@ export default function GA4() {
       firstLoad.current = false;
       return;
     }
-    if (typeof window !== 'undefined' && GA_ID && granted && window.gtag) {
+    if (typeof window !== 'undefined' && GA_ID && granted && window.gtag && !pathname?.startsWith('/admin')) {
       window.gtag('event', 'page_view', {
         page_path: pathname + (searchParams?.toString() ? `?${searchParams}` : ''),
         page_location: typeof window !== 'undefined' ? window.location.href : undefined,
@@ -45,7 +38,7 @@ export default function GA4() {
     }
   }, [pathname, searchParams, granted]);
 
-  if (!GA_ID || !granted) return null;
+  if (!GA_ID || !granted || pathname?.startsWith('/admin')) return null;
 
   return (
     <>

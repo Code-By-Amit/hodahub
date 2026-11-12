@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
+import MetaPixel from '@/components/analytics/MetaPixel';
+import GA4 from '@/components/analytics/GA4';
 
 export const metadata = {
   title: 'HodaHub — Account',
@@ -42,6 +45,10 @@ export default function AuthLayout({ children }) {
         <main className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           {children}
         </main>
+        <Suspense fallback={null}>
+          <MetaPixel />
+          <GA4 />
+        </Suspense>
 
         <footer className="sm:hidden p-3 text-center shrink-0">
           <p className="text-[10px] text-warm-400">

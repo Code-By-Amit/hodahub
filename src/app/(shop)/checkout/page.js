@@ -28,7 +28,7 @@ import {
   FiMessageSquare,
 } from 'react-icons/fi';
 import { toWhatsAppLink } from '@/lib/zod-utils';
-import { trackContact, trackInitiateCheckout, trackPurchase as trackPixelPurchase } from '@/lib/metaPixel';
+import { trackContact, trackInitiateCheckout, trackAddPaymentInfo, trackPurchase as trackPixelPurchase } from '@/lib/metaPixel';
 import { trackBeginCheckout, trackPurchase as trackGAPurchase, trackContact as trackGAContact } from '@/lib/ga';
 import PhoneInput from '@/components/ui/PhoneInput';
 import FieldError from '@/components/ui/FieldError';
@@ -370,6 +370,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
       let createData;
       try {
         createData = await paymentsApi.createOrder(payload);
+        trackAddPaymentInfo(items, total);
       } catch (err) {
         toast.error(err.message || 'Failed to create order');
         setPaying(false);

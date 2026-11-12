@@ -53,8 +53,7 @@ export default async function sitemap() {
     // Dynamic brands
     const dbBrands = await db
       .select({ slug: brands.slug, createdAt: brands.createdAt })
-      .from(brands)
-      .where(eq(brands.isActive, true));
+      .from(brands);
 
     const brandRoutes = dbBrands.map((b) => ({
       url: `${baseUrl}/brands/${b.slug}`,

@@ -19,7 +19,7 @@ export function _processQueue() {
 
 export function track(eventName, params = {}) {
   if (typeof window === 'undefined' || !GA_ID) return;
-  if (getConsent() !== 'granted') return;
+  if (getConsent() === 'denied') return;
   if (isReady && window.gtag) {
     window.gtag('event', eventName, params);
   } else {
