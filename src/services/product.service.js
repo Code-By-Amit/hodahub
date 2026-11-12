@@ -269,7 +269,12 @@ export const productService = {
       conditions.push(eq(products.categoryId, categoryFilter));
     }
     if (brandFilter) {
-      conditions.push(eq(products.brandId, brandFilter));
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brandFilter);
+      if (isUuid) {
+        conditions.push(eq(products.brandId, brandFilter));
+      } else {
+        conditions.push(or(eq(products.brand, brandFilter), ilike(products.brand, `%${brandFilter}%`)));
+      }
     }
     if (activeFilter === 'active') {
       conditions.push(eq(products.isActive, true));

@@ -93,6 +93,7 @@ export const categories = pgTable('categories', {
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   imageUrl: text('image_url'),
+  sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { products, categories } from '@/lib/db/schema';
+import { products, categories, brands } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export default async function sitemap() {
@@ -9,8 +9,13 @@ export default async function sitemap() {
     '',
     '/products',
     '/categories',
-    '/login',
-    '/signup',
+    '/brands',
+    '/about',
+    '/faq',
+    '/shipping',
+    '/returns',
+    '/privacy',
+    '/terms',
     '/contact',
   ].map((route) => ({
     url: `${baseUrl}${route}`,
@@ -45,7 +50,20 @@ export default async function sitemap() {
       priority: 0.6,
     }));
 
-    return [...staticRoutes, ...productRoutes, ...categoryRoutes];
+    // Dynamic brands
+    const dbBrands = await db
+      .select({ slug: brands.slug, createdAt: brands.createdAt })
+      .from(brands)
+      .where(eq(brands.isActive, true));
+
+    const brandRoutes = dbBrands.map((b) => ({
+      url: `${baseUrl}/brands/${b.slug}`,
+      lastModified: b.createdAt || new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    }));
+
+    return [...staticRoutes, ...productRoutes, ...categoryRoutes, ...brandRoutes];
   } catch (error) {
     console.error('Sitemap generation error:', error);
     return staticRoutes;

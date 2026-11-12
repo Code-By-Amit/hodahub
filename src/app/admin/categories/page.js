@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/Toast';
-import { Folder, Plus, Edit2, Trash2, X, Check, ChevronDown } from 'lucide-react';
+import { Folder, Plus, Edit2, Trash2, X, Check, ChevronDown, RefreshCw } from 'lucide-react';
 import ImageUpload from '@/components/ui/ImageUpload';
 import FieldError from '@/components/ui/FieldError';
 import { categorySchema } from '@/lib/validations';
@@ -13,10 +13,20 @@ import useAdminCategories from '@/hooks/useAdminCategories';
 
 export default function AdminCategoriesPage() {
   const toast = useToast();
-  const { categories, isLoading: loading, saveCategory, isSaving: saving, deleteCategory } = useAdminCategories();
+  const {
+    categories,
+    isLoading: loading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+    saveCategory,
+    isSaving: saving,
+    deleteCategory,
+  } = useAdminCategories();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentIds: [] });
+  const [form, setForm] = useState({ name: '', slug: '', imageUrl: '', parentIds: [], sortOrder: 0 });
   const [errors, setErrors] = useState({});
   const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
 
@@ -27,6 +37,7 @@ export default function AdminCategoriesPage() {
       slug: cat.slug,
       imageUrl: cat.imageUrl || '',
       parentIds: Array.isArray(cat.parentIds) ? cat.parentIds : [],
+      sortOrder: cat.sortOrder ?? cat.sort_order ?? 0,
     });
     setErrors({});
     setShowForm(true);
@@ -34,7 +45,7 @@ export default function AdminCategoriesPage() {
 
   function resetForm() {
     setEditingId(null);
-    setForm({ name: '', slug: '', imageUrl: '', parentIds: [] });
+    setForm({ name: '', slug: '', imageUrl: '', parentIds: [], sortOrder: 0 });
     setErrors({});
     setShowForm(false);
     setParentDropdownOpen(false);
@@ -60,7 +71,13 @@ export default function AdminCategoriesPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const payload = { ...form, parentIds: form.parentIds || [] };
+    const parsedSort = form.sortOrder === '' ? 0 : (parseInt(form.sortOrder, 10) || 0);
+    const payload = {
+      ...form,
+      imageUrl: form.imageUrl?.trim() || null,
+      sortOrder: parsedSort,
+      parentIds: form.parentIds || [],
+    };
     const validation = categorySchema.safeParse(payload);
     if (!validation.success) {
       const fieldErrors = flattenZodErrors(validation.error);
@@ -84,6 +101,15 @@ export default function AdminCategoriesPage() {
     } catch {}
   }
 
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const rankA = (a.sortOrder ?? a.sort_order ?? 0) > 0 ? (a.sortOrder ?? a.sort_order) : 999999;
+      const rankB = (b.sortOrder ?? b.sort_order ?? 0) > 0 ? (b.sortOrder ?? b.sort_order) : 999999;
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [categories]);
+
   const availableParents = categories.filter((c) => c.id !== editingId);
 
   return (
@@ -94,16 +120,27 @@ export default function AdminCategoriesPage() {
           <h1 className="text-base font-bold text-warm-900">Category Management</h1>
           <p className="text-[11px] text-warm-500">Organize store products into logical groups with multi-parent support</p>
         </div>
-        <button
-          onClick={() => {
-            resetForm();
-            setShowForm(true);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all shadow-xs"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Category</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1.5 border border-warm-200 text-warm-600 hover:text-warm-900 hover:bg-warm-50 rounded-md transition-colors disabled:opacity-50"
+            title="Refresh categories list"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-warm-900 text-white text-[11px] font-semibold rounded-md hover:bg-warm-800 transition-all shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Category</span>
+          </button>
+        </div>
       </div>
 
       {/* Centered Structured Category Modal Form */}
@@ -126,7 +163,7 @@ export default function AdminCategoriesPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Category Name *
@@ -157,6 +194,21 @@ export default function AdminCategoriesPage() {
                   }`}
                 />
                 <FieldError message={errors.slug} />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-warm-700 mb-1">
+                  Sort Order (1 = Top / First, 2 = Second, 0 = Default)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.sortOrder === '' ? '' : (form.sortOrder ?? 0)}
+                  onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
+                  placeholder="e.g. 1, 2, 3..."
+                  className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 focus:outline-none focus:border-brand-600"
+                />
+                <FieldError message={errors.sortOrder} />
               </div>
             </div>
 
@@ -273,24 +325,43 @@ export default function AdminCategoriesPage() {
               <th className="px-3 py-2 text-left">Category</th>
               <th className="px-3 py-2 text-left">Slug</th>
               <th className="px-3 py-2 text-left">Parent Categories</th>
+              <th className="px-3 py-2 text-center">Sort Order</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-100">
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-warm-400">
-                  Loading categories...
+                <td colSpan={5} className="px-3 py-6 text-center text-warm-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-warm-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Loading categories...</span>
+                  </div>
                 </td>
               </tr>
-            ) : categories.length === 0 ? (
+            ) : isError ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-warm-400">
+                <td colSpan={5} className="px-3 py-6 text-center">
+                  <div className="flex flex-col items-center gap-2 text-red-600">
+                    <span className="text-xs font-semibold">Failed to load categories: {error?.message || 'Network error'}</span>
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="px-3 py-1 bg-warm-100 hover:bg-warm-200 text-warm-900 rounded-md text-xs font-medium cursor-pointer transition-colors"
+                    >
+                      Retry Loading
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ) : sortedCategories.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-warm-400">
                   No categories found. Click &quot;Add Category&quot; to create one.
                 </td>
               </tr>
             ) : (
-              categories.map((c) => {
+              sortedCategories.map((c) => {
                 const parentNames = (c.parentIds || [])
                   .map((pId) => categories.find((p) => p.id === pId)?.name)
                   .filter(Boolean);
@@ -324,6 +395,17 @@ export default function AdminCategoriesPage() {
                       ) : (
                         <span className="text-warm-400 text-[10px]">Top-level (Root)</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded font-mono text-[10px] font-semibold ${
+                        (c.sortOrder ?? c.sort_order ?? 0) > 0
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-warm-100 text-warm-500'
+                      }`}>
+                        {(c.sortOrder ?? c.sort_order ?? 0) > 0
+                          ? `#${c.sortOrder ?? c.sort_order}`
+                          : '0 (Default)'}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex items-center justify-end gap-1">

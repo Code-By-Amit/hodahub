@@ -88,10 +88,24 @@ export function buildCategoryTree(allCategories = [], allRelations = []) {
     }
   });
 
+  // Helper to sort categories: ranked (1, 2, 3...) first, then unranked (0) by name
+  const sortCategories = (a, b) => {
+    const rankA = (a.sortOrder ?? a.sort_order ?? 0) > 0 ? (a.sortOrder ?? a.sort_order) : 999999;
+    const rankB = (b.sortOrder ?? b.sort_order ?? 0) > 0 ? (b.sortOrder ?? b.sort_order) : 999999;
+    if (rankA !== rankB) return rankA - rankB;
+    return (a.name || '').localeCompare(b.name || '');
+  };
+
+  categoryMap.forEach((cat) => {
+    if (cat.children && cat.children.length > 1) {
+      cat.children.sort(sortCategories);
+    }
+  });
+
   // Root categories have no parents
-  const rootCategories = Array.from(categoryMap.values()).filter(
-    (cat) => cat.parentIds.length === 0
-  );
+  const rootCategories = Array.from(categoryMap.values())
+    .filter((cat) => cat.parentIds.length === 0)
+    .sort(sortCategories);
 
   return {
     rootCategories,

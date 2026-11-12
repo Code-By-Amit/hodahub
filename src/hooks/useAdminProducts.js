@@ -10,6 +10,7 @@ export function useAdminProducts({
   limit = 20,
   search = '',
   category = '',
+  brand = '',
   active = '',
   stock = '',
 } = {}) {
@@ -21,6 +22,7 @@ export function useAdminProducts({
     limit,
     search: search.trim(),
     category,
+    brand,
     active,
     stock,
   };

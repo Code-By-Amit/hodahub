@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { categories, categoryRelations, products } from '@/lib/db/schema';
-import { asc, eq, sql, inArray } from 'drizzle-orm';
+import { and, asc, eq, ne, sql, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { checkCategoryCycle } from '@/lib/category-tree';
 
@@ -58,7 +58,20 @@ export const categoryService = {
    */
   async getAdminCategories() {
     const [list, relations] = await Promise.all([
-      db.select().from(categories).orderBy(asc(categories.name)),
+      db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug,
+          imageUrl: categories.imageUrl,
+          sortOrder: sql`COALESCE("categories"."sort_order", 0)::int`.as('sort_order'),
+          createdAt: categories.createdAt,
+        })
+        .from(categories)
+        .orderBy(
+          sql`CASE WHEN COALESCE("categories"."sort_order", 0) > 0 THEN COALESCE("categories"."sort_order", 0) ELSE 999999 END ASC`,
+          asc(categories.name)
+        ),
       db.select().from(categoryRelations),
     ]);
 
@@ -70,6 +83,7 @@ export const categoryService = {
 
     return list.map((cat) => ({
       ...cat,
+      sortOrder: Number(cat.sortOrder ?? cat.sort_order ?? 0),
       parentIds: parentMap[cat.id] || [],
     }));
   },
@@ -77,7 +91,7 @@ export const categoryService = {
   /**
    * Admin: Create a new category with multi-parent relationships
    */
-  async createCategory({ name, slug, imageUrl, parentIds }) {
+  async createCategory({ name, slug, imageUrl, parentIds, sortOrder = 0 }) {
     const normalizedParentIds = Array.from(
       new Set(Array.isArray(parentIds) ? parentIds.filter(Boolean) : [])
     );
@@ -122,8 +136,15 @@ export const categoryService = {
         name,
         slug: formattedSlug,
         imageUrl: imageUrl || null,
+        ...(categories.sortOrder ? { sortOrder: Number(sortOrder) || 0 } : {}),
       })
       .returning();
+
+    if (sortOrder !== undefined) {
+      const parsedSort = Number(sortOrder) || 0;
+      await db.execute(sql`UPDATE "categories" SET "sort_order" = ${parsedSort} WHERE "id" = ${category.id}`);
+      category.sortOrder = parsedSort;
+    }
 
     if (normalizedParentIds.length > 0) {
       await db.insert(categoryRelations).values(
@@ -148,14 +169,14 @@ export const categoryService = {
   /**
    * Admin: Update category metadata and parent relations
    */
-  async updateCategory(id, { name, slug, imageUrl, parentIds }) {
+  async updateCategory(id, { name, slug, imageUrl, parentIds, sortOrder }) {
     const formattedSlug = slug ? slug.toLowerCase().replace(/\s+/g, '-') : undefined;
 
     if (formattedSlug) {
       const [existingSlug] = await db
         .select({ id: categories.id })
         .from(categories)
-        .where(and(eq(categories.slug, formattedSlug), sql`${categories.id} != ${id}`))
+        .where(and(eq(categories.slug, formattedSlug), ne(categories.id, id)))
         .limit(1);
 
       if (existingSlug) {
@@ -202,15 +223,37 @@ export const categoryService = {
       }
     }
 
+    const parsedSort = sortOrder !== undefined ? (Number(sortOrder) || 0) : undefined;
+
+    const updateFields = {
+      ...(name && { name }),
+      ...(formattedSlug && { slug: formattedSlug }),
+      ...(imageUrl !== undefined && { imageUrl: imageUrl || null }),
+      ...(parsedSort !== undefined && { sortOrder: parsedSort }),
+    };
+
+    if (Object.keys(updateFields).length > 0) {
+      await db
+        .update(categories)
+        .set(updateFields)
+        .where(eq(categories.id, id));
+    }
+
+    if (parsedSort !== undefined) {
+      await db.execute(sql`UPDATE "categories" SET "sort_order" = ${parsedSort} WHERE "id" = ${id}`);
+    }
+
     const [cat] = await db
-      .update(categories)
-      .set({
-        ...(name && { name }),
-        ...(formattedSlug && { slug: formattedSlug }),
-        ...(imageUrl !== undefined && { imageUrl: imageUrl || null }),
+      .select({
+        id: categories.id,
+        name: categories.name,
+        slug: categories.slug,
+        imageUrl: categories.imageUrl,
+        sortOrder: sql`COALESCE("categories"."sort_order", 0)::int`.as('sort_order'),
+        createdAt: categories.createdAt,
       })
-      .where(eq(categories.id, id))
-      .returning();
+      .from(categories)
+      .where(eq(categories.id, id));
 
     if (!cat) {
       const error = new Error('Category not found');
@@ -285,7 +328,20 @@ export const categoryService = {
    */
   async getPublicTree() {
     const [allCategories, allRelations] = await Promise.all([
-      db.select().from(categories).orderBy(asc(categories.name)),
+      db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug,
+          imageUrl: categories.imageUrl,
+          sortOrder: sql`COALESCE("categories"."sort_order", 0)::int`.as('sort_order'),
+          createdAt: categories.createdAt,
+        })
+        .from(categories)
+        .orderBy(
+          sql`CASE WHEN COALESCE("categories"."sort_order", 0) > 0 THEN COALESCE("categories"."sort_order", 0) ELSE 999999 END ASC`,
+          asc(categories.name)
+        ),
       this.getCategoryRelations(),
     ]);
     const { buildCategoryTree } = await import('@/lib/category-tree');

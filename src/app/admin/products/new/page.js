@@ -526,30 +526,22 @@ export function ProductForm({ initialData, productId }) {
               <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                 Brand
               </label>
-              <input
-                type="text"
-                list="brand-suggestions"
-                value={form.brand || ''}
-                maxLength={60}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const matchingBrand = brands.find((b) => b.name.toLowerCase() === val.trim().toLowerCase());
+              <CustomSelect
+                options={brandOptions}
+                value={form.brandId || ''}
+                onChange={(val) => {
+                  const selected = brands.find((b) => b.id === val);
                   setForm((prev) => ({
                     ...prev,
-                    brand: val,
-                    brandId: matchingBrand ? matchingBrand.id : (val.trim() === '' ? '' : prev.brandId),
+                    brandId: val,
+                    brand: selected ? selected.name : '',
                   }));
+                  if (errors.brand || errors.brandId) {
+                    setErrors((prev) => ({ ...prev, brand: null, brandId: null }));
+                  }
                 }}
-                placeholder="Type or pick brand..."
-                className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 focus:outline-none ${
-                  errors.brand ? 'border-red-500' : 'border-warm-200 focus:border-brand-600'
-                }`}
+                placeholder="Select brand..."
               />
-              <datalist id="brand-suggestions">
-                {brands.map((b) => (
-                  <option key={b.id} value={b.name} />
-                ))}
-              </datalist>
               <FieldError message={errors.brand || errors.brandId} />
             </div>
           </div>

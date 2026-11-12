@@ -69,6 +69,12 @@ function createPool() {
   // Ensure database schema synchronization for newly added columns
   if (connectionString) {
     poolInstance
+      .query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;`)
+      .catch(() => {});
+    poolInstance
+      .query(`CREATE INDEX IF NOT EXISTS categories_sort_order_idx ON categories (sort_order);`)
+      .catch(() => {});
+    poolInstance
       .query(`ALTER TABLE order_item_addons ADD COLUMN IF NOT EXISTS quantity integer NOT NULL DEFAULT 1;`)
       .catch(() => {});
     poolInstance

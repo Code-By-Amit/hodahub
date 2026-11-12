@@ -151,8 +151,9 @@ export const productAddonSchema = z.object({
 export const categorySchema = z.object({
   name: z.string().min(1, 'Category name is required').max(255),
   slug: z.string().min(1, 'Slug is required').max(255),
-  imageUrl: z.string().url().optional().nullable(),
+  imageUrl: z.string().url('Please enter a valid image URL').optional().nullable().or(z.literal('')),
   parentIds: z.array(z.string().uuid()).max(10, 'A category cannot have more than 10 parent categories').optional().default([]),
+  sortOrder: z.coerce.number().int().default(0).optional(),
 });
 
 export const brandSchema = z.object({

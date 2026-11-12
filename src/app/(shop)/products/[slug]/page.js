@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useDispatch, useSelector } from 'react-redux';
@@ -45,6 +45,7 @@ import {
   Edit3,
   Trash2,
   AlertCircle,
+  Zap,
 } from 'lucide-react';
 import ReturnPolicyContent from '@/components/storefront/ReturnPolicyContent';
 import { productsApi } from '@/lib/apiClient/products.api';
@@ -54,6 +55,7 @@ import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
+  const router = useRouter();
   const dispatch = useDispatch();
   const toast = useToast();
   const user = useSelector(selectUser);
@@ -349,6 +351,26 @@ export default function ProductDetailPage() {
     trackPixelAddToCart(product, quantity);
     trackGAAddToCart(product, quantity);
     toast.success(`${product.name} added to cart!`);
+  }
+
+  function handleBuyNow() {
+    if (!product || isOutOfStock) return;
+    dispatch(
+      addItem({
+        productId: product.id,
+        name: product.name,
+        slug: product.slug,
+        image: product.images?.[0] || '',
+        price: Number(product.price),
+        discountPrice: product.discountPrice ? Number(product.discountPrice) : null,
+        codAvailable: product.codAvailable !== false,
+        quantity,
+        selectedAddon,
+      })
+    );
+    trackPixelAddToCart(product, quantity);
+    trackGAAddToCart(product, quantity);
+    router.push('/checkout');
   }
 
   if (loading) {
@@ -731,6 +753,16 @@ export default function ProductDetailPage() {
               <ShoppingCart className="w-3.5 h-3.5" />
               <span>{isOutOfStock ? 'Out of Stock' : 'Add to Cart'}</span>
             </button>
+
+            {!isOutOfStock && (
+              <button
+                onClick={handleBuyNow}
+                className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2 text-[11px] sm:text-[12px] font-semibold rounded-md transition-all shadow-xs bg-brand-600 text-white hover:bg-brand-700 active:scale-[0.99]"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Buy Now</span>
+              </button>
+            )}
 
             <button
               onClick={async () => {

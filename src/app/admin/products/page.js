@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import Pagination from '@/components/ui/Pagination';
@@ -9,16 +9,26 @@ import { formatCurrency } from '@/lib/utils';
 import { FiPlus, FiEdit, FiTrash2, FiSearch, FiCheck, FiX, FiExternalLink } from 'react-icons/fi';
 import useAdminProducts from '@/hooks/useAdminProducts';
 import useAdminCategories from '@/hooks/useAdminCategories';
+import { brandsApi } from '@/lib/apiClient/brands.api';
 
 export default function AdminProductsPage() {
   const [page, setPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
   const [selectedActive, setSelectedActive] = useState('');
   const [selectedStock, setSelectedStock] = useState('');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [brands, setBrands] = useState([]);
 
   const { categories } = useAdminCategories();
+
+  useEffect(() => {
+    brandsApi
+      .getAdmin()
+      .then((data) => setBrands(data.brands || []))
+      .catch(() => {});
+  }, []);
 
   const {
     products,
@@ -34,6 +44,7 @@ export default function AdminProductsPage() {
     limit: 15,
     search,
     category: selectedCategory,
+    brand: selectedBrand,
     active: selectedActive,
     stock: selectedStock,
   });
@@ -109,6 +120,23 @@ export default function AdminProductsPage() {
           ))}
         </select>
 
+        {/* Brand Filter */}
+        <select
+          value={selectedBrand}
+          onChange={(e) => {
+            setSelectedBrand(e.target.value);
+            setPage(1);
+          }}
+          className="px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-700 outline-none focus:border-brand-400 cursor-pointer"
+        >
+          <option value="">All Brands</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+
         {/* Active/Inactive Filter */}
         <select
           value={selectedActive}
@@ -137,10 +165,11 @@ export default function AdminProductsPage() {
           <option value="out_of_stock">Out of Stock Only</option>
         </select>
 
-        {(selectedCategory || selectedActive || selectedStock || search) && (
+        {(selectedCategory || selectedBrand || selectedActive || selectedStock || search) && (
           <button
             onClick={() => {
               setSelectedCategory('');
+              setSelectedBrand('');
               setSelectedActive('');
               setSelectedStock('');
               setSearch('');
@@ -249,7 +278,14 @@ export default function AdminProductsPage() {
                         </div>
                       </td>
 
-                      <td className="px-3 py-2 text-warm-500">{p.categoryName || '—'}</td>
+                      <td className="px-3 py-2 text-warm-500">
+                        <div>{p.categoryName || '—'}</div>
+                        {(p.brandName || p.brand) && (
+                          <div className="text-[10px] text-warm-400 font-medium truncate max-w-[120px]">
+                            {p.brandName || p.brand}
+                          </div>
+                        )}
+                      </td>
 
                       {/* Active Status Pill Button */}
                       <td className="px-3 py-2">
@@ -292,6 +328,24 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {p.productLink ? (
+                            <a
+                              href={p.productLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 text-warm-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                              title={`Open Supplier Link: ${p.productLink}`}
+                            >
+                              <FiExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          ) : (
+                            <span
+                              className="p-1 text-warm-300 cursor-not-allowed"
+                              title="No supplier link configured for this product"
+                            >
+                              <FiExternalLink className="w-3.5 h-3.5 opacity-30" />
+                            </span>
+                          )}
                           <Link
                             href={`/admin/products/${p.id}/edit`}
                             className="p-1 text-warm-500 hover:text-brand-600 hover:bg-brand-50 rounded-md transition-colors"

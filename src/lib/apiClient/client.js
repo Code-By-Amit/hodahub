@@ -42,6 +42,7 @@ async function request(url, { method = 'GET', data, headers = {}, ...customOpts 
     method,
     headers: reqHeaders,
     body,
+    cache: customOpts.cache || (url.includes('/api/admin') ? 'no-store' : undefined),
     ...customOpts,
   });
 
