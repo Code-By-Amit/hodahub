@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/lib/apiClient/products.api';
 
@@ -17,9 +17,10 @@ export function useShopProducts(params = {}) {
     maxPrice = '',
     search = '',
     minRating = '',
+    enabled = true,
   } = params;
 
-  const normalizedParams = {
+  const normalizedParams = useMemo(() => ({
     page,
     limit,
     sort,
@@ -29,13 +30,14 @@ export function useShopProducts(params = {}) {
     maxPrice,
     search,
     minRating,
-  };
+  }), [page, limit, sort, category, brand, minPrice, maxPrice, search, minRating]);
 
   const fetchProducts = (p) => productsApi.getAll(p);
 
   const queryKey = ['products', normalizedParams];
 
   const query = useQuery({
+    enabled,
     queryKey,
     queryFn: () => fetchProducts(normalizedParams),
     staleTime: 2 * 60 * 1000, // 2 minutes
@@ -46,7 +48,7 @@ export function useShopProducts(params = {}) {
   // Prefetch next page
   useEffect(() => {
     const pagination = query.data?.pagination;
-    if (pagination && pagination.page < pagination.totalPages) {
+    if (enabled && pagination && pagination.page < pagination.totalPages) {
       const nextPage = pagination.page + 1;
       queryClient.prefetchQuery({
         queryKey: ['products', { ...normalizedParams, page: nextPage }],
@@ -54,7 +56,7 @@ export function useShopProducts(params = {}) {
         staleTime: 2 * 60 * 1000,
       });
     }
-  }, [query.data, normalizedParams, queryClient]);
+  }, [query.data, normalizedParams, queryClient, enabled]);
 
   return {
     products: query.data?.products || [],

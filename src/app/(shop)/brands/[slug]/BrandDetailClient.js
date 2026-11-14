@@ -8,6 +8,7 @@ import Pagination from '@/components/ui/Pagination';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
+import Modal from '@/components/ui/Modal';
 import CategoryCard from '@/components/ui/CategoryCard';
 import EmptyState from '@/components/ui/EmptyState';
 import { SlidersHorizontal, ArrowLeft, Layers } from 'lucide-react';
@@ -174,7 +175,7 @@ function BrandDetailInner({
   }
 
   return (
-    <div className="max-w-4xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Live announcement region for accessibility */}
       <div aria-live="polite" className="sr-only">
         {isBrandLandingCards
@@ -252,7 +253,7 @@ function BrandDetailInner({
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
             {hierarchy.categories.map((cat) => (
               <CategoryCard
                 key={cat.id || cat.slug}
@@ -295,7 +296,7 @@ function BrandDetailInner({
                 <Layers className="w-3 h-3 text-warm-900" />
                 Subcategories
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
                 {hierarchy.categories.map((childCat) => (
                   <CategoryCard
                     key={childCat.id || childCat.slug}
@@ -315,15 +316,15 @@ function BrandDetailInner({
             {/* Desktop Filter Sidebar */}
             <aside className="hidden lg:block w-48 shrink-0">
               <div className="bg-white border border-warm-200 rounded-lg p-2.5 shadow-2xs sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto scrollbar-thin">
-                <FilterPanel
+                <FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
                   categories={[]}
                   brands={[]}
                   hideBrandSection={true}
                   hideCategorySection={true}
                   currentCategory={currentCategory}
                   currentBrand=""
-                  minPrice={minPrice}
-                  maxPrice={maxPrice}
+                  minPrice={currentMinPrice}
+                  maxPrice={currentMaxPrice}
                   minRating={currentMinRating}
                   setMinPrice={setMinPrice}
                   setMaxPrice={setMaxPrice}
@@ -340,14 +341,14 @@ function BrandDetailInner({
             {/* Products Listing Area */}
             <div className="flex-1 min-w-0">
               {productsLoading ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="aspect-square bg-warm-100 rounded-md animate-pulse" />
                   ))}
                 </div>
               ) : products.length > 0 ? (
                 <>
-                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
                     {products.map((product) => (
                       <ProductCard key={product.id} product={product} />
                     ))}
@@ -377,36 +378,15 @@ function BrandDetailInner({
       )}
 
       {/* Mobile Drawer Filter */}
-      {showFilters && !isBrandLandingCards && !isInvalidCategory && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-xs"
-            onClick={() => setShowFilters(false)}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-2xl p-4 overflow-y-auto z-10 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-warm-100 pb-3 mb-4">
-                <h3 className="text-sm font-bold text-warm-900 flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-brand-600" /> Filters
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowFilters(false)}
-                  className="p-1 text-warm-400 hover:text-warm-900 rounded-md"
-                >
-                  <span className="sr-only">Close filters</span>
-                  ✕
-                </button>
-              </div>
-              <FilterPanel
+      <Modal isOpen={showFilters} onClose={() => setShowFilters(false)} title="Filters" size="drawer"><FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
                 categories={[]}
                 brands={[]}
                 hideBrandSection={true}
                 hideCategorySection={true}
                 currentCategory={currentCategory}
                 currentBrand=""
-                minPrice={minPrice}
-                maxPrice={maxPrice}
+                minPrice={currentMinPrice}
+                maxPrice={currentMaxPrice}
                 minRating={currentMinRating}
                 setMinPrice={setMinPrice}
                 setMaxPrice={setMaxPrice}
@@ -425,11 +405,7 @@ function BrandDetailInner({
                   setShowFilters(false);
                 }}
                 hasFilters={hasFilters}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+              /></Modal>
     </div>
   );
 }
@@ -444,10 +420,10 @@ export default function BrandDetailClient({
   return (
     <Suspense
       fallback={
-        <div className="max-w-4xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
           <div className="h-3 w-32 bg-warm-100 rounded-md animate-pulse" />
           <div className="h-6 w-52 bg-warm-100 rounded-lg animate-pulse" />
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="aspect-square rounded-md bg-warm-100 animate-pulse" />
             ))}

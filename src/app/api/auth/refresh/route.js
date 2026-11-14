@@ -32,7 +32,7 @@ export async function POST() {
       .where(eq(users.id, decoded.id))
       .limit(1);
 
-    if (!user || !user.isVerified) {
+    if (!user || !user.isVerified || user.sessionVersion !== (decoded.sessionVersion || 0)) {
       return NextResponse.json(
         { error: 'User not found or not verified' },
         { status: 401 }
@@ -40,6 +40,7 @@ export async function POST() {
     }
 
     const tokens = generateTokens({
+      sessionVersion: user.sessionVersion,
       id: user.id,
       email: user.email || null,
       phone: user.phone || null,

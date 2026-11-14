@@ -88,7 +88,8 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       courierProvider: order.courierProvider || 'delhivery',
       awbNumber: order.awbNumber,
-      courierStatus: trackingInfo.status || order.courierStatus || 'In Transit',
+      courierStatus: trackingInfo.status || order.courierStatus || 'Tracking unavailable',
+      unavailable: Boolean(trackingInfo.unavailable),
       events: cachedEvents.length > 0 ? cachedEvents : trackingInfo.events || [],
     });
   } catch (error) {

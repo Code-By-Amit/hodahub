@@ -101,7 +101,7 @@ export async function PUT(request) {
     }
 
     try {
-      revalidateTag('store-settings');
+      revalidateTag('store-settings', { expire: 0 });
       revalidatePath('/contact');
     } catch (cacheErr) {
       console.warn('Failed to revalidate store settings cache:', cacheErr);

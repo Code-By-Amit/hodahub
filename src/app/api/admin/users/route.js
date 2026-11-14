@@ -126,7 +126,7 @@ export async function POST(request) {
         .returning();
 
       return NextResponse.json({
-        user: updated,
+        user: safeUser(updated),
         message: `Existing user's role updated to ${targetRole}`,
       });
     }
@@ -146,7 +146,7 @@ export async function POST(request) {
       .returning();
 
     return NextResponse.json(
-      { user: newUser, message: `New ${targetRole} account created successfully!` },
+      { user: safeUser(newUser), message: `New ${targetRole} account created successfully!` },
       { status: 201 }
     );
   } catch (error) {
@@ -170,10 +170,12 @@ export async function PATCH(request) {
     }
 
     const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
-    return NextResponse.json({ user });
+    return NextResponse.json({ user: safeUser(user) });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden')
       return NextResponse.json({ error: error.message }, { status: 403 });
     return NextResponse.json({ error: 'Failed' }, { status: 500 });
   }
 }
+
+function safeUser(user) { if (!user) return null; const { id, name, email, phone, role, isVerified, createdAt } = user; return { id, name, email, phone, role, isVerified, createdAt }; }

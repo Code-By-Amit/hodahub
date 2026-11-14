@@ -38,10 +38,6 @@ export default function AdminSettingsPage() {
     storeSettingsSchema
   );
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
   async function fetchSettings() {
     try {
       const data = await settingsApi.getAdmin();
@@ -70,7 +66,7 @@ export default function AdminSettingsPage() {
     setLoading(false);
   }
 
-  async function handleSubmit(e) {
+async function handleSubmit(e) {
     if (e) e.preventDefault();
 
     const payloadToValidate = {
@@ -101,6 +97,12 @@ export default function AdminSettingsPage() {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchSettings(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
 
   if (loading) {
     return (

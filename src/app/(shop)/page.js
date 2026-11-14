@@ -64,9 +64,9 @@ async function getHomepageData() {
         .from(products)
         .where(availableCondition)
         .orderBy(desc(products.createdAt), desc(products.id))
-        .limit(12),
-      getBestSellerProducts(8),
-      brandService.getBrands({ limit: 18 }).catch(() => ({ brands: [] })),
+        .limit(10),
+      getBestSellerProducts(10),
+      brandService.getBrands().catch(() => ({ brands: [] })),
     ]);
 
     return {
@@ -88,11 +88,11 @@ export default async function HomePage() {
     <>
       <CategoryQuickNav categories={cats} />
       <BannerCarousel />
-      <ShopByBrand brands={brands} />
       <NewArrivals products={newArrivals} />
       <BestSellers products={bestSellers} />
-      <FlashSale />
+      <ShopByBrand brands={brands} />
       <HappyCustomers />
+      <FlashSale />
       <div className="border-t border-warm-200 mt-8">
         <TrustBadges />
       </div>

@@ -1,18 +1,20 @@
 import Link from 'next/link';
+import { getCachedStoreSettings } from '@/lib/store-settings';
 import { formatCurrency } from '@/lib/utils';
 import { FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 
+export default async function TrustBadges() {
+const settings = await getCachedStoreSettings();
 const badges = [
-  { icon: FiTruck, title: 'Free Shipping', desc: `On orders over ${formatCurrency(50)}` },
+  { icon: FiTruck, title: 'Free Shipping', desc: `On orders of ${formatCurrency(Number(settings.minFreeShipping ?? 50))} or more` },
   { icon: FiShield, title: 'Secure Payments', desc: '100% secure checkout' },
   { icon: FiRefreshCw, title: 'Easy Exchanges', desc: '48-hour exchange & store credit (no cash refunds)', href: '/returns' },
-  { icon: FiHeadphones, title: '24/7 Support', desc: 'Always here to help' },
+  { icon: FiHeadphones, title: 'Customer Support', desc: 'Contact our team for help' },
 ];
 
-export default function TrustBadges() {
   return (
     <section className="border-y border-warm-100 bg-white">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="store-container py-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
           {badges.map((badge, i) => {
             const Content = (

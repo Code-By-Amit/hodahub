@@ -27,7 +27,7 @@ export default function BannerCarousel() {
 
   if (!banners || banners.length === 0) return null;
 
-  const currentBanner = banners[currentIndex];
+  const currentBanner = banners[currentIndex % banners.length];
   const hasText = Boolean(currentBanner.title || currentBanner.subtitle);
 
   const handleNext = (e) => {
@@ -92,7 +92,7 @@ export default function BannerCarousel() {
   };
 
   return (
-    <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-2">
+    <section className="store-container pt-4 pb-2">
       {/* Outer fixed-size relative container */}
       <div
         className="relative w-full h-44 sm:h-56 md:h-64 lg:h-72 rounded-xl overflow-hidden shadow-sm select-none group bg-transparent"

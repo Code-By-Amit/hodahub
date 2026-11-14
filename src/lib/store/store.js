@@ -62,4 +62,6 @@ export const store = configureStore({
     }),
 });
 
-export const persistor = persistStore(store);
+// Read browser persistence after hydration so server and first client render agree.
+export const hydrationSnapshot = store.getState();
+export const persistor = persistStore(store, { manualPersist: true });

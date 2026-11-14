@@ -50,7 +50,7 @@ export async function GET(request, { params }) {
       .where(whereCondition)
       .limit(1);
 
-    if (!product) {
+    if (!product || !product.isActive) {
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }

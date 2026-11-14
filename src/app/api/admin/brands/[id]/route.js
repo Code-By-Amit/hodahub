@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { brands, products } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, or, and, isNull } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { brandSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
+import { brandService } from '@/services/brand.service';
+import { compareBrandOrder } from '@/lib/brand-order';
 
 export async function GET(request, { params }) {
   try {
@@ -35,7 +37,7 @@ export async function PUT(request, { params }) {
       );
     }
 
-    const { name, slug, logoUrl } = body;
+    const { name, slug, logoUrl, sortOrder } = parseResult.data;
 
     const [updated] = await db
       .update(brands)
@@ -43,14 +45,17 @@ export async function PUT(request, { params }) {
         name,
         slug: slug.toLowerCase().replace(/\s+/g, '-'),
         logoUrl: logoUrl || null,
+        sortOrder,
       })
       .where(eq(brands.id, id))
       .returning();
 
     if (!updated) return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
 
+    brandService.invalidateCache();
     try {
       revalidatePath('/', 'layout');
+      revalidatePath('/brands');
       revalidatePath('/products');
       revalidatePath('/search');
     } catch {}
@@ -68,14 +73,19 @@ export async function DELETE(request, { params }) {
     await requireAdmin(request);
     const { id } = await params;
 
-    // Disassociate products belonging to this brand
-    await db.update(products).set({ brandId: null }).where(eq(products.brandId, id));
-
-    const [deleted] = await db.delete(brands).where(eq(brands.id, id)).returning();
+    const deleted = await db.transaction(async (tx) => {
+      const [brand] = await tx.select().from(brands).where(eq(brands.id, id)).for('update');
+      if (!brand) return null;
+      await tx.update(products).set({ brandId: null, brand: null }).where(or(eq(products.brandId, id), and(isNull(products.brandId), eq(products.brand, brand.name))));
+      const [removed] = await tx.delete(brands).where(eq(brands.id, id)).returning();
+      return removed;
+    });
     if (!deleted) return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
 
+    brandService.invalidateCache();
     try {
       revalidatePath('/', 'layout');
+      revalidatePath('/brands');
       revalidatePath('/products');
       revalidatePath('/search');
     } catch {}

@@ -72,6 +72,7 @@ export async function POST(request) {
 
     // Generate tokens and set cookies
     const tokens = generateTokens({
+      sessionVersion: user.sessionVersion,
       id: user.id,
       email: user.email,
       role: user.role,

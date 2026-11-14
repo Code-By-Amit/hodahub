@@ -4,7 +4,7 @@ import { getConsent } from '@/lib/consent';
 // Returns the effective selling price of a product (discount price takes priority)
 const getEffectivePrice = (p) => Number(p.discountPrice || p.price || 0);
 
-export const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+export const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || '1490387086263942';
 export const CURRENCY = 'INR'; // Meta wants the amount in RUPEES (499), never paise (49900)
 
 const queue = [];

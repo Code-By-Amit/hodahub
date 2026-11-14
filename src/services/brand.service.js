@@ -3,6 +3,7 @@ import { products, brands, categories } from '@/lib/db/schema';
 import { eq, gt, and, or, inArray, desc } from 'drizzle-orm';
 import { categoryService } from './category.service';
 import { AppError } from '@/lib/errors';
+import { buildBrandCatalog } from '@/lib/brand-order';
 
 // 60-second in-memory cache for derived brands
 let cachedBrandsData = null;
@@ -41,6 +42,7 @@ async function deriveAllBrands(forceRefresh = false) {
       brandRelName: brands.name,
       brandRelSlug: brands.slug,
       brandLogoUrl: brands.logoUrl,
+      brandSortOrder: brands.sortOrder,
     })
     .from(products)
     .leftJoin(brands, eq(products.brandId, brands.id))
@@ -52,78 +54,9 @@ async function deriveAllBrands(forceRefresh = false) {
       desc(products.createdAt)
     );
 
-  // Map of rawName -> brand accumulator
-  const brandMap = new Map();
-
-  for (const row of productRows) {
-    const rawName = row.brandRelName || (row.brandText ? row.brandText.trim() : null);
-    if (!rawName) continue;
-
-    if (!brandMap.has(rawName)) {
-      const firstImage = Array.isArray(row.images) && row.images.length > 0 ? row.images[0] : null;
-      brandMap.set(rawName, {
-        name: rawName,
-        productCount: 1,
-        logoUrl: row.brandLogoUrl || null,
-        bestProductImage: firstImage || null,
-        dbSlug: row.brandRelSlug || null,
-      });
-    } else {
-      const existing = brandMap.get(rawName);
-      existing.productCount += 1;
-      if (!existing.logoUrl && row.brandLogoUrl) {
-        existing.logoUrl = row.brandLogoUrl;
-      }
-      if (!existing.bestProductImage && Array.isArray(row.images) && row.images.length > 0) {
-        existing.bestProductImage = row.images[0];
-      }
-    }
-  }
-
-  // Sort raw brands alphabetically by exact stored name
-  const sortedRawList = Array.from(brandMap.values()).sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
-
-  // Compute deterministic slugs, handling collisions
-  const slugCounts = new Map();
-  const brandsList = [];
-  const slugToBrandMap = new Map();
-
-  for (const item of sortedRawList) {
-    let baseSlug = item.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-
-    if (!baseSlug) {
-      baseSlug = 'brand';
-    }
-
-    let finalSlug = baseSlug;
-    if (slugCounts.has(baseSlug)) {
-      const count = slugCounts.get(baseSlug) + 1;
-      slugCounts.set(baseSlug, count);
-      finalSlug = `${baseSlug}-${count}`;
-    } else {
-      slugCounts.set(baseSlug, 1);
-    }
-
-    const brandRecord = {
-      name: item.name,
-      slug: finalSlug,
-      productCount: item.productCount,
-      image: item.logoUrl || item.bestProductImage || null,
-    };
-
-    brandsList.push(brandRecord);
-    slugToBrandMap.set(finalSlug, brandRecord);
-    // Also index baseSlug if different for fallback
-    if (finalSlug !== baseSlug && !slugToBrandMap.has(baseSlug)) {
-      slugToBrandMap.set(baseSlug, brandRecord);
-    }
-  }
+  const registeredBrands = await db.select().from(brands);
+  const brandsList = buildBrandCatalog(productRows, registeredBrands);
+  const slugToBrandMap = new Map(brandsList.map((brand) => [brand.slug, brand]));
 
   cachedBrandsData = { brandsList, slugToBrandMap };
   lastCacheTime = now;
@@ -164,11 +97,15 @@ export const brandService = {
       if (cat) {
         const descendantIds = await categoryService.getDescendantCategoryIds(cat.id);
         conditions.push(inArray(products.categoryId, descendantIds));
+      } else {
+        return { brands: [], pagination: { page: 1, limit: 0, total: 0, totalPages: 1 } };
       }
 
       const rows = await db
         .select({
           brandText: products.brand,
+          brandRelId: brands.id,
+          brandSortOrder: brands.sortOrder,
           brandRelName: brands.name,
           brandRelSlug: brands.slug,
           brandLogoUrl: brands.logoUrl,
@@ -178,33 +115,8 @@ export const brandService = {
         .leftJoin(brands, eq(products.brandId, brands.id))
         .where(and(...conditions));
 
-      const scopedMap = new Map();
-      for (const r of rows) {
-        const rawName = r.brandRelName || (r.brandText ? r.brandText.trim() : null);
-        if (!rawName) continue;
-        if (!scopedMap.has(rawName)) {
-          const firstImg = Array.isArray(r.images) && r.images.length > 0 ? r.images[0] : null;
-          scopedMap.set(rawName, {
-            name: rawName,
-            productCount: 1,
-            logoUrl: r.brandLogoUrl || null,
-            bestProductImage: firstImg,
-          });
-        } else {
-          scopedMap.get(rawName).productCount += 1;
-        }
-      }
-
-      // Map to full slug-assigned brands from cache
-      const { brandsList } = await deriveAllBrands();
-      const slugLookup = new Map(brandsList.map((b) => [b.name, b.slug]));
-
-      let resultList = Array.from(scopedMap.values()).map((b) => ({
-        name: b.name,
-        slug: slugLookup.get(b.name) || b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        productCount: b.productCount,
-        image: b.logoUrl || b.bestProductImage || null,
-      })).sort((a, b) => a.name.localeCompare(b.name));
+      const registeredBrands = await db.select().from(brands);
+      let resultList = buildBrandCatalog(rows, registeredBrands);
 
       if (q && q.trim()) {
         const sanitized = q.trim().slice(0, 100);
@@ -245,8 +157,8 @@ export const brandService = {
       };
     }
 
-    const parsedPage = Math.max(1, parseInt(page || '1', 10));
-    const parsedLimit = Math.min(48, Math.max(1, parseInt(limit || '24', 10)));
+    const parsedPage = Number.isSafeInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+    const parsedLimit = Number.isSafeInteger(Number(limit)) && Number(limit) > 0 ? Math.min(48, Number(limit)) : 24;
     const total = filtered.length;
     const totalPages = Math.ceil(total / parsedLimit) || 1;
 
@@ -309,7 +221,7 @@ export const brandService = {
             eq(products.isOutOfStock, false),
             gt(products.stock, 0),
             or(
-              eq(products.brand, brand.name),
+              inArray(products.brand, brand.aliases || [brand.name]),
               eq(brands.name, brand.name)
             )
           )

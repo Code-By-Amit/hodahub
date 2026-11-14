@@ -59,11 +59,11 @@ export async function POST(request) {
     const emailResult = await sendPasswordResetEmail(cleanEmail, resetOtp);
     if (!emailResult.success) {
       console.error('[Forgot Password] Email send failure:', emailResult.error);
+      return NextResponse.json({ error: 'Password reset email could not be sent. Please try again later.' }, { status: 503 });
     }
 
     return NextResponse.json({
-      message: 'Password reset code sent to your email.',
-      email: cleanEmail,
+      message: 'If an account exists with this email, a password reset code has been sent.',
     });
   } catch (error) {
     console.error('Forgot password error:', error);

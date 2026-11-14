@@ -22,12 +22,14 @@ export async function POST(request, { params }) {
 
     const { packageWeight, packageLength, packageWidth, packageHeight } = parseResult.data;
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    return await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for('update');
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    if (!['confirmed', 'packed'].includes(order.status) || (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid')) return NextResponse.json({ error: 'Confirm the order and collect online payment before fulfillment.' }, { status: 409 });
     if (order.status === 'cancelled') {
       return NextResponse.json({ error: 'Cannot pack a cancelled order' }, { status: 400 });
     }
@@ -45,7 +47,7 @@ export async function POST(request, { params }) {
       .where(eq(orders.id, id))
       .returning();
 
-    await db.insert(orderStatusHistory).values({
+    await tx.insert(orderStatusHistory).values({
       orderId: id,
       status: 'packed',
       note: `Order packed: ${packageWeight} kg (${packageLength}x${packageWidth}x${packageHeight} cm)`,
@@ -54,6 +56,7 @@ export async function POST(request, { params }) {
     return NextResponse.json({
       message: 'Order packed successfully!',
       order: updatedOrder,
+    });
     });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden') {

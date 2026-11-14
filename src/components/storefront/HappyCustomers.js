@@ -78,7 +78,7 @@ export default function HappyCustomers() {
 
   return (
     <section className="py-6 bg-warm-50/50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="store-container">
         <div className="mb-6 text-center">
           <h2 className="text-md font-bold text-warm-900 tracking-tight">Happy Customers</h2>
           <p className="text-[11px] text-warm-500 mt-0.5">Real feedback from our customers</p>

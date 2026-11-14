@@ -17,7 +17,7 @@ export default function InvoicePage() {
   useEffect(() => {
     async function fetchOrder() {
       try {
-        const data = await ordersApi.getById(id);
+        const data = await ordersApi.getById(id, window.location.search);
         if (data) setOrderData(data);
       } catch {}
       setLoading(false);

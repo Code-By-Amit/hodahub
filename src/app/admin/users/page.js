@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelectField } from '@/components/ui/CustomSelect';
+
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
@@ -321,14 +323,14 @@ export default function AdminUsersPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Assigned Account Role *
                 </label>
-                <select
+                <CustomSelectField
                   value={addForm.role}
                   onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}
                   className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
                 >
                   <option value="admin">Admin (Full Access)</option>
                   <option value="customer">Customer (Storefront Only)</option>
-                </select>
+                </CustomSelectField>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">

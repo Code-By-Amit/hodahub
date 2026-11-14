@@ -16,7 +16,7 @@ const inter = Inter({
 export const metadata = {
   title: "HodaHub — Official Online Store",
   description:
-    "Discover trending products curated for modern lifestyles. Free shipping on orders over $50. Shop fashion, electronics, beauty, fitness & more.",
+    "Discover HodaHub's latest products, secure INR checkout, and delivery across eligible locations in India.",
   keywords: ["ecommerce", "online shopping", "trending products", "HodaHub"],
   icons: {
     icon: "/favicon.ico",

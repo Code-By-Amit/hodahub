@@ -37,7 +37,7 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
 
   if (!token || token === 'your_delhivery_api_token_here') {
     console.log(`[Delhivery Serviceability] Using mock mode for environment: ${env.toUpperCase()}`);
-    return { serviceable: true, isMock: true, pincode, environment: env, estimatedDays: null };
+    return { serviceable: null, codAvailable: false, pincode, environment: env, reason: 'Delivery availability could not be verified.' };
   }
 
   try {
@@ -45,6 +45,7 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
       headers: {
         Authorization: `Token ${token}`,
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -84,7 +85,7 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
 
       return {
         serviceable: true,
-        codAvailable: matched.postal_code?.cod !== 'N',
+        codAvailable: matched.postal_code?.cod === 'Y',
         city: matched.postal_code?.city,
         state: matched.postal_code?.state_code || matched.postal_code?.state,
         estimatedDays,
@@ -92,11 +93,11 @@ export async function checkPincodeServiceability(pincode, forceStaging = false) 
       };
     }
 
-    // Pincode not directly confirmed by Delhivery — store has alternate shipping arrangements
-    return { serviceable: true, pincode, estimatedDays: null, environment: env };
+    // An unlisted pincode is not a verified delivery destination.
+    return { serviceable: false, codAvailable: false, pincode, environment: env };
   } catch (error) {
     console.error('[Delhivery Serviceability Error]:', error);
-    return { serviceable: true, pincode, estimatedDays: null, environment: env };
+    return { serviceable: null, codAvailable: false, pincode, environment: env, reason: 'Please contact support to confirm delivery.' };
   }
 }
 
@@ -128,6 +129,7 @@ export async function createDelhiveryShipment(orderData, forceStaging = false) {
   const widthCm = parseFloat(packageWidth) || 10;
   const heightCm = parseFloat(packageHeight) || 10;
 
+  if (process.env.NODE_ENV === 'production' && !forceStaging && (!token || env !== 'production')) return { success: false, error: 'Live courier shipping is not configured.' };
   const awbMock = `DEL${Date.now().toString().slice(-10)}`;
 
   if (!token || token === 'your_delhivery_api_token_here') {
@@ -153,7 +155,7 @@ export async function createDelhiveryShipment(orderData, forceStaging = false) {
     const cleanPhone = (shippingAddress?.phone || guestPhone || '')
       .toString()
       .replace(/\D/g, '')
-      .slice(0, 10);
+      .slice(-10);
     const cleanPin = (shippingAddress?.pincode || '').toString().trim();
     const consigneeName = (shippingAddress?.name || guestName || 'Customer').trim();
 
@@ -252,6 +254,7 @@ export async function createDelhiveryShipment(orderData, forceStaging = false) {
       };
     }
 
+    if (process.env.NODE_ENV === 'production' && !forceStaging) return { success: false, error: 'Courier did not return a shipment reference.' };
     // Fallback if API returned response without explicit waybill field in sandbox/staging mode
     return {
       success: true,
@@ -280,6 +283,7 @@ export async function trackDelhiveryShipment(awbNumber, forceStaging = false) {
   const { env, baseUrl, token } = getDelhiveryConfig(forceStaging);
 
   if (!token || token === 'your_delhivery_api_token_here' || awbNumber.startsWith('DEL')) {
+    if (!forceStaging) return { status: null, events: [], environment: env, unavailable: true };
     return {
       status: 'In Transit',
       courierProvider: 'Delhivery',
@@ -316,14 +320,14 @@ export async function trackDelhiveryShipment(awbNumber, forceStaging = false) {
     });
 
     if (!res.ok) {
-      return { status: 'In Transit', events: [], environment: env };
+      return { status: null, events: [], environment: env, unavailable: true };
     }
 
     const data = await res.json();
     const pkg = data?.ShipmentData?.[0]?.Shipment;
 
     if (!pkg) {
-      return { status: 'In Transit', events: [], environment: env };
+      return { status: null, events: [], environment: env, unavailable: true };
     }
 
     const scans = pkg.Scans || [];
@@ -335,7 +339,7 @@ export async function trackDelhiveryShipment(awbNumber, forceStaging = false) {
     }));
 
     return {
-      status: pkg.Status?.Status || 'In Transit',
+      status: pkg.Status?.Status || null,
       courierProvider: 'Delhivery',
       awbNumber,
       environment: env,
@@ -343,6 +347,6 @@ export async function trackDelhiveryShipment(awbNumber, forceStaging = false) {
     };
   } catch (error) {
     console.error('[Delhivery Tracking Error]:', error);
-    return { status: 'In Transit', events: [], environment: env };
+    return { status: null, events: [], environment: env, unavailable: true };
   }
 }

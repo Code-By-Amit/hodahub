@@ -78,21 +78,8 @@ export function ProductForm({ initialData, productId }) {
     codAvailable: true,
     isBestSeller: false,
     ...initialData,
+    addonLinks: initialData?.addonLinks?.length ? initialData.addonLinks : (initialData?.addonIds || []).map((id) => ({ addonId: id, priceOverride: null, isFreeOverride: null })),
   });
-
-  useEffect(() => {
-    if (initialData) {
-      const initialLinks = Array.isArray(initialData.addonLinks) && initialData.addonLinks.length > 0
-        ? initialData.addonLinks
-        : (initialData.addonIds || []).map((id) => ({ addonId: id, priceOverride: null, isFreeOverride: null }));
-
-      setForm((prev) => ({
-        ...prev,
-        ...initialData,
-        addonLinks: initialLinks,
-      }));
-    }
-  }, [initialData]);
 
   useEffect(() => {
     categoriesApi
@@ -235,12 +222,12 @@ export function ProductForm({ initialData, productId }) {
       const data = await addonsApi.save(null, payload);
       if (data?.addon) {
         toast.success(`Add-on "${data.addon.name}" created and added to library!`);
-        
+
         // Add to active library list state
         if (data.addon.isActive) {
           setLibraryAddons((prev) => [data.addon, ...prev]);
         }
-        
+
         // Automatically link to current product
         setForm((prev) => ({
           ...prev,

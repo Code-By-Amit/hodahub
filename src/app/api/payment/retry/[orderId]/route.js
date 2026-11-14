@@ -3,7 +3,8 @@ import Razorpay from 'razorpay';
 import { db } from '@/lib/db';
 import { orders } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { requireAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { canAccessOrder } from '@/lib/order-access';
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -18,7 +19,8 @@ if (razorpayKeyId && razorpayKeySecret) {
 
 export async function POST(request, { params }) {
   try {
-    const user = await requireAuth(request);
+    const user = await getAuthUser(request);
+    const accessCode = new URL(request.url).searchParams.get('accessCode');
     const { orderId } = await params;
 
     if (!orderId) {
@@ -28,12 +30,12 @@ export async function POST(request, { params }) {
     // Fetch order from DB
     const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
 
-    if (!order) {
+    if (!order || !canAccessOrder(user, order, accessCode)) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
     // Validate ownership
-    if (order.userId !== user.id) {
+    if (!canAccessOrder(user, order, accessCode)) {
       return NextResponse.json({ error: 'Unauthorized order access' }, { status: 403 });
     }
 
@@ -42,7 +44,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Cannot pay for a cancelled order' }, { status: 400 });
     }
 
-    if (order.paymentStatus === 'paid') {
+    if (['paid', 'refunded'].includes(order.paymentStatus)) {
       return NextResponse.json({ error: 'This order is already paid' }, { status: 400 });
     }
 
@@ -59,18 +61,8 @@ export async function POST(request, { params }) {
 
     const amountInPaise = Math.round(Number(order.totalAmount) * 100);
 
-    // Create a fresh Razorpay order for the existing order amount
-    const rzpOrder = await razorpay.orders.create({
-      amount: amountInPaise,
-      currency: 'INR',
-      receipt: `retry_${order.id.slice(0, 8)}_${Date.now().toString().slice(-6)}`,
-    });
-
-    // Update existing DB order with new razorpayOrderId (reusing same order row, no stock decrement)
-    await db
-      .update(orders)
-      .set({ razorpayOrderId: rzpOrder.id })
-      .where(eq(orders.id, order.id));
+    if (order.inventoryReleased || !order.razorpayOrderId) return NextResponse.json({ error: 'This checkout reservation has ended. Please place a new order.' }, { status: 409 });
+    const rzpOrder = { id: order.razorpayOrderId };
 
     return NextResponse.json({
       orderId: order.id,

@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelectField } from '@/components/ui/CustomSelect';
+
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -86,8 +88,8 @@ export default function AdminProductsPage() {
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      <div className="admin-product-filters" aria-label="Product filters">
+        <div className="admin-product-search relative">
           <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
           <input
             value={searchInput}
@@ -104,7 +106,7 @@ export default function AdminProductsPage() {
         </div>
 
         {/* Category Filter */}
-        <select
+        <CustomSelectField
           value={selectedCategory}
           onChange={(e) => {
             setSelectedCategory(e.target.value);
@@ -118,10 +120,10 @@ export default function AdminProductsPage() {
               {c.name}
             </option>
           ))}
-        </select>
+        </CustomSelectField>
 
         {/* Brand Filter */}
-        <select
+        <CustomSelectField
           value={selectedBrand}
           onChange={(e) => {
             setSelectedBrand(e.target.value);
@@ -135,10 +137,10 @@ export default function AdminProductsPage() {
               {b.name}
             </option>
           ))}
-        </select>
+        </CustomSelectField>
 
         {/* Active/Inactive Filter */}
-        <select
+        <CustomSelectField
           value={selectedActive}
           onChange={(e) => {
             setSelectedActive(e.target.value);
@@ -149,10 +151,10 @@ export default function AdminProductsPage() {
           <option value="">All Statuses</option>
           <option value="active">Active Only</option>
           <option value="inactive">Inactive Only</option>
-        </select>
+        </CustomSelectField>
 
         {/* Stock Filter */}
-        <select
+        <CustomSelectField
           value={selectedStock}
           onChange={(e) => {
             setSelectedStock(e.target.value);
@@ -163,7 +165,7 @@ export default function AdminProductsPage() {
           <option value="">All Stock States</option>
           <option value="in_stock">In Stock Only</option>
           <option value="out_of_stock">Out of Stock Only</option>
-        </select>
+        </CustomSelectField>
 
         {(selectedCategory || selectedBrand || selectedActive || selectedStock || search) && (
           <button

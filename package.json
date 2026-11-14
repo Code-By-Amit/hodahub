@@ -16,7 +16,11 @@
     "db:migrate-categories": "node src/lib/db/migrate-category-relations.js",
     "db:migrate-addons": "node src/lib/db/migrate-addons.js",
     "db:migrate-happy-customers": "node src/lib/db/migrate-happy-customers.js",
-    "db:migrate-indexes": "node src/lib/db/migrate-performance-indexes.js"
+    "db:migrate-indexes": "node src/lib/db/migrate-performance-indexes.js",
+    "db:migrate-hardening": "node scripts/migrate-hardening.mjs",
+    "check:production": "node scripts/check-production.mjs",
+    "test:database": "node scripts/test-database-lifecycle.mjs",
+    "test:browser": "node tests/browser/run.cjs"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",
@@ -28,7 +32,7 @@
     "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.39.0",
-    "next": "16.3.3",
+    "next": "16.4.6",
     "pg": "^8.23.0",
     "rate-limiter-flexible": "^11.2.0",
     "razorpay": "^2.9.8",
@@ -42,11 +46,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4",
     "babel-plugin-react-compiler": "^1.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4"
   }
 }

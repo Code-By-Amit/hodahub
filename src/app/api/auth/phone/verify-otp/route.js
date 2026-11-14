@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users, orders } from '@/lib/db/schema';
-import { eq, or, like, isNull, sql, and } from 'drizzle-orm';
+import { eq, or, like, isNull, sql, and, isNotNull } from 'drizzle-orm';
 import { generateTokens, setAuthCookies } from '@/lib/auth';
 import { verifyMSG91AccessToken } from '@/lib/msg91-server';
 
@@ -43,14 +43,7 @@ export async function POST(request) {
       const rows = await db
         .select()
         .from(users)
-        .where(
-          or(
-            eq(users.phone, e164Phone),
-            eq(users.phone, formatted12),
-            eq(users.phone, clean10),
-            like(users.phone, `%${clean10}`)
-          )
-        )
+        .where(and(eq(users.phone, e164Phone), isNotNull(users.phoneVerifiedAt)))
         .limit(1);
 
       matchedUser = rows[0] || null;
@@ -59,7 +52,7 @@ export async function POST(request) {
       if (matchedUser && (matchedUser.phone !== e164Phone || !matchedUser.isVerified)) {
         await db
           .update(users)
-          .set({ phone: e164Phone, isVerified: true })
+          .set({ phone: e164Phone, isVerified: true, phoneVerifiedAt: new Date() })
           .where(eq(users.id, matchedUser.id));
         matchedUser.phone = e164Phone;
         matchedUser.isVerified = true;
@@ -79,6 +72,7 @@ export async function POST(request) {
           .insert(users)
           .values({
             phone: e164Phone,
+            phoneVerifiedAt: new Date(),
             name: null,
             isVerified: true,
             role: 'customer',
@@ -126,6 +120,7 @@ export async function POST(request) {
       email: matchedUser.email || null,
       phone: matchedUser.phone || clean10,
       role: matchedUser.role,
+      sessionVersion: matchedUser.sessionVersion,
     };
 
     const tokens = generateTokens(userPayload);

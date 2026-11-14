@@ -8,6 +8,7 @@ import Pagination from '@/components/ui/Pagination';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
+import Modal from '@/components/ui/Modal';
 import { Search, Filter, X, SlidersHorizontal, Package } from 'lucide-react';
 import { trackSearch as trackPixelSearch } from '@/lib/metaPixel';
 import { trackSearch as trackGASearch } from '@/lib/ga';
@@ -44,9 +45,48 @@ function SearchContent() {
   const [minPrice, setMinPrice] = useState(currentMinPrice);
   const [maxPrice, setMaxPrice] = useState(currentMaxPrice);
 
+  async function fetchCategories() {
+    try {
+      const data = await categoriesApi.getAll();
+      setCategories(data?.categories || []);
+      setAllCategoriesList(data?.allCategories || data?.categories || []);
+    } catch {}
+  }
+
+async function fetchBrands() {
+    try {
+      const data = await brandsApi.getAll(query ? { search: query } : undefined);
+      setBrands(data?.brands || []);
+    } catch {}
+  }
+
+function updateFilters(updates) {
+    const params = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    });
+    if (!('page' in updates)) {
+      params.set('page', '1');
+    }
+    router.push(`/search?${params.toString()}`);
+  }
+
+function handlePriceFilter() {
+    updateFilters({ minPrice: minPrice || null, maxPrice: maxPrice || null });
+  }
+
+function clearFilters() {
+    setMinPrice('');
+    setMaxPrice('');
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    router.push(`/search?${params.toString()}`);
+  }
+
   useEffect(() => {
-    fetchCategories();
-    fetchBrands();
+    const timer = setTimeout(() => { fetchCategories(); fetchBrands(); }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -77,44 +117,6 @@ function SearchContent() {
     search();
   }, [query, page, currentSort, currentCategory, currentBrand, currentMinPrice, currentMaxPrice]);
 
-  async function fetchCategories() {
-    try {
-      const data = await categoriesApi.getAll();
-      setCategories(data?.categories || []);
-      setAllCategoriesList(data?.allCategories || data?.categories || []);
-    } catch {}
-  }
-
-  async function fetchBrands() {
-    try {
-      const data = await brandsApi.getAll(query ? { search: query } : undefined);
-      setBrands(data?.brands || []);
-    } catch {}
-  }
-
-  function updateFilters(updates) {
-    const params = new URLSearchParams(searchParams);
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    });
-    if (!('page' in updates)) {
-      params.set('page', '1');
-    }
-    router.push(`/search?${params.toString()}`);
-  }
-
-  function handlePriceFilter() {
-    updateFilters({ minPrice: minPrice || null, maxPrice: maxPrice || null });
-  }
-
-  function clearFilters() {
-    setMinPrice('');
-    setMaxPrice('');
-    const params = new URLSearchParams();
-    if (query) params.set('q', query);
-    router.push(`/search?${params.toString()}`);
-  }
 
   const hasFilters = Boolean(currentCategory || currentBrand || currentMinPrice || currentMaxPrice);
   const selectedCategoryObj = categories.find((c) => c.slug === currentCategory);
@@ -273,13 +275,13 @@ function SearchContent() {
       <div className="flex gap-8 items-start">
         <aside className="hidden lg:block w-64 shrink-0">
           <div className="bg-white border border-warm-200 rounded-xl p-4 shadow-xs sticky top-24 max-h-[calc(100vh-6.5rem)] overflow-y-auto scrollbar-thin">
-            <FilterPanel
+            <FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
               categories={categories}
               brands={brands}
               currentCategory={currentCategory}
               currentBrand={currentBrand}
-              minPrice={minPrice}
-              maxPrice={maxPrice}
+              minPrice={currentMinPrice}
+              maxPrice={currentMaxPrice}
               setMinPrice={setMinPrice}
               setMaxPrice={setMaxPrice}
               onCategoryChange={(slug) => updateFilters({ category: slug || null })}
@@ -293,14 +295,14 @@ function SearchContent() {
 
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="aspect-square bg-warm-100 rounded-xl animate-pulse" />
               ))}
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
@@ -348,26 +350,13 @@ function SearchContent() {
       </div>
 
       {/* Mobile Drawer */}
-      {showFilters && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-xs" onClick={() => setShowFilters(false)} />
-          <div className="absolute left-0 top-0 bottom-0 w-80 bg-white shadow-2xl p-6 overflow-y-auto z-10 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-warm-100 pb-4 mb-6">
-                <h3 className="text-base font-bold text-warm-900 flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-brand-600" /> Filter Options
-                </h3>
-                <button onClick={() => setShowFilters(false)} className="p-1.5 text-warm-400 hover:text-warm-900 rounded-lg">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <FilterPanel
+      <Modal isOpen={showFilters} onClose={() => setShowFilters(false)} title="Filters" size="drawer"><FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
                 categories={categories}
                 brands={brands}
                 currentCategory={currentCategory}
                 currentBrand={currentBrand}
-                minPrice={minPrice}
-                maxPrice={maxPrice}
+                minPrice={currentMinPrice}
+                maxPrice={currentMaxPrice}
                 setMinPrice={setMinPrice}
                 setMaxPrice={setMaxPrice}
                 onCategoryChange={(slug) => {
@@ -387,11 +376,7 @@ function SearchContent() {
                   setShowFilters(false);
                 }}
                 hasFilters={hasFilters}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+              /></Modal>
     </div>
   );
 }

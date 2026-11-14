@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth';
 import { z } from 'zod';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
@@ -47,10 +47,10 @@ export async function PUT(request) {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await db
       .update(users)
-      .set({ passwordHash })
+      .set({ passwordHash, sessionVersion: sql`${users.sessionVersion} + 1` })
       .where(eq(users.id, user.id));
 
-    return NextResponse.json({ message: 'Password updated successfully!' });
+    return NextResponse.json({ message: 'Password updated. Please sign in again.' });
   } catch (error) {
     if (error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -10,6 +10,8 @@ import {
   selectCartAddonsSubtotal,
   selectCartCoupon,
   clearCart,
+  refreshCartPrices,
+  removeCoupon,
 } from '@/lib/store/cartSlice';
 import { selectUser, selectAuthLoading } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
@@ -50,6 +52,7 @@ export default function CheckoutPage() {
   const coupon = useSelector(selectCartCoupon);
   const user = useSelector(selectUser);
   const authLoading = useSelector(selectAuthLoading);
+  const cartReady = useSelector((state) => Boolean(state.cart._persist?.rehydrated));
 
   const [addresses, setAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
@@ -65,11 +68,12 @@ export default function CheckoutPage() {
   });
   const [addrLoading, setAddrLoading] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('razorpay');
+  const [selectedPaymentMethod, setPaymentMethod] = useState('razorpay');
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
   // checkoutMode: 'account' | 'prompt' | 'guest'
-  const [checkoutMode, setCheckoutMode] = useState('prompt');
+  const [guestCheckoutMode, setCheckoutMode] = useState('prompt');
+  const checkoutMode = user ? 'account' : guestCheckoutMode;
 
   const [guestForm, setGuestForm] = useState({
     name: '',
@@ -99,6 +103,8 @@ export default function CheckoutPage() {
   const nonCodItems = items.filter((item) => item.codAvailable === false);
   const isCodAvailable = storeSettings.codEnabled && nonCodItems.length === 0;
 
+  const paymentMethod = selectedPaymentMethod === 'cod' && !isCodAvailable ? 'razorpay' : selectedPaymentMethod;
+
   const discount = coupon
     ? coupon.type === 'percent'
       ? (subtotal * coupon.value) / 100
@@ -110,6 +116,7 @@ export default function CheckoutPage() {
   const total = Math.max(0, subtotal - discount + shippingFee);
 
   const checkoutTracked = useRef(false);
+  const checkoutCompleted = useRef(false);
   useEffect(() => {
     if (!checkoutTracked.current && items.length > 0 && total > 0) {
       checkoutTracked.current = true;
@@ -127,38 +134,23 @@ export default function CheckoutPage() {
     trackGAPurchase({ orderId, items: orderItems, value: orderTotal });
   };
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.Razorpay) {
-      setRazorpayLoaded(true);
-    }
-  }, []);
 
   useEffect(() => {
-    if (authLoading) return;
-    if (items.length === 0) {
+    if (authLoading || !cartReady) return;
+    if (items.length === 0 && !checkoutCompleted.current) {
       router.push('/cart');
       return;
     }
     if (user) {
-      setCheckoutMode('account');
       fetchAddresses();
-    } else {
-      setCheckoutMode((prev) => (prev === 'account' ? 'prompt' : prev));
     }
     fetchStoreSettings();
-  }, [user, authLoading, items.length]);
-
-  useEffect(() => {
-    if (!isCodAvailable && paymentMethod === 'cod') {
-      setPaymentMethod('razorpay');
-    }
-  }, [isCodAvailable, paymentMethod]);
+  }, [user, authLoading, items.length, cartReady]);
 
   // Debounced Pincode Lookup for Guest Form
   useEffect(() => {
     const pincode = guestForm.pincode.trim();
     if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
-      setGuestPincodeNote('');
       return;
     }
 
@@ -185,7 +177,6 @@ export default function CheckoutPage() {
   useEffect(() => {
     const pincode = addrForm.pincode.trim();
     if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
-      setAddrPincodeNote('');
       return;
     }
 
@@ -261,7 +252,7 @@ export default function CheckoutPage() {
     const isGuestOrder = !user || checkoutMode === 'guest';
 
     if (isGuestOrder) {
-      if (!guestForm.name || !guestForm.email || !guestForm.line1 || !guestForm.city || !guestForm.state || !guestForm.pincode) {
+      if (!guestForm.name || !guestForm.email || !/^[6-9][0-9]{9}$/.test(guestForm.phone) || !guestForm.line1 || !guestForm.city || !guestForm.state || !guestForm.pincode) {
         toast.error('Please fill all required guest & shipping details');
         return;
       }
@@ -367,11 +358,21 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
             paymentMethod,
           };
 
+      const attemptFingerprint = JSON.stringify(payload);
+      let savedAttempt;
+      try { savedAttempt = JSON.parse(sessionStorage.getItem('hoda_checkout_attempt') || 'null'); } catch {}
+      const checkoutKey = savedAttempt?.fingerprint === attemptFingerprint ? savedAttempt.key : crypto.randomUUID();
+      sessionStorage.setItem('hoda_checkout_attempt', JSON.stringify({ fingerprint: attemptFingerprint, key: checkoutKey }));
+      payload.checkoutKey = checkoutKey;
+      payload.expectedTotal = total;
       let createData;
       try {
         createData = await paymentsApi.createOrder(payload);
         trackAddPaymentInfo(items, total);
       } catch (err) {
+        if (err.cartUpdates) dispatch(refreshCartPrices(err.cartUpdates));
+        if (err.invalidCoupon) dispatch(removeCoupon());
+        fetchStoreSettings();
         toast.error(err.message || 'Failed to create order');
         setPaying(false);
         return;
@@ -379,7 +380,9 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
 
       // Pure COD without online advance required
       if (createData.isCod && !createData.requiresAdvance) {
-        recordPurchase(createData.orderId, items, total);
+        checkoutCompleted.current = true;
+        sessionStorage.removeItem('hoda_checkout_attempt');
+        recordPurchase(createData.orderId, items, Number(createData.totalAmount));
         dispatch(clearCart());
         toast.success('Order placed successfully via Cash on Delivery!');
         const redirectUrl = `/orders/${createData.orderId}${createData.accessCode ? `?accessCode=${createData.accessCode}` : ''}`;
@@ -404,7 +407,9 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
               orderId: createData.orderId,
             });
             const finalOrderId = verifyData?.orderId || createData.orderId;
-            recordPurchase(finalOrderId, items, total);
+            checkoutCompleted.current = true;
+            sessionStorage.removeItem('hoda_checkout_attempt');
+            recordPurchase(finalOrderId, items, Number(createData.totalAmount));
             dispatch(clearCart());
             toast.success(createData.requiresAdvance ? 'COD advance paid! Order confirmed.' : 'Payment successful! Order placed.');
             const accessCode = verifyData?.accessCode || createData.accessCode;
@@ -440,7 +445,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
     }
   }
 
-  if (authLoading) {
+  if (authLoading || !cartReady) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
         <div className="w-6 h-6 border-2 border-warm-900/20 border-t-warm-900 rounded-full animate-spin mx-auto mb-3" />
@@ -453,7 +458,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
 
   return (
     <>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setRazorpayLoaded(true)} />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setRazorpayLoaded(true)} />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
         <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Cart', href: '/cart' }, { label: 'Checkout' }]} />
@@ -589,7 +594,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                         maxLength={10}
                         value={guestForm.phone}
                         onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                        placeholder="10-digit Phone Number (Optional)"
+                        placeholder="10-digit Phone Number *"
                         className="col-span-2 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] bg-white outline-none focus:ring-2 focus:ring-warm-900/10 focus:border-warm-900 transition-all"
                       />
                       <input
@@ -909,7 +914,7 @@ Hi! I'd like to place this order via WhatsApp. Please confirm item availability 
                       <div>
                         <span className="font-semibold text-amber-900">Cash on Delivery unavailable</span>
                         <p className="mt-0.5 text-amber-700">
-                          Cash on Delivery isn't available for: <span className="font-semibold">{nonCodItems.map((i) => i.name).join(', ')}</span>
+                          Cash on Delivery isn&apos;t available for: <span className="font-semibold">{nonCodItems.map((i) => i.name).join(', ')}</span>
                         </p>
                       </div>
                     </div>

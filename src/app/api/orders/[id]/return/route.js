@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { orders, orderStatusHistory } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { requireAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { canAccessOrder } from '@/lib/order-access';
+import { exchangeEligibility } from '@/lib/order-rules';
 import { returnOrderSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
 
 export async function POST(request, { params }) {
   try {
-    const user = await requireAuth(request);
+    const user = await getAuthUser(request);
+    const accessCode = new URL(request.url).searchParams.get('accessCode');
     const { id } = await params;
     const body = await request.json();
 
@@ -20,19 +23,21 @@ export async function POST(request, { params }) {
       );
     }
 
-    const { reason } = result.data;
+    const { reason, evidenceUrl } = result.data;
 
     // Fetch order
     const [order] = await db
       .select()
       .from(orders)
-      .where(and(eq(orders.id, id), eq(orders.userId, user.id)))
+      .where(eq(orders.id, id))
       .limit(1);
 
-    if (!order) {
+    if (!order || !canAccessOrder(user, order, accessCode)) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    const eligibilityError = exchangeEligibility(order);
+    if (eligibilityError) return NextResponse.json({ error: eligibilityError }, { status: 400 });
     // Return request check
     if (order.status !== 'delivered') {
       return NextResponse.json(
@@ -54,6 +59,7 @@ export async function POST(request, { params }) {
       .set({
         returnStatus: 'requested',
         returnReason: reason,
+        returnEvidenceUrl: evidenceUrl,
       })
       .where(eq(orders.id, order.id));
 
@@ -61,11 +67,11 @@ export async function POST(request, { params }) {
     await db.insert(orderStatusHistory).values({
       orderId: order.id,
       status: order.status,
-      note: `Return/Refund requested by customer. Reason: ${reason}`,
+      note: `Exchange requested by customer. Reason: ${reason}`,
     });
 
     return NextResponse.json({
-      message: 'Return request submitted successfully! Admin will review your request.',
+      message: 'Exchange request submitted. Our team will review your evidence and arrange the next steps.',
     });
   } catch (error) {
     if (error.message === 'Unauthorized') {

@@ -3,19 +3,21 @@
 import { useEffect, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { analyticsApi } from '@/lib/apiClient/analytics.api';
+import useConsent from '@/hooks/useConsent';
 
 export default function AnalyticsTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const lastTracked = useRef('');
+  const consent = useConsent();
 
   useEffect(() => {
     // Ignore admin routes
-    if (!pathname || pathname.startsWith('/admin') || pathname.startsWith('/api')) {
+    if (consent !== 'granted' || !pathname || pathname.startsWith('/admin') || pathname.startsWith('/api') || pathname.startsWith('/orders/') || pathname.startsWith('/reset-password')) {
       return;
     }
 
-    const fullPath = searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    const fullPath = pathname;
     if (lastTracked.current === fullPath) return;
     lastTracked.current = fullPath;
 
@@ -23,6 +25,7 @@ export default function AnalyticsTracker() {
       try {
         await analyticsApi.track({
           path: fullPath,
+          consent: 'granted',
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         });
       } catch (err) {
@@ -31,7 +34,7 @@ export default function AnalyticsTracker() {
     }
 
     sendPing();
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, consent]);
 
   return null;
 }

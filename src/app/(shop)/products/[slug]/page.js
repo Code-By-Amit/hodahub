@@ -53,7 +53,9 @@ import { settingsApi } from '@/lib/apiClient/settings.api';
 import { pincodeApi } from '@/lib/apiClient/pincode.api';
 import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
-export default function ProductDetailPage() {
+export default function ProductDetailPage() { const { slug } = useParams(); return <ProductDetailContent key={String(slug)} />; }
+
+function ProductDetailContent() {
   const { slug } = useParams();
   const router = useRouter();
   const dispatch = useDispatch();
@@ -116,13 +118,6 @@ export default function ProductDetailPage() {
 
   const [whatsappNumber, setWhatsappNumber] = useState('');
 
-  useEffect(() => {
-    if (slug) {
-      fetchProduct();
-      fetchSettings();
-    }
-  }, [slug]);
-
   async function fetchSettings() {
     try {
       const data = await settingsApi.getPublic();
@@ -134,13 +129,7 @@ export default function ProductDetailPage() {
     } catch {}
   }
 
-  useEffect(() => {
-    if (product) {
-      fetchReviews();
-    }
-  }, [product, user]);
-
-  async function fetchProduct() {
+async function fetchProduct() {
     if (!slug) return;
     const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setLoading(true);
@@ -225,7 +214,7 @@ export default function ProductDetailPage() {
     }
   }
 
-  async function fetchReviews() {
+async function fetchReviews() {
     if (!slug) return;
     const slugStr = Array.isArray(slug) ? slug[0] : slug;
     setReviewsLoading(true);
@@ -238,7 +227,7 @@ export default function ProductDetailPage() {
     setReviewsLoading(false);
   }
 
-  function startEditingOwnReview() {
+function startEditingOwnReview() {
     if (!userReview) return;
     setReviewForm({
       rating: userReview.rating || 5,
@@ -248,7 +237,7 @@ export default function ProductDetailPage() {
     setIsEditingReview(true);
   }
 
-  async function handleDeleteOwnReview() {
+async function handleDeleteOwnReview() {
     if (!userReview) return;
     if (!confirm('Are you sure you want to delete your review?')) return;
     try {
@@ -263,7 +252,7 @@ export default function ProductDetailPage() {
     }
   }
 
-  async function handleSubmitReview(e) {
+async function handleSubmitReview(e) {
     e.preventDefault();
     if (!user) {
       toast.error('Please login to submit a review');
@@ -292,14 +281,7 @@ export default function ProductDetailPage() {
     setSubmittingReview(false);
   }
 
-  const [selectedAddon, setSelectedAddon] = useState(null);
-  const [pincodeInput, setPincodeInput] = useState('');
-  const [pincodeStatus, setPincodeStatus] = useState(null);
-  const [pincodeLoading, setPincodeLoading] = useState(false);
-
-  const isOutOfStock = product?.isOutOfStock || product?.stock <= 0;
-
-  async function handleCheckPincode(e) {
+async function handleCheckPincode(e) {
     if (e) e.preventDefault();
     const cleaned = pincodeInput.replace(/\D/g, '').slice(0, 6);
     if (cleaned.length !== 6) {
@@ -324,7 +306,7 @@ export default function ProductDetailPage() {
     setPincodeLoading(false);
   }
 
-  function selectAddon(addon) {
+function selectAddon(addon) {
     setSelectedAddon((prev) => {
       if (prev?.id === addon.id) {
         return null;
@@ -333,7 +315,7 @@ export default function ProductDetailPage() {
     });
   }
 
-  function handleAddToCart() {
+function handleAddToCart() {
     if (!product || isOutOfStock) return;
     dispatch(
       addItem({
@@ -353,7 +335,7 @@ export default function ProductDetailPage() {
     toast.success(`${product.name} added to cart!`);
   }
 
-  function handleBuyNow() {
+function handleBuyNow() {
     if (!product || isOutOfStock) return;
     dispatch(
       addItem({
@@ -372,6 +354,30 @@ export default function ProductDetailPage() {
     trackGAAddToCart(product, quantity);
     router.push('/checkout');
   }
+
+  useEffect(() => {
+    if (slug) {
+      const timer = setTimeout(() => { fetchProduct(); fetchSettings(); }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [slug]);
+
+
+  useEffect(() => {
+    if (product) {
+      const timer = setTimeout(() => fetchReviews(), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [product, user]);
+
+
+  const [selectedAddon, setSelectedAddon] = useState(null);
+  const [pincodeInput, setPincodeInput] = useState('');
+  const [pincodeStatus, setPincodeStatus] = useState(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+
+  const isOutOfStock = product?.isOutOfStock || product?.stock <= 0;
+
 
   if (loading) {
     return (

@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/Pagination';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import CustomSelect from '@/components/ui/CustomSelect';
 import FilterPanel from '@/components/ui/FilterPanel';
+import Modal from '@/components/ui/Modal';
 import { Search, Filter, X, SlidersHorizontal, Package } from 'lucide-react';
 import useShopProducts from '@/hooks/useShopProducts';
 import useShopCategories from '@/hooks/useShopCategories';
@@ -99,7 +100,7 @@ export default function ProductsPage() {
           : `Explore quality curated items for your home and lifestyle (${pagination.total} total)`;
 
   return (
-    <div className="max-w-4xl xl:max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-4">
       {/* Breadcrumb Navigation */}
       <Breadcrumbs items={[{ label: pageTitle, href: '/products' }]} />
 
@@ -212,13 +213,13 @@ export default function ProductsPage() {
         {/* Desktop Filter Sidebar */}
         <aside className="hidden lg:block w-48 shrink-0">
           <div className="bg-white border border-warm-200 rounded-lg p-2.5 shadow-2xs sticky top-20 max-h-[calc(100vh-5.5rem)] overflow-y-auto scrollbar-thin">
-            <FilterPanel
+            <FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
               categories={categories}
               brands={brands}
               currentCategory={currentCategory}
               currentBrand={currentBrand}
-              minPrice={minPrice}
-              maxPrice={maxPrice}
+              minPrice={currentMinPrice}
+              maxPrice={currentMaxPrice}
               setMinPrice={setMinPrice}
               setMaxPrice={setMaxPrice}
               onCategoryChange={(slug) => updateFilters({ category: slug || null })}
@@ -234,14 +235,14 @@ export default function ProductsPage() {
         {/* Product List Content */}
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="aspect-square bg-warm-100 rounded-md animate-pulse" />
               ))}
             </div>
           ) : products.length > 0 ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
@@ -275,26 +276,13 @@ export default function ProductsPage() {
       </div>
 
       {/* Mobile Filter Drawer */}
-      {showFilters && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-xs" onClick={() => setShowFilters(false)} />
-          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-2xl p-4 overflow-y-auto z-10 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-warm-100 pb-3 mb-4">
-                <h3 className="text-sm font-bold text-warm-900 flex items-center gap-1.5">
-                  <Filter className="w-3.5 h-3.5 text-brand-600" /> Filter Options
-                </h3>
-                <button onClick={() => setShowFilters(false)} className="p-1 text-warm-400 hover:text-warm-900 rounded-md">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <FilterPanel
+      <Modal isOpen={showFilters} onClose={() => setShowFilters(false)} title="Filters" size="drawer"><FilterPanel onApplyFilters={updateFilters} onApplied={() => setShowFilters(false)}
                 categories={categories}
                 brands={brands}
                 currentCategory={currentCategory}
                 currentBrand={currentBrand}
-                minPrice={minPrice}
-                maxPrice={maxPrice}
+                minPrice={currentMinPrice}
+                maxPrice={currentMaxPrice}
                 setMinPrice={setMinPrice}
                 setMaxPrice={setMaxPrice}
                 onCategoryChange={(slug) => {
@@ -314,11 +302,7 @@ export default function ProductsPage() {
                   setShowFilters(false);
                 }}
                 hasFilters={hasFilters}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+              /></Modal>
     </div>
   );
 }

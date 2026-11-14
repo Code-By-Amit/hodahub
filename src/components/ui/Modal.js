@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FiX } from 'react-icons/fi';
 
 export default function Modal({
@@ -12,21 +13,32 @@ export default function Modal({
   showClose = true,
 }) {
   const overlayRef = useRef(null);
+  const dialogRef = useRef(null);
+  const titleId = 'dialog-' + useId();
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
+    document.body.style.overflow = 'hidden';
+    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
     return () => {
-      document.body.style.overflow = '';
+      cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus?.();
     };
   }, [isOpen]);
 
   useEffect(() => {
     function handleEsc(e) {
+      if (e.defaultPrevented) return;
       if (e.key === 'Escape') onClose();
+      if (e.key === 'Tab') {
+        const items = Array.from(dialogRef.current?.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), [tabindex="0"]') || []).filter((item) => item.tabIndex >= 0 && item.getClientRects().length);
+        if (!items.length) { e.preventDefault(); return; }
+        if (e.shiftKey && (document.activeElement === items[0] || document.activeElement === dialogRef.current)) { e.preventDefault(); items.at(-1).focus(); }
+        else if (!e.shiftKey && document.activeElement === items.at(-1)) { e.preventDefault(); items[0].focus(); }
+      }
     }
     if (isOpen) window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
@@ -40,21 +52,28 @@ export default function Modal({
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
     full: 'max-w-[90vw]',
+    drawer: 'max-w-sm h-full rounded-none sm:rounded-none ml-auto',
   };
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      className={`fixed inset-0 z-[200] flex ${size === 'drawer' ? 'justify-end' : 'items-center justify-center p-4'}`}
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div aria-hidden="true" onClick={onClose} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
       {/* Modal */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : 'Dialog'}
+        tabIndex={-1}
         className={`relative ${sizes[size]} w-full bg-white rounded-2xl shadow-2xl overflow-hidden`}
         style={{ animation: 'scaleIn 0.2s ease-out' }}
       >
@@ -62,7 +81,7 @@ export default function Modal({
         {(title || showClose) && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100">
             {title && (
-              <h2 className="text-lg font-bold text-warm-900">{title}</h2>
+              <h2 id={titleId} className="text-lg font-bold text-warm-900">{title}</h2>
             )}
             {showClose && (
               <button
@@ -77,9 +96,9 @@ export default function Modal({
         )}
 
         {/* Content */}
-        <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">{children}</div>
+        <div className={`px-5 py-5 overflow-y-auto overscroll-contain ${size === 'drawer' ? 'h-[calc(100dvh-76px)]' : 'max-h-[70dvh]'}`}>{children}</div>
       </div>
-    </div>
+    </div>, document.body
   );
 }
 

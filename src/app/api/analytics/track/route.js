@@ -7,7 +7,9 @@ import crypto from 'crypto';
 export async function POST(req) {
   try {
     const body = await req.json();
+    if (body.consent !== 'granted') return NextResponse.json({ success: false }, { status: 400 });
     const { path, userAgent = '' } = body;
+    if (typeof path !== 'string' || path.length > 500 || typeof userAgent !== 'string' || userAgent.length > 2000) return NextResponse.json({ success: false }, { status: 400 });
 
     if (!path || path.startsWith('/admin') || path.startsWith('/api')) {
       return NextResponse.json({ success: false });
@@ -37,7 +39,7 @@ export async function POST(req) {
         path: path.split('?')[0], // strip query string for clean page path grouping
         userAgent,
         device,
-        referrer: req.headers.get('referer') || null,
+        referrer: null,
       });
     } catch (dbErr) {
       // Safe fallback insert if production DB table hasn't migrated userAgent/device columns yet
@@ -45,7 +47,7 @@ export async function POST(req) {
         await db.insert(pageViews).values({
           visitorId,
           path: path.split('?')[0],
-          referrer: req.headers.get('referer') || null,
+          referrer: null,
         });
       } catch { }
     }

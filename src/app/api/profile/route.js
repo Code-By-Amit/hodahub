@@ -18,6 +18,7 @@ export async function GET(request) {
         phone: users.phone,
         role: users.role,
         isVerified: users.isVerified,
+        phoneVerifiedAt: users.phoneVerifiedAt,
         avatarUrl: users.avatarUrl,
         passwordHash: users.passwordHash,
         createdAt: users.createdAt,
@@ -36,8 +37,8 @@ export async function GET(request) {
       .where(eq(addresses.userId, user.id))
       .orderBy(desc(addresses.createdAt));
 
-    const isPhoneAuth = Boolean(user.phone && (!user.passwordHash || !user.email));
-    const phoneVerified = Boolean(user.phone && (user.isVerified || isPhoneAuth));
+    const isPhoneAuth = Boolean(user.phoneVerifiedAt && (!user.passwordHash || !user.email));
+    const phoneVerified = Boolean(user.phone && user.phoneVerifiedAt);
 
     const userWithDefaults = {
       id: user.id,
@@ -82,30 +83,31 @@ export async function PUT(request) {
         phone: users.phone,
         passwordHash: users.passwordHash,
         isVerified: users.isVerified,
+        phoneVerifiedAt: users.phoneVerifiedAt,
         email: users.email,
       })
       .from(users)
       .where(eq(users.id, authUser.id))
       .limit(1);
 
-    const isPhoneAuth = Boolean(existing?.phone && (!existing?.passwordHash || !existing?.email));
-    const alreadyPhoneVerified = Boolean(existing?.phone && (existing?.isVerified || isPhoneAuth));
+    const isPhoneAuth = Boolean(existing?.phoneVerifiedAt && (!existing?.passwordHash || !existing?.email));
+    const alreadyPhoneVerified = Boolean(existing?.phone && existing?.phoneVerifiedAt);
 
-    const updateFields = {
-      name: name.trim(),
-    };
+    const updateFields = {};
+    if (name !== undefined) updateFields.name = name?.trim() || null;
 
     // If user is already phone verified or phone-auth, keep their verified phone unchanged
     if (alreadyPhoneVerified) {
       updateFields.phone = existing.phone;
-    } else if (phone !== undefined) {
-      updateFields.phone = phone ? phone.trim() : null;
+    } else if (phone && phone !== existing?.phone) {
+      return NextResponse.json({ error: 'Verify your phone number before saving it as an account identity.' }, { status: 400 });
     }
 
     if (avatarUrl !== undefined) {
       updateFields.avatarUrl = avatarUrl ? avatarUrl.trim() : null;
     }
 
+    if (!Object.keys(updateFields).length) return NextResponse.json({ error: 'No profile changes supplied' }, { status: 400 });
     const [updatedUser] = await db
       .update(users)
       .set(updateFields)
@@ -117,6 +119,7 @@ export async function PUT(request) {
         phone: users.phone,
         role: users.role,
         isVerified: users.isVerified,
+        phoneVerifiedAt: users.phoneVerifiedAt,
         avatarUrl: users.avatarUrl,
       });
 

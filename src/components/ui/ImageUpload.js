@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, X, ArrowLeft, ArrowRight, Film, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { isVideoUrl } from '@/lib/utils';
 import { uploadApi } from '@/lib/apiClient/upload.api';
@@ -22,7 +22,7 @@ export default function ImageUpload({
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   const effectiveUploadType = type || uploadType;
 
@@ -193,7 +193,7 @@ export default function ImageUpload({
                 {uploading ? `Uploading... ${progress}%` : 'Click or drag & drop to upload'}
               </p>
               <p className="text-[11px] text-warm-500 mt-0.5">
-                PNG, JPG, WEBP, GIF or MP4 videos up to 50MB
+                {accept.includes('video') ? 'Images or MP4 videos' : 'JPEG, PNG or WebP images'} up to {maxSizeMB}MB
               </p>
             </div>
           </div>

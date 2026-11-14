@@ -23,12 +23,12 @@ function VerifyOTPContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [resendTimer, setResendTimer] = useState(60);
-  const [canResend, setCanResend] = useState(false);
+  const canResend = resendTimer <= 0;
   const inputRefs = useRef([]);
+  const lastSubmittedCode = useRef('');
 
   useEffect(() => {
     if (resendTimer <= 0) {
-      setCanResend(true);
       return;
     }
     const interval = setInterval(() => {
@@ -83,6 +83,7 @@ function VerifyOTPContent() {
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
+    if (newOtp.every(Boolean)) { lastSubmittedCode.current = newOtp.join(''); performVerification(newOtp.join('')); }
 
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
@@ -102,14 +103,10 @@ function VerifyOTPContent() {
 
     const digits = pastedData.split('');
     setOtp(digits);
+    lastSubmittedCode.current = pastedData; performVerification(pastedData);
     inputRefs.current[5]?.focus();
   };
 
-  useEffect(() => {
-    if (!loading && otp.every((d) => d !== '') && otp.join('').length === 6) {
-      performVerification(otp.join(''));
-    }
-  }, [otp, loading, performVerification]);
 
   const handleResend = async () => {
     if (!canResend) return;
@@ -121,8 +118,8 @@ function VerifyOTPContent() {
 
       setSuccess('A new OTP has been sent to your email!');
       setOtp(['', '', '', '', '', '']);
+      lastSubmittedCode.current = '';
       setResendTimer(60);
-      setCanResend(false);
       inputRefs.current[0]?.focus();
     } catch (err) {
       setError(err.message || 'Failed to resend OTP');

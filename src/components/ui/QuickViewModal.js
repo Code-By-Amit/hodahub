@@ -19,7 +19,9 @@ import { trackAddToCart as trackGAAddToCart } from '@/lib/ga';
 import { X, ShoppingBag, Heart, Package, ArrowRight, Minus, Plus } from 'lucide-react';
 import { wishlistApi } from '@/lib/apiClient/wishlist.api';
 
-export default function QuickViewModal({ product, isOpen, onClose }) {
+export default function QuickViewModal(props) { return props.isOpen && props.product ? <QuickViewContents key={props.product.id} {...props} /> : null; }
+
+function QuickViewContents({ product, isOpen, onClose }) {
   const dispatch = useDispatch();
   const toast = useToast();
   const user = useSelector(selectUser);
@@ -30,11 +32,6 @@ export default function QuickViewModal({ product, isOpen, onClose }) {
   const isWishlisted = useSelector(
     (state) => product?.id ? selectIsWishlisted(product.id)(state) : false
   );
-
-  useEffect(() => {
-    setSelectedImgIndex(0);
-    setQuantity(1);
-  }, [product]);
 
   useEffect(() => {
     if (isOpen) {

@@ -53,7 +53,8 @@ export async function POST(request) {
           .set({ otp, otpExpiresAt, ...(userName && { name: userName }), passwordHash: await bcrypt.hash(password, 10) })
           .where(eq(users.id, user.id));
 
-        await sendOTPEmail(email, otp);
+        const delivery = await sendOTPEmail(email, otp);
+        if (!delivery.success) return NextResponse.json({ error: 'Verification email could not be sent. Please try again later.' }, { status: 503 });
 
         return NextResponse.json({
           message: 'OTP sent to your email. Please verify to continue.',
@@ -92,7 +93,8 @@ export async function POST(request) {
       .returning();
 
     // Send OTP email
-    await sendOTPEmail(email, otp);
+    const delivery = await sendOTPEmail(email, otp);
+    if (!delivery.success) return NextResponse.json({ error: 'Verification email could not be sent. Please try again later.' }, { status: 503 });
 
     return NextResponse.json({
       message: 'Account created! OTP sent to your email. Please verify to continue.',

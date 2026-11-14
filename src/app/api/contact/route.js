@@ -37,7 +37,10 @@ export async function POST(request) {
       );
     }
 
-    await sendContactFormEmail(storeContactEmail, result.data);
+    const delivery = await sendContactFormEmail(storeContactEmail, result.data);
+    if (!delivery.success || (delivery.mocked && process.env.NODE_ENV === 'production')) {
+      return NextResponse.json({ error: 'Your message could not be sent. Please contact us by phone or email.' }, { status: 503 });
+    }
 
     return NextResponse.json({
       message: 'Thank you for reaching out! Your message has been sent to our team.',

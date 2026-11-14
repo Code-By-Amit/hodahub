@@ -16,7 +16,7 @@ export default function AdminBrandsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', slug: '', logoUrl: '' });
+  const [form, setForm] = useState({ name: '', slug: '', logoUrl: '', sortOrder: 0 });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -28,7 +28,7 @@ export default function AdminBrandsPage() {
     try {
       const data = await brandsApi.getAdmin();
       setBrands(data.brands || []);
-    } catch {}
+    } catch (error) { toast.error(error.message || 'Unable to load brands'); }
     setLoading(false);
   }
 
@@ -38,6 +38,7 @@ export default function AdminBrandsPage() {
       name: b.name,
       slug: b.slug,
       logoUrl: b.logoUrl || '',
+      sortOrder: b.sortOrder || 0,
     });
     setErrors({});
     setShowForm(true);
@@ -45,7 +46,7 @@ export default function AdminBrandsPage() {
 
   function resetForm() {
     setEditingId(null);
-    setForm({ name: '', slug: '', logoUrl: '' });
+    setForm({ name: '', slug: '', logoUrl: '', sortOrder: 0 });
     setErrors({});
     setShowForm(false);
   }
@@ -167,11 +168,17 @@ export default function AdminBrandsPage() {
             </div>
 
             <div>
+              <label htmlFor="brand-sort-order" className="mb-1 block text-[10px] font-semibold text-warm-700">Display order</label>
+              <input id="brand-sort-order" type="number" min="0" max="9999" step="1" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} className="mb-1 w-full rounded-md border border-warm-200 px-2.5 focus:outline-none focus:border-brand-600" />
+              <p className="mb-3 text-[11px] leading-relaxed text-warm-500">1 appears first, 2 second. Use 0 for alphabetical order after ranked brands.</p>
+              <FieldError message={errors.sortOrder} />
               <ImageUpload
                 uploadType="brand-logo"
                 value={form.logoUrl ? [form.logoUrl] : []}
                 onChange={(urls) => setForm({ ...form, logoUrl: Array.isArray(urls) ? urls[0] || '' : urls })}
                 multiple={false}
+                accept="image/jpeg,image/png,image/webp"
+                maxSizeMB={5}
                 label="Brand Logo (Optional)"
               />
             </div>
@@ -208,19 +215,20 @@ export default function AdminBrandsPage() {
             <tr className="bg-warm-50/80 text-warm-600 text-[10px] font-semibold border-b border-warm-200">
               <th className="px-3 py-2 text-left">Brand</th>
               <th className="px-3 py-2 text-left">Slug</th>
+              <th className="px-3 py-2 text-left">Display order</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-100">
             {loading ? (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-warm-400">
+                <td colSpan={4} className="px-3 py-6 text-center text-warm-400">
                   Loading brands...
                 </td>
               </tr>
             ) : brands.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-6 text-center text-warm-400">
+                <td colSpan={4} className="px-3 py-6 text-center text-warm-400">
                   No brands found. Click &quot;Add Brand&quot; to create one.
                 </td>
               </tr>
@@ -242,6 +250,7 @@ export default function AdminBrandsPage() {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-warm-500 font-mono text-[10px]">{b.slug}</td>
+                  <td className="px-3 py-2 text-warm-600">{b.sortOrder || "Alphabetical"}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button

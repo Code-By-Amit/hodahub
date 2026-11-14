@@ -1,10 +1,10 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import Script from 'next/script';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { PIXEL_ID } from '@/lib/metaPixel';
-import { CONSENT_EVENT, getConsent } from '@/lib/consent';
+import useConsent from '@/hooks/useConsent';
 
 // Fires fbq('track', 'PageView') on every client-side route change.
 // The first PageView is fired from handleLoad so we skip it here.
@@ -50,26 +50,16 @@ function installStub(pixelId) {
 
 export default function MetaPixel() {
   const pathname = usePathname();
-  const [granted, setGranted] = useState(false);
-  const [stubReady, setStubReady] = useState(false);
+  const granted = useConsent() === 'granted';
 
-  // Sync consent state: active unless visitor explicitly clicks 'Reject'
-  useEffect(() => {
-    const sync = () => setGranted(getConsent() !== 'denied');
-    sync();
-    window.addEventListener(CONSENT_EVENT, sync);
-    return () => window.removeEventListener(CONSENT_EVENT, sync);
-  }, []);
 
   // When consent is active: install the stub with init and PageView, then load fbevents.js.
   // When consent is revoked: signal Meta to revoke cookies.
   useEffect(() => {
-    if (granted && PIXEL_ID && !pathname?.startsWith('/admin')) {
+    if (granted && PIXEL_ID && !(pathname?.startsWith('/admin') || pathname?.startsWith('/orders') || pathname?.startsWith('/reset-password') || pathname?.startsWith('/verify-otp'))) {
       installStub(PIXEL_ID);
-      setStubReady(true);
     } else {
       window.fbq?.('consent', 'revoke');
-      setStubReady(false);
     }
   }, [granted, pathname]);
 
@@ -79,7 +69,7 @@ export default function MetaPixel() {
   }
 
   // Do not render in admin or if pixel ID missing or consent denied
-  if (!PIXEL_ID || !granted || !stubReady || pathname?.startsWith('/admin')) return null;
+  if (!PIXEL_ID || !granted || (pathname?.startsWith('/admin') || pathname?.startsWith('/orders') || pathname?.startsWith('/reset-password') || pathname?.startsWith('/verify-otp'))) return null;
 
   return (
     <>

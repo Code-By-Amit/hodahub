@@ -1,15 +1,14 @@
 'use client';
 
 import { Provider } from 'react-redux';
-import { PersistGate } from 'redux-persist/integration/react';
-import { store, persistor } from '@/lib/store/store';
+import { useEffect } from 'react';
+import { store, persistor, hydrationSnapshot } from '@/lib/store/store';
 
 export default function ReduxProvider({ children }) {
+  useEffect(() => { persistor.persist(); }, []);
   return (
-    <Provider store={store}>
-      <PersistGate loading={null} persistor={persistor}>
-        {children}
-      </PersistGate>
+    <Provider store={store} serverState={hydrationSnapshot}>
+      {children}
     </Provider>
   );
 }

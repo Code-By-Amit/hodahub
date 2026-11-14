@@ -10,12 +10,14 @@ export async function POST(request, { params }) {
     await requireAdmin(request);
     const { id } = await params;
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    return await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for('update');
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    if (!['confirmed', 'packed'].includes(order.status) || (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid')) return NextResponse.json({ error: 'Confirm the order and collect online payment before fulfillment.' }, { status: 409 });
     if (order.status === 'cancelled') {
       return NextResponse.json({ error: 'Cannot create shipment for a cancelled order' }, { status: 400 });
     }
@@ -51,7 +53,7 @@ export async function POST(request, { params }) {
 
     let shippingAddr = order.shippingAddress;
     if (!shippingAddr && order.addressId) {
-      const [addr] = await db.select().from(addresses).where(eq(addresses.id, order.addressId)).limit(1);
+      const [addr] = await tx.select().from(addresses).where(eq(addresses.id, order.addressId)).limit(1);
       shippingAddr = addr;
     }
 
@@ -105,7 +107,7 @@ export async function POST(request, { params }) {
       .returning();
 
     // 4. Sync with internal order status history
-    await db.insert(orderStatusHistory).values({
+    await tx.insert(orderStatusHistory).values({
       orderId: id,
       status: 'shipped',
       note: `Shipment created via Delhivery (AWB: ${awbNumber}) [Env: ${shipmentResult.environment || 'staging'}]`,
@@ -115,6 +117,7 @@ export async function POST(request, { params }) {
       message: 'Shipment created successfully!',
       order: updatedOrder,
       shipment: shipmentResult,
+    });
     });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden') {

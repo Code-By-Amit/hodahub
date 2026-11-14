@@ -2,15 +2,16 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import Razorpay from 'razorpay';
 import { db } from '@/lib/db';
-import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings, productAddons, orderItemAddons, addons } from '@/lib/db/schema';
+import { products, coupons, orders, orderItems, orderStatusHistory, storeSettings, productAddons, orderItemAddons, addons, addresses } from '@/lib/db/schema';
 import { eq, and, inArray, sql, gte } from 'drizzle-orm';
 import { getAuthUser } from '@/lib/auth';
 import { createOrderSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderConfirmationEmail, sendAdminNewOrderEmail } from '@/lib/email';
-import { cleanupAbandonedOrders } from '@/lib/order-cleanup';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 
 import { resolveAddonPricing } from '@/lib/addon-utils';
+import { checkPincodeServiceability } from '@/lib/delhivery';
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
 const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -25,8 +26,8 @@ if (razorpayKeyId && razorpayKeySecret) {
 
 export async function POST(request) {
   try {
-    // Non-blocking opportunistic cleanup of expired abandoned orders
-    cleanupAbandonedOrders().catch(() => {});
+    const limit = await checkRateLimit(`checkout:${getClientIP(request)}`, 10, 60);
+    if (!limit.success) return NextResponse.json({ error: "Too many checkout attempts. Please wait a minute." }, { status: 429 });
 
     const user = await getAuthUser(request);
     const body = await request.json();
@@ -48,12 +49,22 @@ export async function POST(request) {
       guestName,
       guestEmail,
       guestPhone,
-      shippingAddress,
+      shippingAddress: submittedAddress,
+      checkoutKey,
+      expectedTotal,
     } = result.data;
 
-    if (!user && !isGuest && (!guestEmail || !shippingAddress)) {
-      return NextResponse.json({ error: 'Please login or provide guest checkout details' }, { status: 400 });
+    let shippingAddress = submittedAddress;
+    if (!user && (!isGuest || !guestName?.trim() || !guestEmail || !guestPhone || !shippingAddress)) {
+      return NextResponse.json({ error: 'Complete guest contact and delivery details are required.' }, { status: 400 });
     }
+    if (addressId) {
+      if (!user) return NextResponse.json({ error: 'Please sign in to use a saved address.' }, { status: 401 });
+      const [saved] = await db.select().from(addresses).where(and(eq(addresses.id, addressId), eq(addresses.userId, user.id))).limit(1);
+      if (!saved) return NextResponse.json({ error: 'Delivery address not found.' }, { status: 400 });
+      shippingAddress = { line1: saved.line1, line2: saved.line2, city: saved.city, state: saved.state, pincode: saved.pincode, phone: saved.phone || user.phone, name: user.name };
+    }
+    if (!shippingAddress?.phone || !shippingAddress?.line1 || !shippingAddress?.city || !shippingAddress?.state || !shippingAddress?.pincode) return NextResponse.json({ error: 'A complete delivery address and phone number are required.' }, { status: 400 });
 
     // Fetch store settings for shipping & COD toggle
     const [settings] = await db.select().from(storeSettings).limit(1);
@@ -68,6 +79,9 @@ export async function POST(request) {
       );
     }
 
+    const delivery = await checkPincodeServiceability(shippingAddress.pincode);
+    if (delivery.serviceable !== true || (process.env.NODE_ENV === 'production' && delivery.environment !== 'production')) return NextResponse.json({ error: delivery.serviceable === false ? 'Delivery is unavailable for this address.' : 'Delivery availability could not be verified. Contact support before ordering.' }, { status: delivery.serviceable === false ? 400 : 503 });
+    if (paymentMethod === 'cod' && delivery.codAvailable !== true) return NextResponse.json({ error: 'Cash on Delivery is unavailable for this pincode. Choose online payment.' }, { status: 400 });
     // Re-verify product details and pricing server-side
     const productIds = items.map((i) => i.productId);
     const dbProducts = await db.select().from(products).where(inArray(products.id, productIds));
@@ -138,7 +152,7 @@ export async function POST(request) {
       }
 
       const unitPrice = product.discountPrice ? Number(product.discountPrice) : Number(product.price);
-      
+
       // Calculate selected add-on price with resolved per-product link overrides (max 1 add-on per product item)
       const itemAddons = [];
       let itemAddonsTotal = 0;
@@ -162,8 +176,9 @@ export async function POST(request) {
 
         const rawAddon = dbAddonLinks.find(
           (a) => a.id === addonId && a.productId === item.productId
-        ) || dbAddonLinks.find((a) => a.id === addonId);
+        );
 
+        if (!rawAddon) return NextResponse.json({ error: 'A selected add-on is no longer available for this product. Please update your cart.' }, { status: 409 });
         if (rawAddon) {
           const resolved = resolveAddonPricing(rawAddon, {
             priceOverride: rawAddon.priceOverride,
@@ -216,217 +231,47 @@ export async function POST(request) {
       }
     }
 
+    if (couponCode && !validCouponCode) return NextResponse.json({ error: 'Your coupon is no longer eligible. Review the updated total before ordering.', invalidCoupon: true }, { status: 409 });
     // Calculate shipping charge
     const shippingCharge = subtotal >= minFreeShipping ? 0 : defaultShippingFee;
     const totalAmount = Math.max(0, subtotal - discount + shippingCharge);
 
-    // Atomic stock decrement helper wrapped in a single DB transaction
-    async function decrementStockAtomic(itemsToDecrement) {
-      try {
-        await db.transaction(async (tx) => {
-          for (const item of itemsToDecrement) {
-            const res = await tx
-              .update(products)
-              .set({
-                stock: sql`${products.stock} - ${item.quantity}`,
-                unitsSold: sql`${products.unitsSold} + ${item.quantity}`,
-                isOutOfStock: sql`CASE WHEN ${products.stock} - ${item.quantity} <= 0 THEN true ELSE ${products.isOutOfStock} END`,
-              })
-              .where(and(eq(products.id, item.productId), gte(products.stock, item.quantity)))
-              .returning();
-
-            if (res.length === 0) {
-              const err = new Error(`INSUFFICIENT_STOCK:${item.name}`);
-              err.failedProductName = item.name;
-              throw err;
-            }
-          }
-        });
-        return { success: true };
-      } catch (error) {
-        if (error.failedProductName || error.message?.startsWith('INSUFFICIENT_STOCK:')) {
-          const failedProductName = error.failedProductName || error.message.replace('INSUFFICIENT_STOCK:', '');
-          return { success: false, failedProductName };
-        }
-        throw error;
-      }
+    if (expectedTotal !== undefined && Math.abs(expectedTotal - totalAmount) > 0.009) {
+      return NextResponse.json({ error: 'Prices or shipping changed. Your cart has been refreshed; review the total before ordering.', cartUpdates: dbProducts.map((product) => ({ productId: product.id, price: product.price, discountPrice: product.discountPrice, codAvailable: product.codAvailable, addons: dbAddonLinks.filter((link) => link.productId === product.id).map((link) => resolveAddonPricing(link, link)) })), totalAmount }, { status: 409 });
     }
-
-    // Handle COD Order Creation (Pure COD - No Advance Required)
-    if (paymentMethod === 'cod') {
-      const stockResult = await decrementStockAtomic(validatedItems);
-      if (!stockResult.success) {
-        return NextResponse.json(
-          { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
-          { status: 400 }
-        );
-      }
-
-      const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
-      const [order] = await db
-        .insert(orders)
-        .values({
-          userId: user ? user.id : null,
-          guestName: guestName || null,
-          guestEmail: guestEmail || null,
-          guestPhone: guestPhone || null,
-          shippingAddress: shippingAddress || null,
-          status: 'pending',
-          paymentStatus: 'pending',
-          paymentMethod: 'cod',
-          shippingCharge: shippingCharge.toFixed(2),
-          totalAmount: totalAmount.toFixed(2),
-          codAdvanceAmount: '0.00',
-          addressId: addressId || null,
-          couponCode: validCouponCode,
-          discountAmount: discount.toFixed(2),
-          accessCode: guestAccessCode,
-        })
-        .returning();
-
-      for (const item of validatedItems) {
-        const [insertedOrderItem] = await db
-          .insert(orderItems)
-          .values({
-            orderId: order.id,
-            productId: item.productId,
-            productName: item.name,
-            productImage: item.image || null,
-            quantity: item.quantity,
-            priceAtPurchase: item.priceAtPurchase,
-          })
-          .returning();
-
-        if (item.addons && item.addons.length > 0) {
-          await db.insert(orderItemAddons).values(
-            item.addons.map((addon) => ({
-              orderItemId: insertedOrderItem.id,
-              addonId: addon.addonId,
-              name: addon.name,
-              priceAtPurchase: addon.priceAtPurchase,
-              quantity: addon.quantity || 1,
-              imageUrl: addon.imageUrl || null,
-            }))
-          );
-        }
-      }
-
-      await db.insert(orderStatusHistory).values({
-        orderId: order.id,
-        status: 'pending',
-        note: user ? 'COD order placed by user.' : 'COD order placed by guest.',
-      });
-
-      const targetEmail = user?.email || guestEmail;
-      if (targetEmail) {
-        sendOrderConfirmationEmail(targetEmail, order, validatedItems);
-      }
-      if (settings?.contactEmail) {
-        sendAdminNewOrderEmail(settings.contactEmail, order, validatedItems);
-      }
-
-      return NextResponse.json({
-        orderId: order.id,
-        accessCode: order.accessCode,
-        isCod: true,
-        requiresAdvance: false,
-        totalAmount,
-        message: "COD Order placed successfully! You'll receive a confirmation call from us shortly to confirm your order.",
-      });
-    }
-
-    // Handle Razorpay Order Creation
-    if (!razorpay) {
-      return NextResponse.json(
-        { error: 'Razorpay keys not configured on server' },
-        { status: 500 }
-      );
-    }
-
-    const stockResult = await decrementStockAtomic(validatedItems);
-    if (!stockResult.success) {
-      return NextResponse.json(
-        { error: `Insufficient stock for "${stockResult.failedProductName}". Please adjust your cart quantity.` },
-        { status: 400 }
-      );
-    }
-
     const amountInPaise = Math.round(totalAmount * 100);
-
-    const rzpOrder = await razorpay.orders.create({
-      amount: amountInPaise,
-      currency: 'INR',
-      receipt: `order_${Date.now().toString().slice(-10)}`,
-    });
-
-    const guestAccessCode = !user ? crypto.randomBytes(16).toString('hex') : null;
-    const [order] = await db
-      .insert(orders)
-      .values({
-        userId: user ? user.id : null,
-        guestName: guestName || null,
-        guestEmail: guestEmail || null,
-        guestPhone: guestPhone || null,
-        shippingAddress: shippingAddress || null,
-        status: 'pending',
-        paymentStatus: 'pending',
-        paymentMethod: 'razorpay',
-        shippingCharge: shippingCharge.toFixed(2),
-        totalAmount: totalAmount.toFixed(2),
-        addressId: addressId || null,
-        couponCode: validCouponCode,
-        discountAmount: discount.toFixed(2),
-        razorpayOrderId: rzpOrder.id,
-        accessCode: guestAccessCode,
-      })
-      .returning();
-
-    // Insert Order Items and their Add-ons
-    for (const item of validatedItems) {
-      const [insertedOrderItem] = await db
-        .insert(orderItems)
-        .values({
-          orderId: order.id,
-          productId: item.productId,
-          productName: item.name,
-          productImage: item.image || null,
-          quantity: item.quantity,
-          priceAtPurchase: item.priceAtPurchase,
-        })
-        .returning();
-
-      if (item.addons && item.addons.length > 0) {
-        await db.insert(orderItemAddons).values(
-          item.addons.map((addon) => ({
-            orderItemId: insertedOrderItem.id,
-            addonId: addon.addonId,
-            name: addon.name,
-            priceAtPurchase: addon.priceAtPurchase,
-            quantity: addon.quantity || 1,
-            imageUrl: addon.imageUrl || null,
-          }))
-        );
+    if (paymentMethod === 'razorpay' && (!razorpay || amountInPaise < 100)) return NextResponse.json({ error: 'Online payment is unavailable for this order. Please contact support.' }, { status: 400 });
+    // Creating an unpaid gateway order does not reserve stock. All store writes commit together.
+    const gatewayOrder = paymentMethod === 'razorpay' ? await razorpay.orders.create({ amount: amountInPaise, currency: 'INR', receipt: 'checkout_' + crypto.randomBytes(10).toString('hex') }) : null;
+    let createdNow = false;
+    const order = await db.transaction(async (tx) => {
+      if (checkoutKey) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${checkoutKey}))`);
+        const [existing] = await tx.select().from(orders).where(eq(orders.checkoutKey, checkoutKey)).limit(1);
+        if (existing) {
+          if (existing.userId !== (user?.id || null)) throw new Error('Invalid checkout attempt.');
+          if (existing.status === 'cancelled' || existing.paymentStatus === 'paid') throw new Error('This checkout is already completed. Check your orders before paying again.');
+          return existing;
+        }
       }
+      for (const item of [...validatedItems].sort((a, b) => a.productId.localeCompare(b.productId))) {
+        const updated = await tx.update(products).set({ stock: sql`${products.stock} - ${item.quantity}`, unitsSold: sql`${products.unitsSold} + ${item.quantity}`, isOutOfStock: sql`CASE WHEN ${products.stock} - ${item.quantity} <= 0 THEN true ELSE ${products.isOutOfStock} END` }).where(and(eq(products.id, item.productId), eq(products.isActive, true), eq(products.isOutOfStock, false), gte(products.stock, item.quantity))).returning();
+        if (!updated.length) throw new Error('Insufficient stock for ' + item.name + '. Please update your cart.');
+      }
+      const [created] = await tx.insert(orders).values({ userId: user?.id || null, guestName: guestName || user?.name || null, guestEmail: guestEmail || user?.email || null, guestPhone: guestPhone || shippingAddress.phone, shippingAddress, status: 'pending', paymentStatus: 'pending', paymentMethod, shippingCharge: shippingCharge.toFixed(2), totalAmount: totalAmount.toFixed(2), addressId: addressId || null, couponCode: validCouponCode, discountAmount: discount.toFixed(2), codAdvanceAmount: '0.00', razorpayOrderId: gatewayOrder?.id || null, accessCode: !user ? crypto.randomBytes(24).toString('hex') : null, checkoutKey: checkoutKey || null }).returning();
+      for (const item of validatedItems) {
+        const [inserted] = await tx.insert(orderItems).values({ orderId: created.id, productId: item.productId, productName: item.name, productImage: item.image, quantity: item.quantity, priceAtPurchase: item.priceAtPurchase }).returning();
+        if (item.addons.length) await tx.insert(orderItemAddons).values(item.addons.map((addon) => ({ ...addon, orderItemId: inserted.id })));
+      }
+      await tx.insert(orderStatusHistory).values({ orderId: created.id, status: 'pending', note: paymentMethod === 'cod' ? 'COD order placed; awaiting store confirmation.' : 'Checkout initialized; stock reserved while awaiting payment.' });
+      createdNow = true;
+      return created;
+    });
+    if (createdNow && paymentMethod === 'cod') {
+      await Promise.allSettled([order.guestEmail ? sendOrderConfirmationEmail(order.guestEmail, order, validatedItems, shippingAddress) : Promise.resolve(), settings?.contactEmail ? sendAdminNewOrderEmail(settings.contactEmail, order, validatedItems) : Promise.resolve()]);
     }
+    return NextResponse.json({ orderId: order.id, accessCode: order.accessCode, razorpayOrderId: order.razorpayOrderId, amount: Math.round(Number(order.totalAmount) * 100), totalAmount: Number(order.totalAmount), subtotal, discount, shippingCharge, isCod: paymentMethod === 'cod', requiresAdvance: false });
 
-    // Status History
-    await db.insert(orderStatusHistory).values({
-      orderId: order.id,
-      status: 'pending',
-      note: 'Razorpay order initialized. Awaiting payment.',
-    });
-
-    return NextResponse.json({
-      orderId: order.id,
-      accessCode: order.accessCode,
-      razorpayOrderId: rzpOrder.id,
-      amount: amountInPaise,
-      totalAmount,
-      subtotal,
-      discount,
-      shippingCharge,
-      isCod: false,
-    });
   } catch (error) {
     if (error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Please login to checkout' }, { status: 401 });

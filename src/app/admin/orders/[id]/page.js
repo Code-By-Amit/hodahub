@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelectField } from '@/components/ui/CustomSelect';
+
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
@@ -216,7 +218,8 @@ export default function AdminOrderDetailPage() {
       {/* Return Request Banner */}
       {order.returnStatus === 'requested' && (
         <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-md mb-4">
-          <h3 className="font-bold text-amber-900 text-[12px] mb-1">Return / Refund Requested by Customer</h3>
+          <h3 className="font-bold text-amber-900 text-[12px] mb-1">Exchange requested by customer</h3>
+          {order.returnEvidenceUrl && <a href={order.returnEvidenceUrl} target="_blank" rel="noopener noreferrer" className="mb-2 block text-sm underline">View unboxing evidence</a>}
           <p className="text-[11px] text-amber-700 mb-2">Reason: {order.returnReason || 'No reason provided'}</p>
           <div className="flex items-center gap-2">
             <button
@@ -224,7 +227,7 @@ export default function AdminOrderDetailPage() {
               disabled={updating}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
             >
-              <FiCheck className="w-3.5 h-3.5" /> Approve Return & Refund Stock
+              <FiCheck className="w-3.5 h-3.5" /> Approve exchange request
             </button>
             <button
               onClick={() => handleAdminAction('reject_return')}
@@ -599,7 +602,7 @@ export default function AdminOrderDetailPage() {
               <div>
                 <label className="block text-[10px] font-semibold text-warm-600 uppercase mb-1">Order Status</label>
                 <div className="flex gap-1.5">
-                  <select
+                  <CustomSelectField
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="flex-1 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] outline-none bg-white capitalize"
@@ -609,7 +612,7 @@ export default function AdminOrderDetailPage() {
                         {s}
                       </option>
                     ))}
-                  </select>
+                  </CustomSelectField>
                   <button
                     onClick={() => handleAdminAction('update_status', { status: newStatus })}
                     disabled={updating}
@@ -623,7 +626,7 @@ export default function AdminOrderDetailPage() {
               <div>
                 <label className="block text-[10px] font-semibold text-warm-600 uppercase mb-1">Payment Status</label>
                 <div className="flex gap-1.5">
-                  <select
+                  <CustomSelectField
                     value={newPaymentStatus}
                     onChange={(e) => setNewPaymentStatus(e.target.value)}
                     className="flex-1 px-2.5 py-1.5 border border-warm-200 rounded-md text-[11px] outline-none bg-white capitalize"
@@ -633,7 +636,7 @@ export default function AdminOrderDetailPage() {
                         {s}
                       </option>
                     ))}
-                  </select>
+                  </CustomSelectField>
                   <button
                     onClick={() => handleAdminAction('update_payment_status', { paymentStatus: newPaymentStatus })}
                     disabled={updating}
@@ -715,7 +718,6 @@ export default function AdminOrderDetailPage() {
           )}
         </div>
       </div>
-
 
 
       {/* Manual AWB Entry Modal */}

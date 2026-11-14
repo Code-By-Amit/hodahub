@@ -71,7 +71,7 @@ export async function verifyMSG91AccessToken(accessToken, claimedPhone = null) {
     }
 
     // Diagnostic logging: log full response body (authkey is redacted)
-    console.log('[MSG91 Server Verification] MSG91 HTTP status:', response.status, 'Response:', JSON.stringify(data));
+    console.log('[MSG91 Server Verification] HTTP status:', response.status);
 
     // Reject on HTTP error or MSG91 error payload
     if (!response.ok || data.type === 'error' || data.hasError || data.status === 'fail') {

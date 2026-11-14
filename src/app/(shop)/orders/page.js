@@ -26,12 +26,6 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) { router.push('/login'); return; }
-    fetchOrders();
-  }, [user, authLoading]);
-
   async function fetchOrders() {
     try {
       const data = await ordersApi.getAll();
@@ -39,6 +33,14 @@ export default function OrdersPage() {
     } catch {}
     setLoading(false);
   }
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push('/login'); return; }
+    const timer = setTimeout(() => fetchOrders(), 0);
+    return () => clearTimeout(timer);
+  }, [user, authLoading, router]);
+
 
   if (loading || authLoading) {
     return (

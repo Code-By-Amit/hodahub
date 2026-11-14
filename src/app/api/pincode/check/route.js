@@ -23,33 +23,34 @@ export async function GET(request) {
     let locationInfo = '';
     try {
       const postRes = await lookupPincode(cleanPin);
-      if (postRes.success && postRes.details) {
-        locationInfo = `${postRes.details.district}, ${postRes.details.state}`;
+      if (postRes?.city || postRes?.state) {
+        locationInfo = `${postRes.city}, ${postRes.state}`;
       }
     } catch {}
-    
+
     const cityName = delhiveryResult.city || locationInfo;
     const estText = delhiveryResult.estimatedDays
       ? `Est. ${delhiveryResult.estimatedDays}`
-      : 'Est. 3-7 business days';
+      : 'Delivery time confirmed after dispatch';
 
     const locationDisplay = cityName ? ` to ${cityName}` : '';
-    const message = `Delivery available${locationDisplay} (${estText})`;
+    const message = delhiveryResult.serviceable === true ? `Delivery available${locationDisplay} (${estText})` : delhiveryResult.serviceable === false ? 'Delivery is unavailable for this pincode.' : 'Please contact us to confirm delivery to this pincode.';
 
     return NextResponse.json({
-      serviceable: true,
+      serviceable: delhiveryResult.serviceable,
       pincode: cleanPin,
       city: delhiveryResult.city || null,
       state: delhiveryResult.state || null,
       estimatedDays: delhiveryResult.estimatedDays || null,
-      codAvailable: delhiveryResult.codAvailable !== false,
+      codAvailable: delhiveryResult.serviceable === true && delhiveryResult.codAvailable === true,
       message,
     });
   } catch (error) {
     console.error('[Pincode Check API Error]:', error);
     return NextResponse.json({
-      serviceable: true,
-      message: 'Delivery available (Est. 3-7 business days)',
-    });
+      serviceable: null,
+      codAvailable: false,
+      message: 'Delivery availability could not be verified. Please contact support.',
+    }, { status: 503 });
   }
 }

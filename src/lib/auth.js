@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { randomInt } from 'crypto';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
@@ -10,6 +11,7 @@ const REFRESH_TOKEN_EXPIRY = '7d';
 export function generateTokens(user) {
   const payload = {
     id: user.id,
+    sessionVersion: user.sessionVersion || 0,
     email: user.email || null,
     phone: user.phone || null,
     role: user.role,
@@ -90,10 +92,12 @@ export async function getAuthUser(request) {
   const token = cookieStore.get('access_token')?.value;
 
   let userObj = null;
+  let tokenSessionVersion = 0;
 
   if (token) {
     const decoded = verifyAccessToken(token);
     if (decoded) {
+      tokenSessionVersion = decoded.sessionVersion || 0;
       userObj = {
         id: decoded.id,
         email: decoded.email || null,
@@ -110,6 +114,7 @@ export async function getAuthUser(request) {
     if (refreshToken) {
       const refreshDecoded = verifyRefreshToken(refreshToken);
       if (refreshDecoded) {
+        tokenSessionVersion = refreshDecoded.sessionVersion || 0;
         userObj = {
           id: refreshDecoded.id,
           email: refreshDecoded.email || null,
@@ -126,14 +131,15 @@ export async function getAuthUser(request) {
   // Always sync latest user profile & role from DB so role promotions/demotions take effect immediately
   try {
     const [dbUser] = await db
-      .select({ id: users.id, email: users.email, phone: users.phone, role: users.role, name: users.name })
+      .select({ id: users.id, email: users.email, phone: users.phone, role: users.role, name: users.name, sessionVersion: users.sessionVersion })
       .from(users)
       .where(eq(users.id, userObj.id))
       .limit(1);
 
-    if (dbUser) {
+    if (dbUser && dbUser.sessionVersion === tokenSessionVersion) {
       userObj = {
         id: dbUser.id,
+        sessionVersion: dbUser.sessionVersion,
         email: dbUser.email || null,
         phone: dbUser.phone || null,
         role: dbUser.role,
@@ -142,9 +148,7 @@ export async function getAuthUser(request) {
     } else {
       return null;
     }
-  } catch {
-    // Fall back to decoded token userObj if DB fails
-  }
+  } catch { return null; }
 
   return userObj;
 }
@@ -166,5 +170,5 @@ export async function requireAdmin(request) {
 }
 
 export function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return randomInt(100000, 1000000).toString();
 }

@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { selectUser, clearUser } from '@/lib/store/authSlice';
 import { authApi } from '@/lib/apiClient/auth.api';
+import { clearWishlist } from '@/lib/store/wishlistSlice';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard,
   Package,
@@ -45,6 +47,7 @@ export default function AdminLayout({ children }) {
   const dispatch = useDispatch();
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -67,6 +70,8 @@ export default function AdminLayout({ children }) {
       await authApi.logout();
     } catch {}
     dispatch(clearUser());
+    dispatch(clearWishlist());
+    queryClient.clear();
     router.push('/');
   }
 

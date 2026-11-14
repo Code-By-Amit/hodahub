@@ -6,7 +6,7 @@ import { ArrowRight, Sparkles, ShoppingBag, ShieldCheck, Truck, RefreshCw } from
 export default function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-warm-50 via-white to-brand-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="store-container">
         <div className="grid lg:grid-cols-2 gap-12 items-center min-h-[480px] lg:min-h-[560px] py-12 lg:py-16">
           {/* Left: Content */}
           <div className="relative z-10 space-y-6" style={{ animation: 'slideUp 0.6s ease-out' }}>

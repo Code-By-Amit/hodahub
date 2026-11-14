@@ -45,7 +45,7 @@ function sanitizeWidgetData(data) {
 let _scriptAppended = false;
 let _widgetInitialized = false;
 
-export function useMsg91Otp() {
+export function useMsg91Otp({ verifyAccessToken = authApi.verifyMsg91Otp } = {}) {
   const [otpState, setOtpState] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
@@ -78,7 +78,7 @@ export function useMsg91Otp() {
 
     // If SDK already initialized (e.g. React Strict Mode double-effect), just check readiness
     if (_widgetInitialized) {
-      if (window.sendOtp) setSdkReady(true);
+      if (window.sendOtp) { const timer = setTimeout(() => setSdkReady(true), 0); return () => clearTimeout(timer); }
       return;
     }
 
@@ -385,7 +385,6 @@ export function useMsg91Otp() {
     setErrorMessage('');
     setInfoMessage('');
 
-    console.log(`[MSG91] verifyOtp → window.verifyOtp('${cleanOtp}', ..., reqId=${lastReqIdRef.current})`);
 
     return new Promise((resolve) => {
       if (!window.verifyOtp) {
@@ -443,7 +442,7 @@ export function useMsg91Otp() {
         try {
           console.log('[MSG91] Verifying access token server-side with phone binding...');
           const claimedPhone = phone || lastPhoneRef.current;
-          const data = await authApi.verifyMsg91Otp({
+          const data = await verifyAccessToken({
             accessToken,
             phone: claimedPhone,
           });
@@ -488,7 +487,7 @@ export function useMsg91Otp() {
         onFailure(e);
       }
     });
-  }, [isConfigured, otpState]);
+  }, [isConfigured, otpState, verifyAccessToken]);
 
   return {
     otpState,

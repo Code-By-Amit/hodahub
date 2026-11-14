@@ -29,6 +29,7 @@ export async function getBestSellerProducts(limit = 8) {
         and(
           ne(orders.status, 'cancelled'),
           ne(orders.paymentStatus, 'failed'),
+          ne(orders.paymentStatus, 'refunded'),
           or(
             eq(orders.paymentStatus, 'paid'),
             inArray(orders.status, ['confirmed', 'packed', 'shipped', 'delivered'])
@@ -71,7 +72,7 @@ export async function getBestSellerProducts(limit = 8) {
       .where(availableCondition)
       .orderBy(
         desc(products.isBestSeller),
-        desc(sql`GREATEST(${products.unitsSold}, COALESCE(${validSalesSubquery.totalSales}, 0))`),
+        desc(sql`COALESCE(${validSalesSubquery.totalSales}, 0)`),
         desc(products.createdAt),
         desc(products.id)
       )

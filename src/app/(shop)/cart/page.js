@@ -32,13 +32,15 @@ export default function CartPage() {
   const productsSubtotal = useSelector(selectCartProductsSubtotal);
   const addonsSubtotal = useSelector(selectCartAddonsSubtotal);
   const coupon = useSelector(selectCartCoupon);
+  const cartReady = useSelector((state) => Boolean(state.cart._persist?.rehydrated));
+  const availabilityKey = items.map((item) => item.productId).join(',');
   const [couponCode, setCouponCode] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
 
   // Availability validation on cart page load
   useEffect(() => {
-    if (!items || items.length === 0) return;
+    if (!cartReady || !items || items.length === 0) return;
     const checkAvailability = async () => {
       try {
         const productIds = items.map((i) => i.productId);
@@ -54,7 +56,7 @@ export default function CartPage() {
       }
     };
     checkAvailability();
-  }, []);
+  }, [cartReady, availabilityKey]);
 
   const discount = coupon
     ? coupon.type === 'percent'
@@ -87,6 +89,7 @@ export default function CartPage() {
     setCouponLoading(false);
   }
 
+  if (!cartReady) return <div role="status" className="mx-auto max-w-4xl px-4 py-12 text-sm text-warm-500">Loading your cart…</div>;
   if (items.length === 0) {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">

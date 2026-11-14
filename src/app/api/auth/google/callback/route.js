@@ -11,6 +11,9 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const errorParam = searchParams.get('error');
+    const state = searchParams.get('state');
+    const expectedState = request.cookies.get('google_oauth_state')?.value;
+    if (!state || !expectedState || state !== expectedState) return NextResponse.json({ error: 'Invalid sign-in session. Start Google sign-in again.' }, { status: 400 });
 
     const origin = request.headers.get('origin') || request.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const redirectUri = `${origin}/api/auth/google/callback`;
@@ -51,7 +54,7 @@ export async function GET(request) {
     });
 
     const profile = await profileRes.json();
-    if (!profileRes.ok || !profile.email) {
+    if (!profileRes.ok || !profile.email || profile.verified_email !== true) {
       console.error('Google profile fetch failed:', profile);
       return NextResponse.redirect(`${origin}/login?error=google_profile_error`);
     }
@@ -153,6 +156,7 @@ export async function GET(request) {
 
     // 6. Issue tokens & set auth cookies
     const tokenPayload = {
+      sessionVersion: targetUser.sessionVersion,
       id: targetUser.id,
       email: targetUser.email,
       role: targetUser.role,
@@ -161,6 +165,7 @@ export async function GET(request) {
 
     const tokens = generateTokens(tokenPayload);
     const response = NextResponse.redirect(`${origin}/`);
+    response.cookies.set('google_oauth_state', '', { path: '/api/auth/google/callback', maxAge: 0 });
     setAuthCookies(response, tokens);
 
     return response;

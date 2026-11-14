@@ -67,7 +67,8 @@ export async function POST(request) {
       .set({ otp, otpExpiresAt })
       .where(eq(users.id, user.id));
 
-    await sendOTPEmail(email, otp);
+    const delivery = await sendOTPEmail(email, otp);
+    if (!delivery.success) return NextResponse.json({ error: 'Verification email could not be sent. Please try again later.' }, { status: 503 });
 
     return NextResponse.json({
       message: 'OTP sent successfully!',

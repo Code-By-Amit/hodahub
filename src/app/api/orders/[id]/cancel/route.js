@@ -2,14 +2,17 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { orders, orderItems, products, orderStatusHistory } from '@/lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { requireAuth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/auth';
+import { canAccessOrder } from '@/lib/order-access';
 import { cancelOrderSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { sendOrderStatusEmail } from '@/lib/email';
+import { cancelOrderAtomic } from '@/lib/order-lifecycle';
 
 export async function POST(request, { params }) {
   try {
-    const user = await requireAuth(request);
+    const user = await getAuthUser(request);
+    const accessCode = new URL(request.url).searchParams.get('accessCode');
     const { id } = await params;
     const body = await request.json();
 
@@ -27,10 +30,10 @@ export async function POST(request, { params }) {
     const [order] = await db
       .select()
       .from(orders)
-      .where(and(eq(orders.id, id), eq(orders.userId, user.id)))
+      .where(eq(orders.id, id))
       .limit(1);
 
-    if (!order) {
+    if (!order || !canAccessOrder(user, order, accessCode)) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
@@ -42,39 +45,10 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Update order status
-    await db
-      .update(orders)
-      .set({
-        status: 'cancelled',
-        cancelReason: reason,
-      })
-      .where(eq(orders.id, order.id));
-
-    // Record history
-    await db.insert(orderStatusHistory).values({
-      orderId: order.id,
-      status: 'cancelled',
-      note: `Cancelled by customer. Reason: ${reason}`,
-    });
-
-    // RESTORE STOCK BACK TO PRODUCTS
-    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-    for (const item of items) {
-      if (item.productId) {
-        await db
-          .update(products)
-          .set({
-            stock: sql`${products.stock} + ${item.quantity}`,
-            unitsSold: sql`GREATEST(0, ${products.unitsSold} - ${item.quantity})`,
-            isOutOfStock: sql`CASE WHEN ${products.stock} + ${item.quantity} > 0 THEN false ELSE ${products.isOutOfStock} END`,
-          })
-          .where(eq(products.id, item.productId));
-      }
-    }
+    await cancelOrderAtomic(order.id, reason, { user, accessCode });
 
     // Send Status Email
-    sendOrderStatusEmail(user.email, { ...order, status: 'cancelled' }, 'cancelled', reason);
+    await sendOrderStatusEmail(user?.email || order.guestEmail, { ...order, status: 'cancelled' }, 'cancelled', reason);
 
     return NextResponse.json({
       message: 'Order cancelled successfully! Stock has been restored.',

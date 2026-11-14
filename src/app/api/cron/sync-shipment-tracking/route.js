@@ -1,42 +1,21 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { orders, shipmentTrackingEvents, orderStatusHistory } from '@/lib/db/schema';
-import { eq, and, ne, isNotNull, notInArray } from 'drizzle-orm';
+import { eq, and, asc, isNotNull, notInArray } from 'drizzle-orm';
 import { trackDelhiveryShipment } from '@/lib/delhivery';
+import { courierOrderStatus } from '@/lib/order-rules';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Map Delhivery courier status to system order status
  */
-function mapCourierStatusToOrderStatus(courierStatus) {
-  if (!courierStatus) return null;
-  const statusUpper = courierStatus.toUpperCase().trim();
-
-  if (statusUpper.includes('DELIVERED') || statusUpper === 'DL') {
-    return 'delivered';
-  }
-  if (statusUpper.includes('CANCEL')) {
-    return 'cancelled';
-  }
-  if (
-    statusUpper.includes('TRANSIT') ||
-    statusUpper.includes('DISPATCH') ||
-    statusUpper.includes('OUT FOR DELIVERY') ||
-    statusUpper.includes('MANIFEST') ||
-    statusUpper.includes('PENDING')
-  ) {
-    return 'shipped';
-  }
-  return null;
-}
-
 export async function GET(request) {
   try {
     // Optional CRON Secret check for security in production
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if ((!cronSecret && process.env.NODE_ENV === 'production') || cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: 'Unauthorized cron request' }, { status: 401 });
     }
 
@@ -49,7 +28,7 @@ export async function GET(request) {
           isNotNull(orders.awbNumber),
           notInArray(orders.status, ['delivered', 'cancelled'])
         )
-      );
+      ).orderBy(asc(orders.courierStatusUpdatedAt), asc(orders.createdAt)).limit(100);
 
     if (!activeOrders || activeOrders.length === 0) {
       return NextResponse.json({
@@ -67,7 +46,7 @@ export async function GET(request) {
       try {
         const trackingInfo = await trackDelhiveryShipment(order.awbNumber);
 
-        if (!trackingInfo || !trackingInfo.status) continue;
+        if (!trackingInfo || !trackingInfo.status || trackingInfo.unavailable) continue;
 
         // Fetch existing tracking events for this order to prevent duplicates
         const existingEvents = await db
@@ -117,21 +96,24 @@ export async function GET(request) {
         }
 
         // Check if courier status maps to a new order-level status
-        const mappedOrderStatus = mapCourierStatusToOrderStatus(trackingInfo.status);
+        const mappedOrderStatus = courierOrderStatus(trackingInfo.status, order.status);
         let orderStatusChanged = false;
 
         if (mappedOrderStatus && mappedOrderStatus !== order.status) {
-          await db
+          orderStatusChanged = await db.transaction(async (tx) => {
+          const changed = await tx
             .update(orders)
-            .set({ status: mappedOrderStatus })
-            .where(eq(orders.id, order.id));
+            .set({ status: mappedOrderStatus, ...(mappedOrderStatus === 'delivered' ? { deliveredAt: order.deliveredAt || new Date() } : {}) })
+            .where(and(eq(orders.id, order.id), eq(orders.status, order.status), eq(orders.awbNumber, order.awbNumber))).returning({ id: orders.id });
+          if (!changed.length) return false;
 
-          await db.insert(orderStatusHistory).values({
+          await tx.insert(orderStatusHistory).values({
             orderId: order.id,
             status: mappedOrderStatus,
             note: `Status auto-updated to ${mappedOrderStatus} via background tracking sync (${trackingInfo.status})`,
           });
-          orderStatusChanged = true;
+          return true;
+          });
         }
 
         if (courierStatusChanged || orderStatusChanged || newEventsAdded > 0) {

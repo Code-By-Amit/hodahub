@@ -3,6 +3,7 @@ import { cleanupAbandonedOrders } from '@/lib/order-cleanup';
 
 function isAuthorized(request) {
   const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret && process.env.NODE_ENV === 'production') return false;
   // If CRON_SECRET is configured in environment, enforce Authorization Bearer token header check
   if (cronSecret) {
     const authHeader = request.headers.get('authorization');

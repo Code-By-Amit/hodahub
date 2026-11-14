@@ -111,6 +111,52 @@ body {
 }
 
 /* === Selection === */
+/* Shared control metrics deliberately use pixels: rem-based padding must not
+   squeeze a fixed-width phone selector when the browser's base font changes. */
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]):not([hidden]):not(.sr-only)),
+.custom-select-trigger {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  padding-block: 0;
+}
+.custom-select-trigger { gap: 8px; padding-inline: 12px; }
+.select-chevron { width: 16px; height: 16px; }
+.custom-select-popup { font-size: 14px; }
+.select-option { min-height: 36px; font-size: 14px; line-height: 20px; }
+.phone-prefix { width: 88px; flex: 0 0 88px; }
+.phone-prefix .custom-select-trigger { padding-inline: 8px; }
+.phone-prefix .custom-select-trigger > span { flex-shrink: 0; }
+.phone-field { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.phone-field input, .phone-field .custom-select-trigger { height: 40px; min-height: 40px; }
+.phone-prefix .custom-select-trigger > span { overflow: visible; text-overflow: clip; white-space: nowrap; }
+.admin-product-filters { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 8px; margin-bottom: 16px; }
+.admin-product-filters > * { min-width: 0; }
+.admin-product-search { display: flex; align-items: center; }
+.store-container { box-sizing: border-box; width: 100%; max-width: 56rem; margin-inline: auto; padding-inline: 1rem; }
+@media (min-width: 640px) {
+  .admin-product-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-product-search { grid-column: 1 / -1; }
+  .store-container { padding-inline: 1.5rem; }
+}
+@media (min-width: 1024px) {
+  .admin-product-filters { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); }
+  .admin-product-filters:has(> button) { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)) auto; }
+  .admin-product-search { grid-column: auto; }
+  .store-container { padding-inline: 2rem; }
+}
+.product-card-cart { height: 36px; min-height: 36px; font-size: 12px; line-height: 16px; }
+.product-card-details { padding: 10px 12px 8px; gap: 4px; }
+.product-card-title { font-size: 13px; line-height: 18px; min-height: 36px; }
+.product-card-price { font-size: 16px; line-height: 22px; }
+@media (max-width: 639px) {
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]):not([hidden]):not(.sr-only)),
+  .custom-select-trigger { font-size: 16px; }
+}
+
 ::selection {
   background: #FDBA74;
   color: #7C2D12;

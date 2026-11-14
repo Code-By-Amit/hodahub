@@ -13,10 +13,9 @@ function formatError(error) {
  * Send OTP Verification Email
  */
 export async function sendOTPEmail(email, otp) {
-  console.log(`[DEVELOPMENT OTP] Verification code for ${email}: ${otp}`);
 
   if (!resend) {
-    return { success: true, mocked: true };
+    return { success: false, error: "Email delivery is not configured" };
   }
 
   try {
@@ -63,9 +62,8 @@ export async function sendOTPEmail(email, otp) {
  * Send Password Reset Email
  */
 export async function sendPasswordResetEmail(email, otp) {
-  console.log(`[DEVELOPMENT RESET OTP] Password reset code for ${email}: ${otp}`);
 
-  if (!resend) return { success: true, mocked: true };
+  if (!resend) return { success: false, error: "Email delivery is not configured" };
 
   try {
     const { data, error } = await resend.emails.send({
@@ -104,9 +102,9 @@ export async function sendPasswordResetEmail(email, otp) {
  * Send Order Confirmation Email
  */
 export async function sendOrderConfirmationEmail(toEmail, order, items = [], address = null) {
-  console.log(`[EMAIL] Order confirmation sent to ${toEmail} for Order #${order.id}`);
 
-  if (!resend) return { success: true, mocked: true };
+
+  if (!resend) return { success: false, error: "Email delivery is not configured" };
 
   try {
     const itemsListHtml = items
@@ -189,7 +187,7 @@ export async function sendOrderConfirmationEmail(toEmail, order, items = [], add
 export async function sendPaymentConfirmationEmail(toEmail, order) {
   console.log(`[EMAIL] Payment confirmation sent to ${toEmail} for Order #${order.id}`);
 
-  if (!resend) return { success: true, mocked: true };
+  if (!resend) return { success: false, error: "Email delivery is not configured" };
 
   try {
     const { data, error } = await resend.emails.send({
@@ -228,7 +226,7 @@ export async function sendPaymentConfirmationEmail(toEmail, order) {
 export async function sendOrderStatusEmail(toEmail, order, newStatus, note = '') {
   console.log(`[EMAIL] Order status update (${newStatus}) sent to ${toEmail} for Order #${order.id}`);
 
-  if (!resend) return { success: true, mocked: true };
+  if (!resend) return { success: false, error: "Email delivery is not configured" };
 
   const statusTitles = {
     shipped: 'Your Order Has Shipped',
@@ -277,7 +275,7 @@ export async function sendOrderStatusEmail(toEmail, order, newStatus, note = '')
  * Send Admin Notification on New Order
  */
 export async function sendAdminNewOrderEmail(adminEmail, order, items = []) {
-  if (!adminEmail || !resend) return { success: true, mocked: true };
+  if (!adminEmail || !resend) return { success: false, error: "Email delivery is not configured" };
 
   try {
     const { data, error } = await resend.emails.send({
@@ -303,7 +301,7 @@ export async function sendAdminNewOrderEmail(adminEmail, order, items = []) {
  */
 export async function sendContactFormEmail(contactEmail, { name, email, subject, message }) {
   const recipient = contactEmail || process.env.CONTACT_FORM_RECIPIENT || 'support@hodahub.in';
-  if (!resend) return { success: true, mocked: true };
+  if (!resend) return { success: false, error: "Email delivery is not configured" };
 
   try {
     const { data, error } = await resend.emails.send({

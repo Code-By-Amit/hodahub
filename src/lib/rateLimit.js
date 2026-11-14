@@ -48,12 +48,12 @@ export async function checkRateLimit(identifier, limit = 5, windowSeconds = 60) 
       };
     }
 
-    // Fail open on Redis error (connection error, timeout, etc.)
+    // Production authentication/checkout must not silently lose abuse protection.
     console.warn(
-      `[RateLimit] Redis error encountered (${rejOrError?.message || rejOrError}). Failing open.`
+      '[RateLimit] Rate-limit store unavailable.'
     );
     return {
-      success: true,
+      success: process.env.NODE_ENV !== 'production',
       remaining: 1,
       resetAt: new Date(Date.now() + windowSeconds * 1000),
     };

@@ -13,7 +13,7 @@ export default function ShopLayout({ children }) {
       <AnnouncementBar />
       <Header />
       <ProfilePromptBanner />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1"><Suspense fallback={<div className="mx-auto max-w-4xl px-4 py-12 text-sm text-warm-500">Loading…</div>}>{children}</Suspense></main>
       <Suspense fallback={null}>
         <MetaPixel />
         <GA4 />

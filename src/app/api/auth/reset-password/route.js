@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { users } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { resetPasswordSchema } from '@/lib/validations';
 import { formatZodErrorResponse } from '@/lib/zod-utils';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
@@ -87,6 +87,7 @@ export async function POST(request) {
       .update(users)
       .set({
         passwordHash,
+        sessionVersion: sql`${users.sessionVersion} + 1`,
         resetOtp: null,
         resetOtpExpiresAt: null,
         resetOtpAttempts: 0,

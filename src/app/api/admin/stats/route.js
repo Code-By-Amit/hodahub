@@ -22,7 +22,7 @@ export async function GET(request) {
       db
         .select({ total: sql`COALESCE(SUM(${orders.totalAmount}::numeric), 0)` })
         .from(orders)
-        .where(ne(orders.status, 'cancelled')),
+        .where(and(eq(orders.paymentStatus, 'paid'), ne(orders.status, 'cancelled'))),
       db
         .select({ total: sql`COALESCE(SUM(${orders.totalAmount}::numeric), 0)` })
         .from(orders)

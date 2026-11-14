@@ -1,4 +1,6 @@
 'use client';
+import { CustomSelectField } from '@/components/ui/CustomSelect';
+
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ui/Toast';
@@ -55,10 +57,6 @@ export default function AdminReviewsPage() {
     isHidden: false,
   });
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
   async function fetchProducts() {
     try {
       const data = await productsApi.getAdmin({ limit: 100 });
@@ -71,7 +69,7 @@ export default function AdminReviewsPage() {
     } catch {}
   }
 
-  async function handleCreateReview(e) {
+async function handleCreateReview(e) {
     e.preventDefault();
 
     const payload = {
@@ -102,7 +100,7 @@ export default function AdminReviewsPage() {
     setSubmitting(false);
   }
 
-  function openEditModal(review) {
+function openEditModal(review) {
     setEditingReview(review);
     setEditForm({
       productId: review.productId || productsList[0]?.id || '',
@@ -115,7 +113,7 @@ export default function AdminReviewsPage() {
     setErrors({});
   }
 
-  async function handleUpdateReview(e) {
+async function handleUpdateReview(e) {
     e.preventDefault();
     if (!editingReview) return;
 
@@ -139,18 +137,24 @@ export default function AdminReviewsPage() {
     setSubmitting(false);
   }
 
-  async function toggleHide(id) {
+async function toggleHide(id) {
     try {
       await toggleVisibility(id);
     } catch {}
   }
 
-  async function handleDelete(id) {
+async function handleDelete(id) {
     if (!confirm('Delete this review permanently?')) return;
     try {
       await deleteReview(id);
     } catch {}
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchProducts(), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
 
   return (
     <div className="space-y-4">
@@ -326,7 +330,7 @@ export default function AdminReviewsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Target Product *
                 </label>
-                <select
+                <CustomSelectField
                   value={addForm.productId}
                   onChange={(e) => setAddForm({ ...addForm, productId: e.target.value })}
                   className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
@@ -338,7 +342,7 @@ export default function AdminReviewsPage() {
                       {p.name}
                     </option>
                   ))}
-                </select>
+                </CustomSelectField>
                 <FieldError message={errors.productId} />
               </div>
 
@@ -362,7 +366,7 @@ export default function AdminReviewsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Star Rating (Optional)
                 </label>
-                <select
+                <CustomSelectField
                   value={addForm.rating || ''}
                   onChange={(e) => setAddForm({ ...addForm, rating: e.target.value ? Number(e.target.value) : '' })}
                   className={`w-full px-2.5 py-1.5 bg-white border rounded-md text-[11px] text-warm-900 outline-none ${
@@ -375,7 +379,7 @@ export default function AdminReviewsPage() {
                   <option value="2">2 Stars (Below Average)</option>
                   <option value="1">1 Star (Poor)</option>
                   <option value="">No Star Rating (Comment Only)</option>
-                </select>
+                </CustomSelectField>
                 <FieldError message={errors.rating} />
               </div>
 
@@ -448,7 +452,7 @@ export default function AdminReviewsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Target Product *
                 </label>
-                <select
+                <CustomSelectField
                   value={editForm.productId}
                   onChange={(e) => setEditForm({ ...editForm, productId: e.target.value })}
                   className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
@@ -458,7 +462,7 @@ export default function AdminReviewsPage() {
                       {p.name}
                     </option>
                   ))}
-                </select>
+                </CustomSelectField>
               </div>
 
               <div>
@@ -478,7 +482,7 @@ export default function AdminReviewsPage() {
                 <label className="block text-[10px] font-semibold text-warm-700 mb-1">
                   Star Rating (Optional)
                 </label>
-                <select
+                <CustomSelectField
                   value={editForm.rating || ''}
                   onChange={(e) => setEditForm({ ...editForm, rating: e.target.value ? Number(e.target.value) : '' })}
                   className="w-full px-2.5 py-1.5 bg-white border border-warm-200 rounded-md text-[11px] text-warm-900 outline-none focus:border-warm-900"
@@ -489,7 +493,7 @@ export default function AdminReviewsPage() {
                   <option value="2">2 Stars (Below Average)</option>
                   <option value="1">1 Star (Poor)</option>
                   <option value="">No Star Rating (Comment Only)</option>
-                </select>
+                </CustomSelectField>
               </div>
 
               <div>

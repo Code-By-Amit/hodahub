@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useRouter } from 'next/navigation';
-import { selectUser, selectAuthLoading, setUser } from '@/lib/store/authSlice';
+import { selectUser, selectAuthLoading, setUser, clearUser } from '@/lib/store/authSlice';
 import { useToast } from '@/components/ui/Toast';
 import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import ImageUpload from '@/components/ui/ImageUpload';
@@ -14,6 +14,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import FormField, { ReadOnlyField } from '@/components/ui/FormField';
 import { VerifiedBadge } from '@/components/ui/Badges';
 import OtpModal from '@/components/ui/OtpModal';
+import { useMsg91Otp } from '@/hooks/useMsg91Otp';
 import { updateProfileSchema, addressSchema } from '@/lib/validations';
 import { lookupPincode } from '@/lib/pincode';
 import {
@@ -36,6 +37,7 @@ export default function ProfilePage() {
   const authUser = useSelector(selectUser);
   const authLoading = useSelector(selectAuthLoading);
 
+  const phoneOtp = useMsg91Otp({ verifyAccessToken: profileApi.verifyPhoneOtp });
   const [activeTab, setActiveTab] = useState('profile');
   const [profileData, setProfileData] = useState({
     name: '',
@@ -82,7 +84,6 @@ export default function ProfilePage() {
   useEffect(() => {
     const pincode = addrForm.pincode.trim();
     if (pincode.length !== 6 || !/^\d{6}$/.test(pincode)) {
-      setPincodeNote('');
       return;
     }
 
@@ -147,7 +148,8 @@ export default function ProfilePage() {
     }
     setSendingOtp(true);
     try {
-      const data = await profileApi.sendPhoneOtp({ phone: profileData.phone });
+      const data = await phoneOtp.sendOtp(profileData.phone);
+      if (!data.success) throw new Error(data.error);
       if (data) {
         toast.success(data.message || 'OTP sent to mobile number');
         if (data.demoOtp && process.env.NODE_ENV === 'development') {
@@ -169,7 +171,8 @@ export default function ProfilePage() {
     }
     setVerifyingOtp(true);
     try {
-      const data = await profileApi.verifyPhoneOtp({ otp: phoneOtpInput });
+      const data = await phoneOtp.verifyOtp(phoneOtpInput, profileData.phone);
+      if (!data.success) throw new Error(data.error);
       if (data) {
         toast.success('Mobile number verified successfully!');
         setProfileData((prev) => ({
@@ -254,6 +257,8 @@ export default function ProfilePage() {
       if (data) {
         toast.success(data.message || 'Password updated successfully!');
         setPasswordData({ currentPassword: '', newPassword: '' });
+        dispatch(clearUser());
+        router.push('/login?redirect=/profile');
       }
     } catch (err) {
       if (err.errors) setPasswordErrors(err.errors);

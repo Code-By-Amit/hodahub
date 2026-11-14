@@ -30,6 +30,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   role: roleEnum('role').default('customer').notNull(),
   isVerified: boolean('is_verified').default(false).notNull(),
+  phoneVerifiedAt: timestamp('phone_verified_at'),
+  sessionVersion: integer('session_version').default(0).notNull(),
   otp: varchar('otp', { length: 6 }),
   otpExpiresAt: timestamp('otp_expires_at'),
   otpAttempts: integer('otp_attempts').default(0).notNull(),
@@ -84,6 +86,7 @@ export const brands = pgTable('brands', {
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   logoUrl: text('logo_url'),
+  sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -262,7 +265,11 @@ export const orders = pgTable('orders', {
   codAdvancePaymentId: varchar('cod_advance_payment_id', { length: 255 }),
   codAdvancePaidAt: timestamp('cod_advance_paid_at'),
   cancelReason: text('cancel_reason'),
+  inventoryReleased: boolean('inventory_released').default(false).notNull(),
+  deliveredAt: timestamp('delivered_at'),
+  checkoutKey: uuid('checkout_key').unique(),
   returnReason: text('return_reason'),
+  returnEvidenceUrl: text('return_evidence_url'),
   returnStatus: returnStatusEnum('return_status').default('none').notNull(),
   courierProvider: varchar('courier_provider', { length: 50 }).default('delhivery'),
   awbNumber: varchar('awb_number', { length: 100 }),
@@ -464,7 +471,5 @@ export const msg91UsedTokens = pgTable(
     index('msg91_used_tokens_expires_at_idx').on(table.expiresAt),
   ]
 );
-
-
 
 

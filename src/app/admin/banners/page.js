@@ -6,7 +6,7 @@ import Modal from '@/components/ui/Modal';
 import ImageUpload from '@/components/ui/ImageUpload';
 import { useToast } from '@/components/ui/Toast';
 import NumericInput from '@/components/ui/NumericInput';
-import { Edit2, ExternalLink, Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
+import { Edit2, ExternalLink, Eye, EyeOff, Plus, Trash2, Layers } from 'lucide-react';
 
 import useAdminBanners from '@/hooks/useAdminBanners';
 
@@ -121,7 +121,7 @@ export default function AdminBannersPage() {
                 <td colSpan={6} className="px-3 py-8 text-center text-warm-400">
                   <Layers className="w-8 h-8 mx-auto text-warm-300 mb-1.5" />
                   <p className="text-[11px] font-semibold text-warm-900">No promotional banners created yet.</p>
-                  <p className="text-[10px] text-warm-500 mt-0.5">Click "Add New Banner" above to publish your first banner.</p>
+                  <p className="text-[10px] text-warm-500 mt-0.5">Click &quot;Add New Banner&quot; above to publish your first banner.</p>
                 </td>
               </tr>
             ) : banners.map((b) => (

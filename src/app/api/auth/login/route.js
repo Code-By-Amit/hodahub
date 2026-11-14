@@ -74,7 +74,8 @@ export async function POST(request) {
         .set({ otp, otpExpiresAt })
         .where(eq(users.id, user.id));
 
-      await sendOTPEmail(user.email, otp);
+      const delivery = await sendOTPEmail(user.email, otp);
+      if (!delivery.success) return NextResponse.json({ error: 'Verification email could not be sent. Please try again later.' }, { status: 503 });
 
       return NextResponse.json(
         {
@@ -105,6 +106,7 @@ export async function POST(request) {
 
     // Generate tokens
     const tokens = generateTokens({
+      sessionVersion: user.sessionVersion,
       id: user.id,
       email: user.email,
       role: user.role,

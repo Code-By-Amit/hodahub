@@ -51,6 +51,7 @@ export default function OrderDetailPage() {
 
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [returnEvidenceUrl, setReturnEvidenceUrl] = useState('');
   const [returning, setReturning] = useState(false);
 
   const [retryingPayment, setRetryingPayment] = useState(false);
@@ -63,11 +64,6 @@ export default function OrderDetailPage() {
   const [reviewMediaUrls, setReviewMediaUrls] = useState([]);
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.Razorpay) {
-      setRazorpayLoaded(true);
-    }
-  }, []);
 
   const [trackingInfo, setTrackingInfo] = useState(null);
 
@@ -128,7 +124,7 @@ export default function OrderDetailPage() {
     }
     setReturning(true);
     try {
-      const data = await ordersApi.returnOrder(id, { reason: returnReason });
+      const data = await ordersApi.returnOrder(id, { reason: returnReason, evidenceUrl: returnEvidenceUrl });
       toast.success(data?.message || 'Return request submitted!');
       setShowReturnModal(false);
       fetchOrder();
@@ -296,7 +292,7 @@ export default function OrderDetailPage() {
           )}
 
           <Link
-            href={`/orders/${order.id}/invoice`}
+            href={`/orders/${order.id}/invoice${typeof window !== 'undefined' ? window.location.search : ''}`}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-warm-200 text-warm-800 text-[11px] font-semibold rounded-md hover:bg-warm-50 transition-colors shadow-xs"
           >
             <FiPrinter className="w-3.5 h-3.5 text-warm-600" /> Printable Invoice
@@ -316,7 +312,7 @@ export default function OrderDetailPage() {
               onClick={() => setShowReturnModal(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold rounded-md hover:bg-amber-100 transition-colors"
             >
-              <FiRotateCcw className="w-3.5 h-3.5" /> Request Return
+              <FiRotateCcw className="w-3.5 h-3.5" /> Request Exchange
             </button>
           )}
         </div>
@@ -666,14 +662,18 @@ export default function OrderDetailPage() {
       </Modal>
 
       {/* Request Return Modal */}
-      <Modal isOpen={showReturnModal} onClose={() => setShowReturnModal(false)} title="Request Return / Refund">
+      <Modal isOpen={showReturnModal} onClose={() => setShowReturnModal(false)} title="Request an exchange">
         <form onSubmit={handleReturnOrder} className="space-y-3">
+          <label className="block text-sm font-medium text-warm-700">Unboxing video link
+            <input type="url" required value={returnEvidenceUrl} onChange={(event) => setReturnEvidenceUrl(event.target.value)} placeholder="https://…" className="mt-1 min-h-11 w-full rounded-xl border border-warm-200 px-3 text-sm" />
+            <span className="mt-1 block text-xs font-normal text-warm-500">Provide a shareable HTTPS video link. Exchange requests must be submitted within 48 hours of delivery.</span>
+          </label>
           <p className="text-[11px] text-warm-600">
-            Submit a return request for Order #{order.id.slice(0, 8)}. Our team will review your request.
+            Submit an exchange request for Order #{order.id.slice(0, 8)}. Our team will review your request.
           </p>
           <div>
             <label className="block text-[10px] font-semibold text-warm-700 uppercase mb-1">
-              Reason for Return *
+              Reason for exchange *
             </label>
             <textarea
               value={returnReason}
@@ -772,7 +772,7 @@ export default function OrderDetailPage() {
         </form>
       </Modal>
 
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setRazorpayLoaded(true)} />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" onReady={() => setRazorpayLoaded(true)} />
     </div>
   );
 }

@@ -16,6 +16,7 @@ export async function POST(request) {
     }
 
     const { code, subtotal } = await request.json();
+    if (typeof code !== 'string' || code.length > 50 || !Number.isFinite(subtotal) || subtotal < 0) return NextResponse.json({ error: 'Invalid coupon or subtotal' }, { status: 400 });
 
     if (!code) return NextResponse.json({ error: 'Coupon code is required' }, { status: 400 });
 

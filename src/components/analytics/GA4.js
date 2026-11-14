@@ -3,25 +3,18 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import Script from 'next/script';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { getConsent, CONSENT_EVENT } from '@/lib/consent';
+import useConsent from '@/hooks/useConsent';
 import { GA_ID, setReady } from '@/lib/ga';
 
 export default function GA4() {
-  const [granted, setGranted] = useState(false);
+  const granted = useConsent() === 'granted';
   const firstLoad = useRef(true);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Sync consent state: active unless visitor explicitly clicks 'Reject'
-  useEffect(() => {
-    const sync = () => setGranted(getConsent() !== 'denied');
-    sync();
-    window.addEventListener(CONSENT_EVENT, sync);
-    return () => window.removeEventListener(CONSENT_EVENT, sync);
-  }, []);
 
   // Track page view on route change (skip first render which is handled in onLoad / initialization)
   useEffect(() => {
@@ -29,16 +22,16 @@ export default function GA4() {
       firstLoad.current = false;
       return;
     }
-    if (typeof window !== 'undefined' && GA_ID && granted && window.gtag && !pathname?.startsWith('/admin')) {
+    if (typeof window !== 'undefined' && GA_ID && granted && window.gtag && !(pathname?.startsWith('/admin') || pathname?.startsWith('/orders') || pathname?.startsWith('/reset-password') || pathname?.startsWith('/verify-otp'))) {
       window.gtag('event', 'page_view', {
-        page_path: pathname + (searchParams?.toString() ? `?${searchParams}` : ''),
-        page_location: typeof window !== 'undefined' ? window.location.href : undefined,
+        page_path: pathname,
+        page_location: typeof window !== 'undefined' ? window.location.origin + pathname : undefined,
         page_title: document.title,
       });
     }
   }, [pathname, searchParams, granted]);
 
-  if (!GA_ID || !granted || pathname?.startsWith('/admin')) return null;
+  if (!GA_ID || !granted || (pathname?.startsWith('/admin') || pathname?.startsWith('/orders') || pathname?.startsWith('/reset-password') || pathname?.startsWith('/verify-otp'))) return null;
 
   return (
     <>

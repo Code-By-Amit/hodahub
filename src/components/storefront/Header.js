@@ -6,6 +6,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import { selectCartItemCount } from '@/lib/store/cartSlice';
 import { selectWishlistItemCount } from '@/lib/store/wishlistSlice';
 import { selectUser, clearUser } from '@/lib/store/authSlice';
+import { clearWishlist } from '@/lib/store/wishlistSlice';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   FiSearch, FiHeart, FiUser, FiShoppingCart,
@@ -46,6 +48,7 @@ export default function Header() {
 
   const dispatch = useDispatch();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let ticking = false;
@@ -90,6 +93,8 @@ export default function Header() {
       await authApi.logout();
     } catch {}
     dispatch(clearUser());
+    dispatch(clearWishlist());
+    queryClient.clear();
     setAccountOpen(false);
     router.push('/');
   };
@@ -102,7 +107,7 @@ export default function Header() {
             : 'bg-white border-b border-warm-100'
         }`}
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="store-container">
           <div className="flex items-center justify-between h-12 lg:h-14">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0">
@@ -384,7 +389,7 @@ export default function Header() {
           <div className="lg:hidden border-t border-warm-100 bg-white"
             style={{ animation: 'slideDown 0.3s ease-out' }}
           >
-            <nav className="max-w-6xl mx-auto px-3 py-2 flex flex-col gap-0.5">
+            <nav className="store-container py-2 flex flex-col gap-0.5">
               <Link
                 href="/"
                 onClick={() => setMobileOpen(false)}

@@ -160,6 +160,7 @@ export const brandSchema = z.object({
   name: z.string().min(1, 'Brand name is required').max(255),
   slug: z.string().min(1, 'Slug is required').max(255),
   logoUrl: z.string().url().optional().nullable().or(z.literal('')),
+  sortOrder: z.coerce.number().int('Display order must be a whole number').min(0).max(9999).default(0),
 });
 
 export const couponSchema = z.object({
@@ -169,7 +170,7 @@ export const couponSchema = z.object({
   minOrderAmount: z.coerce.number().min(0, 'Minimum order amount cannot be negative').default(0),
   expiresAt: z.string().optional().nullable(),
   isActive: z.boolean().default(true),
-});
+}).refine((coupon) => coupon.type !== 'percent' || coupon.value <= 100, { path: ['value'], message: 'Percentage discount cannot exceed 100' });
 
 // --- Reviews ---
 export const reviewSchema = z
@@ -221,7 +222,9 @@ export const orderItemInputSchema = z.object({
 });
 
 export const createOrderSchema = z.object({
-  items: z.array(orderItemInputSchema).min(1, 'Cart cannot be empty'),
+  items: z.array(orderItemInputSchema).min(1, 'Cart cannot be empty').max(100, 'Maximum 100 cart lines'),
+  checkoutKey: z.string().uuid().optional(),
+  expectedTotal: z.number().finite().nonnegative().optional(),
   addressId: z.string().uuid('Invalid address ID').optional().nullable(),
   paymentMethod: z.enum(['razorpay', 'cod']).default('razorpay'),
   couponCode: z.string().max(50).optional().nullable(),
@@ -253,6 +256,7 @@ export const cancelOrderSchema = z.object({
 
 export const returnOrderSchema = z.object({
   reason: z.string().min(3, 'Please provide a reason for return').max(1000),
+  evidenceUrl: z.string().url('Provide a shareable link to the unboxing video').max(2048).refine((value) => value.startsWith('https://'), 'Use a secure HTTPS video link'),
 });
 
 export const adminOrderActionSchema = z.object({

@@ -1,4 +1,5 @@
 import { api, toQueryString } from './client';
+import { guestOrderQuery } from './guest-order-query';
 
 export const ordersApi = {
   // Customer endpoints
@@ -11,9 +12,9 @@ export const ordersApi = {
 
   create: (data, opts) => api.post('/api/orders', data, opts),
 
-  cancel: (id, data, opts) => api.post(`/api/orders/${id}/cancel`, data, opts),
+  cancel: (id, data, opts) => api.post(`/api/orders/${id}/cancel${guestOrderQuery()}`, data, opts),
 
-  returnOrder: (id, data, opts) => api.post(`/api/orders/${id}/return`, data, opts),
+  returnOrder: (id, data, opts) => api.post(`/api/orders/${id}/return${guestOrderQuery()}`, data, opts),
 
   getTracking: (id, params, opts) => {
     const qs = toQueryString(params);

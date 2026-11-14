@@ -3,7 +3,7 @@ const nextConfig = {
   allowedDevOrigins: ['nontragical-untaxing-laurette.ngrok-free.dev'],
   reactCompiler: true,
   images: {
-    unoptimized:true,
+    unoptimized: false,
     remotePatterns: [
       {
         protocol: 'https',

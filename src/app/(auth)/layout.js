@@ -32,7 +32,7 @@ export default function AuthLayout({ children }) {
       </div>
 
       {/* Form panel */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
         <header className="sm:hidden p-3 text-center shrink-0">
           <Link href="/" className="inline-flex items-center gap-2">
             <img src="/logof.png" alt="HodaHub" className="h-7 w-auto object-contain" />
@@ -42,8 +42,8 @@ export default function AuthLayout({ children }) {
           </Link>
         </header>
 
-        <main className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          {children}
+        <main className="flex-1 min-h-0 min-w-0 flex items-start justify-center p-4 sm:p-6 overflow-y-auto [&>*]:my-auto [&>*]:min-w-0">
+          <Suspense fallback={<p className="p-6 text-sm text-warm-500">Loading account…</p>}>{children}</Suspense>
         </main>
         <Suspense fallback={null}>
           <MetaPixel />

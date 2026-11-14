@@ -92,6 +92,19 @@ const cartSlice = createSlice({
       state.items = [];
       state.coupon = null;
     },
+    refreshCartPrices: (state, action) => {
+      for (const update of action.payload) {
+        const item = state.items.find((entry) => entry.productId === update.productId);
+        if (!item) continue;
+        item.price = Number(update.price);
+        item.discountPrice = update.discountPrice == null ? null : Number(update.discountPrice);
+        item.codAvailable = update.codAvailable !== false;
+        if (item.selectedAddon && update.addons) {
+          const addon = update.addons.find((entry) => entry.id === (item.selectedAddon.id || item.selectedAddon.addonId));
+          if (addon) item.selectedAddon = { ...item.selectedAddon, price: Number(addon.price), isFree: addon.isFree };
+        }
+      }
+    },
     applyCoupon: (state, action) => {
       state.coupon = action.payload;
     },
@@ -108,6 +121,7 @@ export const {
   updateAddonQuantity,
   removeAddonFromCartItem,
   clearCart,
+  refreshCartPrices,
   applyCoupon,
   removeCoupon,
 } = cartSlice.actions;

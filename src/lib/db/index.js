@@ -1,6 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.js';
+import { databaseConnectionConfig } from './connection-config.js';
 
 export function isConnectionError(err) {
   if (!err) return false;
@@ -46,16 +47,14 @@ export function isConnectionError(err) {
 
 function createPool() {
   const connectionString = process.env.DATABASE_URL;
-  const isLocal = !connectionString || connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
 
   const poolInstance = new pg.Pool({
-    connectionString,
+    ...databaseConnectionConfig(connectionString),
     max: process.env.NODE_ENV === 'production' ? 15 : 5,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 15000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10000,
-    ssl: isLocal ? false : { rejectUnauthorized: false },
   });
 
   poolInstance.on('error', (err) => {
@@ -66,62 +65,7 @@ function createPool() {
     }
   });
 
-  // Ensure database schema synchronization for newly added columns
-  if (connectionString) {
-    poolInstance
-      .query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0;`)
-      .catch(() => {});
-    poolInstance
-      .query(`CREATE INDEX IF NOT EXISTS categories_sort_order_idx ON categories (sort_order);`)
-      .catch(() => {});
-    poolInstance
-      .query(`ALTER TABLE order_item_addons ADD COLUMN IF NOT EXISTS quantity integer NOT NULL DEFAULT 1;`)
-      .catch(() => {});
-    poolInstance
-      .query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand text;`)
-      .catch(() => {});
-    poolInstance
-      .query(`
-        CREATE TABLE IF NOT EXISTS msg91_used_tokens (
-          token_hash VARCHAR(64) PRIMARY KEY,
-          created_at TIMESTAMP DEFAULT NOW() NOT NULL,
-          expires_at TIMESTAMP NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS msg91_used_tokens_expires_at_idx ON msg91_used_tokens (expires_at);
-        CREATE INDEX IF NOT EXISTS users_phone_idx ON users (phone);
-        CREATE INDEX IF NOT EXISTS users_created_at_idx ON users (created_at);
-        CREATE INDEX IF NOT EXISTS users_email_idx ON users (email);
-      `)
-      .catch(() => {});
-    poolInstance
-      .query(`
-        CREATE TABLE IF NOT EXISTS happy_customers (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          image_url TEXT NOT NULL,
-          cloudinary_asset_id VARCHAR(255),
-          caption VARCHAR(500),
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          sort_order INTEGER NOT NULL DEFAULT 0,
-          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS happy_customers_is_active_idx ON happy_customers (is_active);
-        CREATE INDEX IF NOT EXISTS happy_customers_sort_order_idx ON happy_customers (sort_order);
-        CREATE INDEX IF NOT EXISTS reviews_product_id_idx ON reviews (product_id);
-        CREATE INDEX IF NOT EXISTS reviews_user_id_idx ON reviews (user_id);
-        CREATE INDEX IF NOT EXISTS reviews_is_hidden_idx ON reviews (is_hidden);
-        CREATE INDEX IF NOT EXISTS reviews_created_at_idx ON reviews (created_at);
-        CREATE INDEX IF NOT EXISTS products_is_active_idx ON products (is_active);
-        CREATE INDEX IF NOT EXISTS products_created_at_idx ON products (created_at);
-        CREATE INDEX IF NOT EXISTS products_active_home_idx ON products (is_active, show_on_home);
-        CREATE INDEX IF NOT EXISTS orders_status_idx ON orders (status);
-        CREATE INDEX IF NOT EXISTS orders_payment_status_idx ON orders (payment_status);
-        CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders (created_at);
-        CREATE INDEX IF NOT EXISTS category_relations_parent_id_idx ON category_relations (parent_id);
-      `)
-      .catch(() => {});
-  }
-
+  // Schema changes run through the explicit migration command, never on requests.
   return poolInstance;
 }
 
@@ -187,7 +131,8 @@ export function createResilientProxy(target) {
   });
 }
 
-export const db = globalThis.drizzleDb || createResilientProxy(rawDb);
+// Never automatically replay writes after an ambiguous connection failure.
+export const db = globalThis.drizzleDbV2 || rawDb;
 if (process.env.NODE_ENV !== 'production') {
-  globalThis.drizzleDb = db;
+  globalThis.drizzleDbV2 = db;
 }

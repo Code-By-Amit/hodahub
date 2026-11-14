@@ -28,14 +28,16 @@ export default function SearchOverlay({ onClose }) {
     if (!query.trim()) {
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const [prodData, catData] = await Promise.all([
-          productsApi.getAll({ search: query.trim(), limit: 6 }),
-          categoriesApi.getAll(),
+          productsApi.getAll({ search: query.trim(), limit: 6 }, { signal: controller.signal }),
+          categoriesApi.getAll({ signal: controller.signal }),
         ]);
 
+        if (controller.signal.aborted) return;
         setResults(prodData?.products || []);
 
         const allCats = catData?.allCategories || catData?.categories || [];
@@ -44,13 +46,14 @@ export default function SearchOverlay({ onClose }) {
         );
         setCategoryResults(matched.slice(0, 4));
       } catch {
+        if (controller.signal.aborted) return;
         setResults([]);
         setCategoryResults([]);
       }
       setLoading(false);
     }, 300);
 
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [query]);
 
   const handleQueryChange = (e) => {

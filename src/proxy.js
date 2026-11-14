@@ -17,6 +17,8 @@ const adminRoutes = ['/admin'];
 
 export async function proxy(request) {
     const { pathname } = request.nextUrl;
+    // Order endpoints still enforce ownership or the scoped guest access code.
+    if (/^\/orders\/[^/]+(?:\/invoice)?\/?$/.test(pathname)) return NextResponse.next();
     const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
     const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
 
@@ -32,6 +34,13 @@ export async function proxy(request) {
 
     if (accessToken) {
         decodedUser = verifyAccessToken(accessToken);
+        if (decodedUser) {
+            try {
+                const [current] = await db.select({ role: users.role, sessionVersion: users.sessionVersion }).from(users).where(eq(users.id, decodedUser.id)).limit(1);
+                if (!current || current.sessionVersion !== (decodedUser.sessionVersion || 0)) decodedUser = null;
+                else decodedUser.role = current.role;
+            } catch { decodedUser = null; }
+        }
     }
 
     // If access token is missing or expired, attempt refresh token fallback
@@ -46,9 +55,10 @@ export async function proxy(request) {
                     .where(eq(users.id, refreshPayload.id))
                     .limit(1);
 
-                if (dbUser) {
+                if (dbUser && dbUser.sessionVersion === (refreshPayload.sessionVersion || 0)) {
                     decodedUser = {
                         id: dbUser.id,
+                        sessionVersion: dbUser.sessionVersion,
                         email: dbUser.email,
                         role: dbUser.role,
                         name: dbUser.name,
@@ -57,15 +67,7 @@ export async function proxy(request) {
                     setAuthCookies(responseToReturn, newTokens);
                 }
             } catch {
-                // Fallback to token payload if DB query fails during transient issue
-                decodedUser = {
-                    id: refreshPayload.id,
-                    email: refreshPayload.email,
-                    role: refreshPayload.role,
-                    name: refreshPayload.name,
-                };
-                const newTokens = generateTokens(decodedUser);
-                setAuthCookies(responseToReturn, newTokens);
+                decodedUser = null;
             }
         }
     }
@@ -73,7 +75,7 @@ export async function proxy(request) {
     // Redirect unauthenticated users to login
     if (!decodedUser) {
         const loginUrl = new URL('/login', request.url);
-        loginUrl.searchParams.set('redirect', pathname);
+        loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
         return NextResponse.redirect(loginUrl);
     }
 

@@ -3,6 +3,7 @@ import { products, categories, brands, productAddons, orders, orderItems } from 
 import { eq, desc, asc, ilike, and, gte, lte, gt, sql, or, inArray, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { categoryService } from './category.service';
+import { brandService } from './brand.service';
 
 export const productService = {
   /**
@@ -20,6 +21,7 @@ export const productService = {
     minRating,
   } = {}) {
     const offset = (page - 1) * limit;
+    const effectivePrice = sql`COALESCE(${products.discountPrice}, ${products.price})`;
 
     const conditions = [
       eq(products.isActive, true),
@@ -52,7 +54,7 @@ export const productService = {
       const selectedBrands = brand.split(',').map((b) => b.trim()).filter(Boolean);
       if (selectedBrands.length > 0) {
         const matchingBrandRows = await db
-          .select({ id: brands.id })
+          .select({ id: brands.id, name: brands.name })
           .from(brands)
           .where(
             or(
@@ -61,8 +63,13 @@ export const productService = {
             )
           );
         const matchingBrandIds = matchingBrandRows.map((b) => b.id);
+        const { brands: catalogBrands } = await brandService.getBrands();
+        const legacyAliases = catalogBrands.filter((entry) => selectedBrands.includes(entry.slug)).flatMap((entry) => entry.aliases || [entry.name]);
 
-        const brandConds = [inArray(products.brand, selectedBrands)];
+        const brandConds = [
+          inArray(products.brand, [...selectedBrands, ...matchingBrandRows.map((entry) => entry.name), ...legacyAliases]),
+          inArray(sql`BTRIM(REGEXP_REPLACE(LOWER(TRIM(${products.brand})), '[^a-z0-9]+', '-', 'g'), '-')`, [...selectedBrands, ...matchingBrandRows.map((entry) => entry.name)].map((entry) => entry.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''))),
+        ];
         if (matchingBrandIds.length > 0) {
           brandConds.push(inArray(products.brandId, matchingBrandIds));
         }
@@ -115,11 +122,11 @@ export const productService = {
     }
 
     if (minPrice) {
-      conditions.push(gte(products.price, minPrice));
+      conditions.push(gte(effectivePrice, minPrice));
     }
 
     if (maxPrice) {
-      conditions.push(lte(products.price, maxPrice));
+      conditions.push(lte(effectivePrice, maxPrice));
     }
 
     if (minRating) {
@@ -134,10 +141,10 @@ export const productService = {
 
     switch (sort) {
       case 'price-asc':
-        orderBy = [asc(products.price), desc(products.id)];
+        orderBy = [asc(effectivePrice), desc(products.id)];
         break;
       case 'price-desc':
-        orderBy = [desc(products.price), desc(products.id)];
+        orderBy = [desc(effectivePrice), desc(products.id)];
         break;
       case 'best-sellers':
         validSalesSubquery = db
@@ -151,6 +158,7 @@ export const productService = {
             and(
               ne(orders.status, 'cancelled'),
               ne(orders.paymentStatus, 'failed'),
+          ne(orders.paymentStatus, 'refunded'),
               or(
                 eq(orders.paymentStatus, 'paid'),
                 inArray(orders.status, ['confirmed', 'packed', 'shipped', 'delivered'])
@@ -162,7 +170,7 @@ export const productService = {
 
         orderBy = [
           desc(products.isBestSeller),
-          desc(sql`GREATEST(${products.unitsSold}, COALESCE(${validSalesSubquery.totalSales}, 0))`),
+          desc(sql`COALESCE(${validSalesSubquery.totalSales}, 0)`),
           desc(products.createdAt),
           desc(products.id),
         ];
@@ -171,6 +179,7 @@ export const productService = {
         orderBy = [desc(products.ratingAvg), desc(products.id)];
         break;
       case 'discount':
+        conditions.push(sql`${products.discountPrice} IS NOT NULL AND ${products.discountPrice} < ${products.price}`);
         orderBy = [
           desc(
             sql`CASE WHEN ${products.discountPrice} IS NOT NULL THEN (${products.price} - ${products.discountPrice}) / ${products.price} ELSE 0 END`
@@ -406,6 +415,7 @@ export const productService = {
       addonLinks,
     } = body;
 
+    if (discountPrice != null && Number(discountPrice) >= Number(price)) { const error = new Error('Discount price must be lower than the regular price.'); error.status = 400; throw error; }
     const numStock = Number(stock || 0);
 
     const [catExists] = await db

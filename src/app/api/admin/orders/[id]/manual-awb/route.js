@@ -17,12 +17,15 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Tracking / AWB Number is required' }, { status: 400 });
     }
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    return await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for('update');
 
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
+    if (!['packed', 'shipped'].includes(order.status) || (order.paymentMethod === 'razorpay' && order.paymentStatus !== 'paid')) return NextResponse.json({ error: 'Pack the order and collect online payment before adding a shipment.' }, { status: 409 });
+    if (order.awbNumber && order.awbNumber !== awbNumber) return NextResponse.json({ error: 'A shipment already exists. Contact support before replacing it.' }, { status: 409 });
     if (order.status === 'cancelled') {
       return NextResponse.json({ error: 'Cannot add tracking number to a cancelled order' }, { status: 400 });
     }
@@ -41,7 +44,7 @@ export async function POST(request, { params }) {
       .where(eq(orders.id, id))
       .returning();
 
-    await db.insert(orderStatusHistory).values({
+    await tx.insert(orderStatusHistory).values({
       orderId: id,
       status: newStatus,
       note: `Tracking number manually entered (AWB: ${awbNumber})`,
@@ -50,6 +53,7 @@ export async function POST(request, { params }) {
     return NextResponse.json({
       message: 'Tracking number saved successfully!',
       order: updatedOrder,
+    });
     });
   } catch (error) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden') {

@@ -40,7 +40,6 @@ export default function AdminDashboard() {
   const [trafficView, setTrafficView] = useState('24h'); // '24h' or '30d'
 
   async function loadData(isManual = false) {
-    if (isManual) setRefreshing(true);
     try {
       const [statsData, analyticsData] = await Promise.all([
         settingsApi.getStats(),
@@ -57,11 +56,11 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    loadData();
+    const initialLoad = setTimeout(() => loadData(), 0);
     const interval = setInterval(() => {
       loadData();
     }, 15000); // 15s live polling
-    return () => clearInterval(interval);
+    return () => { clearTimeout(initialLoad); clearInterval(interval); };
   }, []);
 
   const peakSpike = analytics?.metrics?.peakSpike;
@@ -119,7 +118,7 @@ export default function AdminDashboard() {
             </span>
           )}
           <button
-            onClick={() => loadData(true)}
+            onClick={() => (setRefreshing(true), loadData(true))}
             disabled={refreshing}
             className="p-1.5 border border-warm-200 rounded-md text-warm-600 hover:bg-warm-50 transition-colors disabled:opacity-50 cursor-pointer"
             title="Refresh now"

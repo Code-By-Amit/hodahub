@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useDispatch, useSelector } from 'react-redux';
@@ -45,10 +45,8 @@ export default function ProductCard({ product, variant = 'default' }) {
     ? Math.round(((price - discountPrice) / price) * 100)
     : 0;
 
-  const isNew = useMemo(
-    () => Boolean(createdAt && (Date.now() - new Date(createdAt).getTime()) < 14 * 24 * 60 * 60 * 1000),
-    [createdAt]
-  );
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setIsNew(Boolean(createdAt && Date.now() - new Date(createdAt).getTime() < 14 * 86400000)), 0); return () => clearTimeout(timer); }, [createdAt]);
 
   const handleAddToCart = (e) => {
     e.preventDefault();
@@ -137,10 +135,10 @@ export default function ProductCard({ product, variant = 'default' }) {
                     {name}
                   </h3>
                   <div className="flex items-center gap-2 mb-1">
-                    <StarRating rating={Number(ratingAvg)} count={reviewCount} size="xs" />
+                    {Number(reviewCount) > 0 && <StarRating rating={Number(ratingAvg)} count={reviewCount} size="xs" />}
                   </div>
                   <div className="flex items-center flex-wrap gap-1.5 mb-1.5">
-                    <span className="text-xs sm:text-sm font-bold text-warm-900">
+                    <span className="text-xs sm:product-card-price font-semibold text-warm-900">
                       {formatCurrency(discountPrice || price)}
                     </span>
                     {discountPrice && (
@@ -181,17 +179,17 @@ export default function ProductCard({ product, variant = 'default' }) {
   // Default card
   return (
     <>
-      <div className="group bg-white rounded-md border border-warm-200 hover:border-warm-300 hover:shadow-xs transition-all duration-200 overflow-hidden h-full flex flex-col">
-        <Link href={`/products/${productSlug}`} className="flex flex-col h-full">
+      <div className="group bg-white product-card rounded-xl border border-warm-200 hover:border-warm-300 hover:shadow-sm transition-shadow duration-200 overflow-hidden h-full flex flex-col">
+        <Link href={`/products/${productSlug}`} className="flex flex-1 flex-col">
           {/* Image */}
-          <div className="relative aspect-square bg-warm-50 overflow-hidden">
+          <div className="relative aspect-square sm:aspect-[6/5] bg-warm-50 overflow-hidden">
             {mainImage ? (
               <Image
                 src={mainImage}
                 alt={name}
                 fill
                 className="object-cover group-hover:scale-105 transition-transform duration-300"
-                sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 14vw"
+                sizes="(max-width: 640px) 48vw, (max-width: 1024px) 30vw, 20vw"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-warm-300 bg-warm-100">
@@ -214,9 +212,9 @@ export default function ProductCard({ product, variant = 'default' }) {
             </div>
 
             {/* Quick actions */}
-            <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-200 z-10">
+            <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 opacity-100 pointer-events-auto sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:pointer-events-none sm:group-hover:pointer-events-auto sm:group-focus-within:pointer-events-auto transition-opacity duration-200 z-10">
               <button
-                className={`w-6 h-6 rounded-full shadow-xs flex items-center justify-center transition-all ${isWishlisted
+                className={`w-9 h-9 rounded-full shadow-xs flex items-center justify-center transition-all ${isWishlisted
                   ? 'bg-rose-500 text-white hover:bg-rose-600'
                   : 'bg-white/90 backdrop-blur-xs text-warm-700 hover:text-rose-600 hover:scale-105'
                   }`}
@@ -226,7 +224,7 @@ export default function ProductCard({ product, variant = 'default' }) {
                 <Heart className={`w-3 h-3 ${isWishlisted ? 'fill-white' : ''}`} />
               </button>
               <button
-                className="w-6 h-6 bg-white/90 backdrop-blur-xs rounded-full shadow-xs flex items-center justify-center text-warm-700 hover:text-warm-900 hover:scale-105 transition-all"
+                className="w-9 h-9 bg-white/90 backdrop-blur-xs rounded-full shadow-xs flex items-center justify-center text-warm-700 hover:text-warm-900 hover:scale-105 transition-all"
                 aria-label="Quick view"
                 onClick={handleOpenQuickView}
               >
@@ -234,39 +232,30 @@ export default function ProductCard({ product, variant = 'default' }) {
               </button>
             </div>
 
-            {/* Add to cart button overlay */}
-            <div className="absolute bottom-1.5 left-1.5 right-1.5 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto translate-y-1 group-hover:translate-y-0 transition-all duration-200 z-10">
-              <button
-                onClick={handleAddToCart}
-                className="w-full py-1.5 bg-warm-900 text-white text-[10px] font-semibold rounded-md hover:bg-warm-800 transition-colors flex items-center justify-center gap-1 shadow-sm"
-              >
-                <ShoppingBag className="w-3 h-3" />
-                Add to Cart
-              </button>
-            </div>
           </div>
 
           {/* Info */}
-          <div className="p-2 flex-1 flex flex-col">
+          <div className="product-card-details flex-1 flex flex-col">
             {displayBrand && (
               <span className="text-[9px] font-semibold text-warm-500 uppercase tracking-wider block mb-0.5 truncate">
                 {displayBrand}
               </span>
             )}
-            <h3 className="text-[10px] sm:text-[11px] font-semibold text-warm-900 line-clamp-1 mb-0.5">
+            <h3 className="product-card-title font-medium text-warm-900 line-clamp-2">
               {name}
             </h3>
             <div className="flex items-center gap-1 mb-0.5">
-              <span className="text-[11px] sm:text-xs font-bold text-warm-900">
+              <span className="text-sm font-bold text-warm-900">
                 {formatCurrency(discountPrice || price)}
               </span>
               {discountPrice && (
                 <span className="text-[9px] sm:text-[10px] text-warm-400 line-through">{formatCurrency(price)}</span>
               )}
             </div>
-            <StarRating rating={Number(ratingAvg)} count={reviewCount} size="xs" />
+            {Number(reviewCount) > 0 && <StarRating rating={Number(ratingAvg)} count={reviewCount} size="xs" />}
           </div>
         </Link>
+        <div className="px-3 pb-3"><button type="button" onClick={handleAddToCart} className="product-card-cart flex w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-warm-900 px-2 text-xs font-medium leading-none text-white transition-colors hover:bg-warm-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"><ShoppingBag aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span>Add to Cart</span></button></div>
       </div>
 
       {quickViewOpen && (

@@ -94,6 +94,11 @@ export async function PUT(request, { params }) {
       addonLinks,
     } = body;
 
+    const [existingProduct] = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    if (!existingProduct) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    const updatedPrice = Number(price ?? existingProduct.price);
+    const updatedDiscount = discountPrice !== undefined ? discountPrice : existingProduct.discountPrice;
+    if (updatedDiscount != null && Number(updatedDiscount) >= updatedPrice) return NextResponse.json({ error: 'Discount price must be lower than the regular price.' }, { status: 400 });
     if (categoryId) {
       const [catExists] = await db
         .select({ id: categories.id })

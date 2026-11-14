@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
@@ -15,20 +15,13 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
-  const [step, setStep] = useState(1);
-  const [email, setEmail] = useState('');
+  const [step, setStep] = useState(searchParams.get('email') ? 2 : 1);
+  const [email, setEmail] = useState(searchParams.get('email') || '');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  useEffect(() => {
-    const emailParam = searchParams.get('email');
-    if (emailParam) {
-      setEmail(emailParam);
-      setStep(2);
-    }
-  }, [searchParams]);
 
   async function handleRequestCode(e) {
     e.preventDefault();
